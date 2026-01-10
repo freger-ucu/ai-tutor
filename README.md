@@ -91,4 +91,8 @@ See `.env.example` for all available configuration options.
 
 ## Team
 
-- Mike - Project Lead
+- Mykhailo Rykhalskyi
+- Denys Shcherbyna
+- Mariia Hamaniuk
+- Ostap Mnykh
+- Maryna Ohinska
