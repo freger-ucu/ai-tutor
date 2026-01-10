@@ -1,0 +1,25 @@
+# Core
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+
+# Data processing
+pandas>=2.1.0
+numpy>=1.26.0
+
+# LLM & AI
+langchain>=0.1.0
+langgraph>=0.0.20
+
+# Caching
+redis>=5.0.0
+
+# HTTP client
+httpx>=0.26.0
+
+# Dev dependencies
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+ruff>=0.1.0
