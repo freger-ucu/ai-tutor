@@ -12,6 +12,27 @@ export const students: Student[] = [
         firstName: "Марія",
         lastName: "Петренко",
         className: "8-А",
-        teacherIds: ["t1", "t2", "t3"], // Has all 3 teachers
+        teacherIds: ["t1", "t2", "t3"],
+    },
+    {
+        id: "s2",
+        firstName: "Олександр",
+        lastName: "Коваленко",
+        className: "8-А",
+        teacherIds: ["t1", "t2", "t3"],
+    },
+    {
+        id: "s3",
+        firstName: "Анна",
+        lastName: "Мельник",
+        className: "8-А",
+        teacherIds: ["t1", "t2", "t3"],
+    },
+    {
+        id: "s4",
+        firstName: "Дмитро",
+        lastName: "Бойко",
+        className: "8-А",
+        teacherIds: ["t1", "t2", "t3"],
     },
 ];

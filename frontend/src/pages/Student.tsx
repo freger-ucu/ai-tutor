@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { students } from "../data/students";
 import { getTopics } from "../data/materialsStorage";
 import PillButton from "../components/PillButton";
@@ -26,8 +26,15 @@ const Subjects = [
   },
 ];
 
+const courseIdMap: Record<string, string> = {
+  "ukr-lang": "ukr-lang-8", // Assuming 8th grade based on student mock
+  algebra: "algebra-8",
+  history: "history-8",
+};
+
 const Student = () => {
   const { studentId } = useParams();
+  const navigate = useNavigate();
   const [activeSubjectId, setActiveSubjectId] = useState("ukr-lang");
 
   const student = useMemo(
@@ -39,13 +46,6 @@ const Student = () => {
   // In a real app, we'd filter by the activeSubjectId mapping to a real courseId
   // For demo, we'll fetch all and filter loosely or just show mock data if empty
   const topics = useMemo(() => {
-    // Mapping our sidebar IDs to the mock data course IDs likely used
-    const courseIdMap: Record<string, string> = {
-      "ukr-lang": "ukr-lang-8", // Assuming 8th grade based on student mock
-      algebra: "algebra-8",
-      history: "history-8",
-    };
-
     const targetCourseId = courseIdMap[activeSubjectId] || activeSubjectId;
     
     // Fetch topics from storage for the student's class and selected subject
@@ -65,6 +65,11 @@ const Student = () => {
 
   const newTopics = topics.filter((t) => !t.isCompleted);
   const completedTopics = topics.filter((t) => t.isCompleted);
+  
+  const handleTopicClick = (topicTitle: string) => {
+    const targetCourseId = courseIdMap[activeSubjectId] || activeSubjectId;
+    navigate(`/student/${studentId}/topic/${targetCourseId}/${encodeURIComponent(topicTitle)}`);
+  };
 
   if (!student) {
     return (
@@ -135,6 +140,7 @@ const Student = () => {
                   <PillButton 
                     label="Переглянути" 
                     className="bg-[#E9F1FF] text-[#1E73F7] hover:bg-[#D4E4FF]"
+                    onClick={() => handleTopicClick(topic.title)}
                   />
                 </div>
               ))}
@@ -154,7 +160,10 @@ const Student = () => {
                   className="flex items-center justify-between rounded-2xl border border-white/30 bg-[#1E73F7] px-6 py-5"
                 >
                   <div className="font-semibold text-white">{topic.title}</div>
-                  <button className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-[#1E73F7] transition-colors hover:bg-slate-50">
+                  <button 
+                    onClick={() => handleTopicClick(topic.title)}
+                    className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-[#1E73F7] transition-colors hover:bg-slate-50"
+                  >
                     Переглянути
                   </button>
                 </div>

@@ -7,6 +7,7 @@ import GenerateModalContent from "../components/GenerateModalContent";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import PillButton from "../components/PillButton";
+import SelectStudentsModal from "../components/SelectStudentsModal";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { addMaterial, getMaterials } from "../data/materialsStorage";
 
@@ -25,9 +26,14 @@ const TeacherTopic = () => {
     () => teachers.find((item) => item.id === id),
     [id]
   );
-  const [activeModal, setActiveModal] = useState<"material" | "test" | null>(
+  const [activeModal, setActiveModal] = useState<"material" | "test" | "audience" | null>(
     null
   );
+  // Keep track of which flow opened the audience selector
+  const [previousModal, setPreviousModal] = useState<"material" | "test" | null>(
+    null
+  );
+
   const [materialName, setMaterialName] = useState("");
   const [testName, setTestName] = useState("");
   const decodedClass = classId ? decodeURIComponent(classId) : "";
@@ -38,6 +44,7 @@ const TeacherTopic = () => {
   const [tests, setTests] = useState<string[]>([]);
   const isMaterialModalOpen = activeModal === "material";
   const isTestModalOpen = activeModal === "test";
+  const isAudienceModalOpen = activeModal === "audience";
 
   useEffect(() => {
     const storedNotes = getMaterials({
@@ -57,6 +64,25 @@ const TeacherTopic = () => {
     setNotes(storedNotes);
     setTests(storedTests);
   }, [id, courseId, decodedClass, decodedTopic]);
+
+  const handleOpenAudience = (from: "material" | "test") => {
+    setPreviousModal(from);
+    setActiveModal("audience");
+  };
+
+  const handleAudienceSave = (selection: {
+    levels: string[];
+    students: string[];
+  }) => {
+    // In a real app, we would store this selection to use when generating
+    console.log("Audience selected:", selection);
+    // Return to the previous modal
+    if (previousModal) {
+      setActiveModal(previousModal);
+    } else {
+      setActiveModal(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#1E73F7] text-slate-900">
@@ -137,7 +163,10 @@ const TeacherTopic = () => {
                       <span className="inline-block h-6 w-6 rounded-md bg-slate-200" />
                       {item}
                     </div>
-                    <PillButton label="Переглянути" />
+                    {/* Link to Note View */}
+                    <Link to={`/teacher/${id}/note/${courseId}/${topicId}/${encodeURIComponent(item)}`}>
+                        <PillButton label="Переглянути" />
+                    </Link>
                   </Card>
                 ))}
               </div>
@@ -194,6 +223,7 @@ const TeacherTopic = () => {
           value={materialName}
           onChange={setMaterialName}
           primaryLabel="Згенерувати"
+          onSecondaryClick={() => handleOpenAudience("material")}
           onPrimaryClick={() => {
             if (!materialName.trim()) {
               return;
@@ -223,6 +253,7 @@ const TeacherTopic = () => {
           value={testName}
           onChange={setTestName}
           primaryLabel="Згенерувати"
+          onSecondaryClick={() => handleOpenAudience("test")}
           onPrimaryClick={() => {
             if (!testName.trim()) {
               return;
@@ -241,6 +272,16 @@ const TeacherTopic = () => {
           }}
         />
       </Modal>
+
+      <SelectStudentsModal
+        isOpen={isAudienceModalOpen}
+        onClose={() => {
+          if (previousModal) setActiveModal(previousModal);
+          else setActiveModal(null);
+        }}
+        classNameFilter={decodedClass}
+        onSave={handleAudienceSave}
+      />
     </div>
   );
 };

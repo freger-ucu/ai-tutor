@@ -242,6 +242,11 @@ const Teacher = () => {
             type="text"
             value={newTopic}
             onChange={(event) => setNewTopic(event.target.value)}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                    handleAddTopic();
+                }
+            }}
             placeholder="Введіть тему"
             className="w-full rounded-full bg-[#E9F1FF] px-8 py-5 text-lg font-medium text-slate-700 placeholder-slate-500 outline-none transition focus:bg-white focus:ring-2 focus:ring-[#BFD6FF]"
           />
