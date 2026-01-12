@@ -7,6 +7,34 @@ import Panel from "../components/Panel";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { addTopic, getTopics } from "../data/materialsStorage";
 
+const courses = [
+  {
+    grade: "8 клас",
+    items: [
+      { id: "algebra-8", name: "Алгебра" },
+      { id: "history-8", name: "Історія України" },
+      { id: "ukr-lang-8", name: "Українська мова" },
+    ],
+  },
+  {
+    grade: "9 клас",
+    items: [
+      { id: "algebra-9", name: "Алгебра" },
+      { id: "history-9", name: "Історія України" },
+      { id: "ukr-lang-9", name: "Українська мова" },
+    ],
+  },
+];
+
+const classesByCourse: Record<string, string[]> = {
+  "algebra-8": ["8-А", "8-Б", "8-В"],
+  "history-8": ["8-А", "8-Б", "8-В"],
+  "ukr-lang-8": ["8-А", "8-Б", "8-В"],
+  "algebra-9": ["9-А", "9-Б", "9-В"],
+  "history-9": ["9-А", "9-Б", "9-В"],
+  "ukr-lang-9": ["9-А", "9-Б", "9-В"],
+};
+
 const Teacher = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -15,35 +43,34 @@ const Teacher = () => {
     [id]
   );
 
-  const courses = [
-    {
-      grade: "8 клас",
-      items: [
-        { id: "world-lit-8", name: "Зарубіжна література" },
-        { id: "ukr-lang-8", name: "Українська мова" },
-        { id: "ukr-lit-8", name: "Українська література" },
-      ],
-    },
-    {
-      grade: "9 клас",
-      items: [
-        { id: "world-lit-9", name: "Зарубіжна література" },
-        { id: "ukr-lang-9", name: "Українська мова" },
-        { id: "ukr-lit-9", name: "Українська література" },
-      ],
-    },
-  ];
+  // Filter courses based on teacher's allowed subjects
+  const filteredCourses = useMemo(() => {
+    if (!teacher || !teacher.subjectIds) return courses;
+    
+    return courses.map(gradeGroup => ({
+      ...gradeGroup,
+      // Check if course ID starts with anty of the allowed subject IDs
+      // e.g. "algebra-8" starts with "algebra"
+      items: gradeGroup.items.filter(item => 
+        teacher.subjectIds?.some(subjectId => item.id.startsWith(subjectId))
+      )
+    })).filter(group => group.items.length > 0);
+  }, [teacher]);
 
-  const classesByCourse: Record<string, string[]> = {
-    "world-lit-8": ["8-А", "8-Б", "8-В"],
-    "ukr-lang-8": ["8-А", "8-Б", "8-В"],
-    "ukr-lit-8": ["8-А", "8-Б", "8-В"],
-    "world-lit-9": ["9-А", "9-Б", "9-В"],
-    "ukr-lang-9": ["9-А", "9-Б", "9-В"],
-    "ukr-lit-9": ["9-А", "9-Б", "9-В"],
-  };
 
-  const initialCourseId = courses[0]?.items[0]?.id ?? "";
+  // Update initial selection logic to look at filtered courses
+  const initialCourseId = filteredCourses[0]?.items[0]?.id ?? "";
+  
+  // Reset selection when teacher changes
+  useEffect(() => {
+    if (filteredCourses[0]?.items[0]?.id) {
+       setSelectedCourseId(filteredCourses[0].items[0].id);
+       const firstCourseId = filteredCourses[0].items[0].id;
+       const classes = classesByCourse[firstCourseId] ?? [];
+       setSelectedClass(classes[0] ?? "");
+    }
+  }, [teacher, filteredCourses]); // Re-run when teacher changes
+
   const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
   const currentClasses = classesByCourse[selectedCourseId] ?? [];
   const [selectedClass, setSelectedClass] = useState(
@@ -132,7 +159,7 @@ const Teacher = () => {
             <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr_1fr]">
               <Panel title="Курси">
                 <div className="space-y-6">
-                  {courses.map((group) => (
+                  {filteredCourses.map((group) => (
                     <div key={group.grade}>
                       <div className="text-sm font-semibold text-slate-700">
                         {group.grade}
@@ -215,6 +242,11 @@ const Teacher = () => {
             type="text"
             value={newTopic}
             onChange={(event) => setNewTopic(event.target.value)}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                    handleAddTopic();
+                }
+            }}
             placeholder="Введіть тему"
             className="w-full rounded-full bg-[#E9F1FF] px-8 py-5 text-lg font-medium text-slate-700 placeholder-slate-500 outline-none transition focus:bg-white focus:ring-2 focus:ring-[#BFD6FF]"
           />

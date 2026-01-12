@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { teachers } from "../data/teachers";
 import AddMaterialsCard from "../components/AddMaterialsCard";
 import Card from "../components/Card";
@@ -7,16 +7,17 @@ import GenerateModalContent from "../components/GenerateModalContent";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import PillButton from "../components/PillButton";
+import SelectStudentsModal from "../components/SelectStudentsModal";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { addMaterial, getMaterials } from "../data/materialsStorage";
 
 const courseLabels: Record<string, string> = {
-  "world-lit-8": "Зарубіжна література",
+  "algebra-8": "Алгебра",
+  "history-8": "Історія України",
   "ukr-lang-8": "Українська мова",
-  "ukr-lit-8": "Українська література",
-  "world-lit-9": "Зарубіжна література",
+  "algebra-9": "Алгебра",
+  "history-9": "Історія України",
   "ukr-lang-9": "Українська мова",
-  "ukr-lit-9": "Українська література",
 };
 
 const TeacherTopic = () => {
@@ -25,9 +26,14 @@ const TeacherTopic = () => {
     () => teachers.find((item) => item.id === id),
     [id]
   );
-  const [activeModal, setActiveModal] = useState<"material" | "test" | null>(
+  const [activeModal, setActiveModal] = useState<"material" | "test" | "audience" | null>(
     null
   );
+  // Keep track of which flow opened the audience selector
+  const [previousModal, setPreviousModal] = useState<"material" | "test" | null>(
+    null
+  );
+
   const [materialName, setMaterialName] = useState("");
   const [testName, setTestName] = useState("");
   const decodedClass = classId ? decodeURIComponent(classId) : "";
@@ -38,6 +44,7 @@ const TeacherTopic = () => {
   const [tests, setTests] = useState<string[]>([]);
   const isMaterialModalOpen = activeModal === "material";
   const isTestModalOpen = activeModal === "test";
+  const isAudienceModalOpen = activeModal === "audience";
 
   useEffect(() => {
     const storedNotes = getMaterials({
@@ -57,6 +64,25 @@ const TeacherTopic = () => {
     setNotes(storedNotes);
     setTests(storedTests);
   }, [id, courseId, decodedClass, decodedTopic]);
+
+  const handleOpenAudience = (from: "material" | "test") => {
+    setPreviousModal(from);
+    setActiveModal("audience");
+  };
+
+  const handleAudienceSave = (selection: {
+    levels: string[];
+    students: string[];
+  }) => {
+    // In a real app, we would store this selection to use when generating
+    console.log("Audience selected:", selection);
+    // Return to the previous modal
+    if (previousModal) {
+      setActiveModal(previousModal);
+    } else {
+      setActiveModal(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#1E73F7] text-slate-900">
@@ -137,7 +163,10 @@ const TeacherTopic = () => {
                       <span className="inline-block h-6 w-6 rounded-md bg-slate-200" />
                       {item}
                     </div>
-                    <PillButton label="Переглянути" />
+                    {/* Link to Note View */}
+                    <Link to={`/teacher/${id}/note/${courseId}/${topicId}/${encodeURIComponent(item)}`}>
+                        <PillButton label="Переглянути" />
+                    </Link>
                   </Card>
                 ))}
               </div>
@@ -151,19 +180,21 @@ const TeacherTopic = () => {
             <section>
               <h2 className="text-xl font-semibold text-white">Тести</h2>
               <div className="mt-4 space-y-4">
-                {tests.map((item) => (
+                {tests.map((item, index) => (
                   <Card key={item} className="px-5 py-5">
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-semibold text-slate-900">
                         {item}
                       </div>
-                      <PillButton label="Переглянути" />
+                      <Link to={`/teacher/${id}/test/test-${index + 1}`}>
+                        <PillButton label="Переглянути" />
+                      </Link>
                     </div>
                     <div className="mt-4 text-sm text-slate-700">Учнів 20</div>
                     <div className="mt-3 flex -space-x-2">
-                      {[0, 1, 2, 3].map((index) => (
+                      {[0, 1, 2, 3].map((idx) => (
                         <div
-                          key={index}
+                          key={idx}
                           className="h-8 w-8 rounded-full border-2 border-white bg-slate-200"
                         />
                       ))}
@@ -192,6 +223,7 @@ const TeacherTopic = () => {
           value={materialName}
           onChange={setMaterialName}
           primaryLabel="Згенерувати"
+          onSecondaryClick={() => handleOpenAudience("material")}
           onPrimaryClick={() => {
             if (!materialName.trim()) {
               return;
@@ -221,6 +253,7 @@ const TeacherTopic = () => {
           value={testName}
           onChange={setTestName}
           primaryLabel="Згенерувати"
+          onSecondaryClick={() => handleOpenAudience("test")}
           onPrimaryClick={() => {
             if (!testName.trim()) {
               return;
@@ -239,6 +272,16 @@ const TeacherTopic = () => {
           }}
         />
       </Modal>
+
+      <SelectStudentsModal
+        isOpen={isAudienceModalOpen}
+        onClose={() => {
+          if (previousModal) setActiveModal(previousModal);
+          else setActiveModal(null);
+        }}
+        classNameFilter={decodedClass}
+        onSave={handleAudienceSave}
+      />
     </div>
   );
 };
