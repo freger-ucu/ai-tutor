@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { teachers } from "../data/teachers";
 import AddMaterialsCard from "../components/AddMaterialsCard";
 import Card from "../components/Card";
@@ -11,12 +11,12 @@ import TeacherSidebar from "../components/TeacherSidebar";
 import { addMaterial, getMaterials } from "../data/materialsStorage";
 
 const courseLabels: Record<string, string> = {
-  "world-lit-8": "Зарубіжна література",
+  "algebra-8": "Алгебра",
+  "history-8": "Історія України",
   "ukr-lang-8": "Українська мова",
-  "ukr-lit-8": "Українська література",
-  "world-lit-9": "Зарубіжна література",
+  "algebra-9": "Алгебра",
+  "history-9": "Історія України",
   "ukr-lang-9": "Українська мова",
-  "ukr-lit-9": "Українська література",
 };
 
 const TeacherTopic = () => {
@@ -151,19 +151,21 @@ const TeacherTopic = () => {
             <section>
               <h2 className="text-xl font-semibold text-white">Тести</h2>
               <div className="mt-4 space-y-4">
-                {tests.map((item) => (
+                {tests.map((item, index) => (
                   <Card key={item} className="px-5 py-5">
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-semibold text-slate-900">
                         {item}
                       </div>
-                      <PillButton label="Переглянути" />
+                      <Link to={`/teacher/${id}/test/test-${index + 1}`}>
+                        <PillButton label="Переглянути" />
+                      </Link>
                     </div>
                     <div className="mt-4 text-sm text-slate-700">Учнів 20</div>
                     <div className="mt-3 flex -space-x-2">
-                      {[0, 1, 2, 3].map((index) => (
+                      {[0, 1, 2, 3].map((idx) => (
                         <div
-                          key={index}
+                          key={idx}
                           className="h-8 w-8 rounded-full border-2 border-white bg-slate-200"
                         />
                       ))}
