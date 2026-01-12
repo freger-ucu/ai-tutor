@@ -1,12 +1,13 @@
 """
-State Models
+State Models for LangGraph Workflows
 
-Pydantic models for LangGraph state management.
+This module will contain state definitions for LangGraph graphs.
+States define what data flows through the workflow nodes.
+
+TODO: Define states when implementing LangGraph in T8, T14, T17
+- TutorState: Teacher workflow (analyze → lesson → tests)
+- StudentFlowState: Student workflow (submit → check → summary)
+- ReportState: Report workflow (aggregate → analyze → report)
 """
 
-from pydantic import BaseModel
-
-
-class SessionState(BaseModel):
-    """Session state model."""
-    pass
+# States will be defined here when LangGraph is implemented
