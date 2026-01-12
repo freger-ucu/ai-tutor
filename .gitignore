@@ -10,7 +10,7 @@ ENV/
 env/
 .env
 
-# Data (will be downloaded separately)
+# Data (added separately, not in repo)
 backend/data/
 
 # Node
@@ -24,6 +24,9 @@ frontend/.env.local
 *.swp
 *.swo
 *~
+
+# Claude Code
+.claude/
 
 # Docker
 .docker/
@@ -56,5 +59,8 @@ wheels/
 *.log
 logs/
 
-# Markdowns
+# Planning docs (local only)
+AI_Tutor_Tasks.md
 T0_Basic_Architecture.md
+endpoints_all.md
+endpoints_teacher.md
