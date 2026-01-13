@@ -1,8 +1,11 @@
-import { useState, useMemo } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useState, useMemo, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { students } from "../data/students";
-import { getTopics } from "../data/materialsStorage";
+import { getMaterials, getTopics } from "../data/materialsStorage";
 import PillButton from "../components/PillButton";
+import { getStudentData } from "../api/student";
+import { toNumericId } from "../api/idUtils";
+import { getStudentCompletedTestIds } from "../data/studentProgress";
 
 const Subjects = [
   { id: "algebra", label: "Алгебра", icon: <span className="text-xl">√x</span> },
@@ -26,45 +29,114 @@ const Subjects = [
   },
 ];
 
-const courseIdMap: Record<string, string> = {
-  "ukr-lang": "ukr-lang-8", // Assuming 8th grade based on student mock
-  algebra: "algebra-8",
-  history: "history-8",
-};
-
 const Student = () => {
   const { studentId } = useParams();
   const navigate = useNavigate();
   const [activeSubjectId, setActiveSubjectId] = useState("ukr-lang");
+  const [apiSubjects, setApiSubjects] = useState<string[]>([]);
+  const [studentGrade, setStudentGrade] = useState<number | null>(null);
 
   const student = useMemo(
     () => students.find((s) => s.id === studentId),
     [studentId]
   );
 
-  // Get topics for the current context
-  // In a real app, we'd filter by the activeSubjectId mapping to a real courseId
-  // For demo, we'll fetch all and filter loosely or just show mock data if empty
+  useEffect(() => {
+    const apiId = toNumericId(studentId);
+    if (!apiId) {
+      return;
+    }
+    getStudentData(apiId)
+      .then((response) => {
+        setApiSubjects(response.subjects);
+        setStudentGrade(response.class_number);
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+  }, [studentId]);
+
+  const availableSubjects = apiSubjects.length
+    ? Subjects.filter((subject) => apiSubjects.includes(subject.label))
+    : Subjects;
+
+  useEffect(() => {
+    if (!availableSubjects.length) {
+      return;
+    }
+    if (!availableSubjects.find((subject) => subject.id === activeSubjectId)) {
+      setActiveSubjectId(availableSubjects[0].id);
+    }
+  }, [availableSubjects, activeSubjectId]);
+
+  const localGradeMatch = student?.className.match(/(\d+)/);
+  const localGrade = localGradeMatch ? Number(localGradeMatch[1]) : null;
+  const gradeSuffix = localGrade ?? studentGrade ?? 8;
+  const courseIdMap: Record<string, string> = {
+    "ukr-lang": `ukr-lang-${gradeSuffix}`,
+    algebra: `algebra-${gradeSuffix}`,
+    history: `history-${gradeSuffix}`,
+  };
+
+  const formatDate = (value?: string) => {
+    if (!value) {
+      return "—";
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return "—";
+    }
+    return parsed.toLocaleDateString("uk-UA", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  };
+
   const topics = useMemo(() => {
     const targetCourseId = courseIdMap[activeSubjectId] || activeSubjectId;
-    
-    // Fetch topics from storage for the student's class and selected subject
-    let fetched = getTopics({ 
-      courseId: targetCourseId,
-      className: student?.className // "8-А"
-    });
-    
-    return fetched.map((t, idx) => ({
-        ...t,
-        // Simulate completed status for demo: first one is new, others are completed? 
-        // Or just random. Let's make the last added new, others completed.
-        // For now, simple modulo logic is fine.
-        isCompleted: idx % 2 !== 0 
-    }));
-  }, [activeSubjectId, student]);
+    const className = student?.className;
+    if (!className) {
+      return [];
+    }
 
-  const newTopics = topics.filter((t) => !t.isCompleted);
-  const completedTopics = topics.filter((t) => t.isCompleted);
+    const fetchedTopics = getTopics({
+      courseId: targetCourseId,
+      className,
+    });
+    const tests = getMaterials({
+      courseId: targetCourseId,
+      className,
+      type: "test",
+    });
+    const testsByTopic = new Map<string, typeof tests>();
+    tests.forEach((test) => {
+      if (!test.topicName) {
+        return;
+      }
+      const existing = testsByTopic.get(test.topicName) ?? [];
+      testsByTopic.set(test.topicName, [...existing, test]);
+    });
+
+    const completedTestIds = getStudentCompletedTestIds(studentId);
+
+    return fetchedTopics.map((topic) => {
+      const topicTests = testsByTopic.get(topic.title) ?? [];
+      const totalTests = topicTests.length;
+      const completedTests = topicTests.filter((test) =>
+        completedTestIds.has(test.id)
+      ).length;
+      const percent = totalTests
+        ? Math.round((completedTests / totalTests) * 100)
+        : 0;
+      return {
+        ...topic,
+        totalTests,
+        completedTests,
+        percent,
+      };
+    });
+  }, [activeSubjectId, student, studentId]);
   
   const handleTopicClick = (topicTitle: string) => {
     const targetCourseId = courseIdMap[activeSubjectId] || activeSubjectId;
@@ -101,7 +173,7 @@ const Student = () => {
           </div>
 
           <div className="mt-4 flex-1 space-y-1 px-4">
-            {Subjects.map((subject) => {
+            {availableSubjects.map((subject) => {
               const isActive = activeSubjectId === subject.id;
               return (
                 <button
@@ -126,54 +198,59 @@ const Student = () => {
         {/* Main Content */}
         <div className="ml-64 w-full p-10">
           <h1 className="text-2xl font-semibold text-white">Теми</h1>
-          
-          <div className="mt-8 grid grid-cols-2 gap-8">
-            {/* New Topics (Left) */}
-            <div className="space-y-4">
-              <div className="text-sm text-white/80 font-medium">Нові</div>
-              {newTopics.map((topic) => (
-                <div
-                  key={topic.id}
-                  className="flex items-center justify-between rounded-2xl bg-white px-6 py-5 shadow-sm"
-                >
-                  <div className="font-bold text-slate-900">{topic.title}</div>
-                  <PillButton 
-                    label="Переглянути" 
-                    className="bg-[#E9F1FF] text-[#1E73F7] hover:bg-[#D4E4FF]"
-                    onClick={() => handleTopicClick(topic.title)}
-                  />
-                </div>
-              ))}
-              {newTopics.length === 0 && (
-                <div className="rounded-2xl bg-white/10 px-6 py-8 text-center text-sm text-white/60">
-                  Немає нових тем
-                </div>
-              )}
-            </div>
 
-            {/* Completed Topics (Right) */}
-             <div className="space-y-4">
-              <div className="text-sm text-white/80 font-medium">Пройдені</div>
-              {completedTopics.map((topic) => (
-                <div
-                  key={topic.id}
-                  className="flex items-center justify-between rounded-2xl border border-white/30 bg-[#1E73F7] px-6 py-5"
-                >
-                  <div className="font-semibold text-white">{topic.title}</div>
-                  <button 
-                    onClick={() => handleTopicClick(topic.title)}
-                    className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-[#1E73F7] transition-colors hover:bg-slate-50"
-                  >
-                    Переглянути
-                  </button>
+          <div className="mt-6 space-y-4">
+            {topics.map((topic) => (
+              <div
+                key={topic.id}
+                className="flex flex-wrap items-center justify-between gap-6 rounded-[24px] bg-white px-8 py-5 shadow-sm"
+              >
+                <div className="min-w-[180px] font-semibold text-slate-900">
+                  {topic.title}
                 </div>
-              ))}
-              {completedTopics.length === 0 && (
-                <div className="rounded-2xl border border-white/10 px-6 py-8 text-center text-sm text-white/40">
-                  Немає пройдених тем
+
+                <div className="min-w-[220px]">
+                  <div className="text-xs font-semibold uppercase text-[#1E73F7]">
+                    Тестів пройдено
+                  </div>
+                  <div className="mt-2 flex items-center gap-3">
+                    <div className="h-2.5 w-40 rounded-full bg-[#E9F1FF]">
+                      <div
+                        className="h-full rounded-full bg-[#1E73F7]"
+                        style={{ width: `${topic.percent}%` }}
+                      />
+                    </div>
+                    <div className="text-sm font-semibold text-slate-700">
+                      {topic.percent}%
+                    </div>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {topic.completedTests}/{topic.totalTests} тестів
+                  </div>
                 </div>
-              )}
-            </div>
+
+                <div className="min-w-[160px]">
+                  <div className="text-xs font-semibold uppercase text-[#1E73F7]">
+                    Дата
+                  </div>
+                  <div className="mt-2 text-sm font-semibold text-slate-900">
+                    {formatDate(topic.createdAt)}
+                  </div>
+                </div>
+
+                <PillButton
+                  label="Переглянути"
+                  className="bg-[#E9F1FF] text-[#1E73F7] hover:bg-[#D4E4FF]"
+                  onClick={() => handleTopicClick(topic.title)}
+                />
+              </div>
+            ))}
+
+            {topics.length === 0 && (
+              <div className="rounded-2xl border border-white/10 px-6 py-8 text-center text-sm text-white/60">
+                Немає тем
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -182,4 +259,3 @@ const Student = () => {
 };
 
 export default Student;
-

@@ -12,6 +12,7 @@ interface TestContainerProps {
   showStatistics?: boolean;
   /** 'teacher' shows pre-answered test results, 'student' lets user answer */
   viewMode?: "teacher" | "student";
+  onFinish?: (result: { correctAnswers: number; totalQuestions: number }) => void;
 }
 
 const TestContainer = ({
@@ -19,9 +20,11 @@ const TestContainer = ({
   statistics,
   showStatistics = false,
   viewMode = "student",
+  onFinish,
 }: TestContainerProps) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Map<string, TestAnswer>>(new Map());
+  const [isFinished, setIsFinished] = useState(false);
 
   // Pre-populate answers for teacher view (simulating that students have already answered)
   useEffect(() => {
@@ -41,6 +44,13 @@ const TestContainer = ({
       setAnswers(preFilledAnswers);
     }
   }, [viewMode, testData.questions]);
+
+  useEffect(() => {
+    if (viewMode === "student") {
+      setAnswers(new Map());
+      setIsFinished(false);
+    }
+  }, [viewMode, testData.id]);
 
   const currentQuestion = testData.questions[currentQuestionIndex];
   const currentAnswer = answers.get(currentQuestion.id);
@@ -80,7 +90,7 @@ const TestContainer = ({
   const handleOptionSelect = (optionId: string) => {
     // Teacher view is read-only
     if (viewMode === "teacher") return;
-    if (currentAnswer) return; // Already answered
+    if (isFinished) return;
 
     const isCorrect = optionId === currentQuestion.correctOptionId;
     const newAnswer: TestAnswer = {
@@ -99,6 +109,19 @@ const TestContainer = ({
   const handleQuestionSelect = (index: number) => {
     setCurrentQuestionIndex(index);
   };
+
+  const totalQuestions = testData.questions.length;
+  const answeredCount = answeredQuestionIndices.size;
+  const isReadyToFinish =
+    viewMode === "student" ? answeredCount === totalQuestions : false;
+  const progressCount =
+    viewMode === "student" && !isFinished ? answeredCount : correctAnswersCount;
+  const progressLabel =
+    viewMode === "teacher"
+      ? "учнів відповіли\nправильно"
+      : isFinished
+        ? "правильних\nвідповідей"
+        : "відповідей\nобрано";
 
   return (
     <div className="space-y-6">
@@ -121,25 +144,77 @@ const TestContainer = ({
             question={currentQuestion}
             selectedOptionId={currentAnswer?.selectedOptionId ?? null}
             onOptionSelect={handleOptionSelect}
-            showResult={!!currentAnswer}
+            showResult={viewMode === "teacher" ? !!currentAnswer : isFinished}
           />
 
           {/* Show explanation after answering */}
-          {currentAnswer && currentQuestion.explanation && (
-            <TestExplanation explanation={currentQuestion.explanation} />
-          )}
+          {currentAnswer &&
+            currentQuestion.explanation &&
+            (viewMode === "teacher" || isFinished) && (
+              <TestExplanation explanation={currentQuestion.explanation} />
+            )}
+
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
+              disabled={currentQuestionIndex === 0}
+              className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
+                currentQuestionIndex === 0
+                  ? "cursor-not-allowed bg-white/60 text-slate-300"
+                  : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
+              }`}
+            >
+              ← Попереднє
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
+              disabled={currentQuestionIndex >= testData.questions.length - 1}
+              className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
+                currentQuestionIndex >= testData.questions.length - 1
+                  ? "cursor-not-allowed bg-white/60 text-slate-300"
+                  : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
+              }`}
+            >
+              Наступне →
+            </button>
+          </div>
         </div>
 
         {/* Right column - Progress and Statistics */}
         <div className="flex flex-col gap-4">
           <TestProgressCard
-            correctAnswers={correctAnswersCount}
+            correctAnswers={progressCount}
             totalQuestions={totalCount}
-            label={viewMode === "teacher" ? "учнів відповіли\nправильно" : "правильних\nвідповідей"}
+            label={progressLabel}
           />
 
           {showStatistics && statistics && (
             <TestStatisticsCard statistics={statistics} />
+          )}
+
+          {viewMode === "student" && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!isFinished) {
+                  onFinish?.({
+                    correctAnswers: correctAnswersCount,
+                    totalQuestions: testData.questions.length,
+                  });
+                  setIsFinished(true);
+                }
+              }}
+              disabled={!isReadyToFinish || isFinished}
+              className={`rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
+                isReadyToFinish && !isFinished
+                  ? "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
+                  : "cursor-not-allowed bg-white/60 text-slate-300"
+              }`}
+            >
+              Завершити тест
+            </button>
           )}
         </div>
       </div>
@@ -148,4 +223,3 @@ const TestContainer = ({
 };
 
 export default TestContainer;
-

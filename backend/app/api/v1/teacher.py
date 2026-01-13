@@ -218,6 +218,216 @@ class FullPipelineResponse(BaseModel):
 
 
 # =============================================================================
+# Contract Models (api_flow_and_contracts.md)
+# =============================================================================
+
+
+class TeacherClassItem(BaseModel):
+    """Teacher class entry for contract flow."""
+    class_id: int
+    class_number: int
+    subject: str
+
+
+class TeacherDataResponse(BaseModel):
+    """Teacher data response for contract flow."""
+    teacher_id: int
+    full_name: str
+    classes: list[TeacherClassItem]
+
+
+class TeacherStudentsRequest(BaseModel):
+    """Request students for a class in contract flow."""
+    class_id: int
+    teacher_id: int
+    subject: str
+
+
+class TeacherStudentItem(BaseModel):
+    """Student item for teacher student list."""
+    student_id: int
+    subject_level: str
+    average_subject_grade: float
+
+
+class TeacherStudentsResponse(BaseModel):
+    """Response with student list and levels."""
+    students: list[TeacherStudentItem]
+
+
+class GenerateNotesByLevelRequest(BaseModel):
+    """Request to generate notes by level."""
+    class_id: int
+    teacher_id: int
+    subject: str
+    level_list: list[str]
+    topic_definition: str
+
+
+class GenerateNotesByStudentRequest(BaseModel):
+    """Request to generate notes by student list."""
+    class_id: int
+    teacher_id: int
+    subject: str
+    student_list: list[int]
+    topic_definition: str
+
+
+class GeneratedNotesResponse(BaseModel):
+    """Generated notes response for contract flow."""
+    title: str
+    contents: str
+    teacher_notes: str
+
+
+class GenerateTestRequest(BaseModel):
+    """Request to generate test questions."""
+    class_id: int
+    teacher_id: int
+    subject: str
+    topic_definition: str
+
+
+class TestAnswerOption(BaseModel):
+    """Answer option for a test question."""
+    answer: str
+    correct: bool
+
+
+class GeneratedQuestion(BaseModel):
+    """Generated test question."""
+    question: str
+    type: str
+    difficulty: str
+    answer_options: Optional[list[TestAnswerOption]] = None
+    explanation: str
+    topic: str
+    subtopics: list[str]
+
+
+class GeneratedTestResponse(BaseModel):
+    """Generated test response."""
+    title: str
+    questions: list[GeneratedQuestion]
+
+
+class StudentDetailsRequest(BaseModel):
+    """Request for detailed student data."""
+    class_id: int
+    subject: str
+    teacher_id: int
+    student_id: int
+
+
+class SkippedLesson(BaseModel):
+    """Skipped lesson info."""
+    date: str
+    topic: str
+
+
+class ProblemTopic(BaseModel):
+    """Problem topic info."""
+    topic: str
+    average_score: float
+
+
+class StudentDetailsResponse(BaseModel):
+    """Response for detailed student data."""
+    average_subject_grade: float
+    level: str
+    skipped_lessons: list[SkippedLesson]
+    problematic_topics: list[ProblemTopic]
+
+
+class StudentRecommendationRequest(BaseModel):
+    """Request for student recommendation."""
+    student_id: int
+
+
+class StudentRecommendationResponse(BaseModel):
+    """Recommendation response for a student."""
+    feedback: str
+
+
+def _generate_mock_teacher_classes(teacher_id: int) -> list[TeacherClassItem]:
+    subjects = ["Алгебра", "Історія України", "Українська мова"]
+    classes = []
+    for subject in subjects:
+        for grade in (8, 9):
+            classes.append(
+                TeacherClassItem(
+                    class_id=grade,
+                    class_number=grade,
+                    subject=subject,
+                )
+            )
+    return classes
+
+
+def _generate_mock_students(class_id: int) -> list[TeacherStudentItem]:
+    levels = ["weak", "medium", "strong"]
+    students = []
+    for idx in range(1, 11):
+        students.append(
+            TeacherStudentItem(
+                student_id=class_id * 100 + idx,
+                subject_level=levels[idx % 3],
+                average_subject_grade=6.5 + idx * 0.2,
+            )
+        )
+    return students
+
+
+def _build_notes_response(topic_definition: str, subject: str) -> GeneratedNotesResponse:
+    title = f"{subject}: {topic_definition[:40]}".strip()
+    contents = (
+        f"## {topic_definition}\n\n"
+        "Основні поняття та приклади по темі. "
+        "Цей конспект сформовано за контрактом API.\n"
+    )
+    teacher_notes = (
+        "Зверніть увагу на учнів із низьким рівнем. "
+        "Почніть з короткого повторення базових понять."
+    )
+    return GeneratedNotesResponse(
+        title=title,
+        contents=contents,
+        teacher_notes=teacher_notes,
+    )
+
+
+def _build_test_response(topic_definition: str, subject: str) -> GeneratedTestResponse:
+    questions = [
+        GeneratedQuestion(
+            question=f"Поясніть основну ідею теми: {topic_definition}",
+            type="open",
+            difficulty="medium",
+            answer_options=None,
+            explanation="Відповідь має відображати ключові поняття теми.",
+            topic=topic_definition,
+            subtopics=["основи", "визначення"],
+        ),
+        GeneratedQuestion(
+            question=f"Оберіть правильне твердження про тему: {topic_definition}",
+            type="single_choice",
+            difficulty="easy",
+            answer_options=[
+                TestAnswerOption(answer="Варіант A", correct=False),
+                TestAnswerOption(answer="Варіант B", correct=True),
+                TestAnswerOption(answer="Варіант C", correct=False),
+            ],
+            explanation="Правильна відповідь — Варіант B.",
+            topic=topic_definition,
+            subtopics=["терміни"],
+        ),
+    ]
+    return GeneratedTestResponse(
+        title=f"Тест: {topic_definition}",
+        questions=questions,
+    )
+
+
+# =============================================================================
 # Mock Data Generators
 # =============================================================================
 
@@ -585,3 +795,79 @@ async def full_pipeline(request: FullPipelineRequest) -> FullPipelineResponse:
     4. Test personalization
     """
     return _generate_mock_full_pipeline(request)
+
+
+# =============================================================================
+# Contract Endpoints (api_flow_and_contracts.md)
+# =============================================================================
+
+
+@router.get("/{teacher_id}", response_model=TeacherDataResponse)
+async def get_teacher_data(teacher_id: int) -> TeacherDataResponse:
+    """Endpoint 1: Get teacher data (classes + subjects)."""
+    classes = _generate_mock_teacher_classes(teacher_id)
+    return TeacherDataResponse(
+        teacher_id=teacher_id,
+        full_name=f"Вчитель #{teacher_id}",
+        classes=classes,
+    )
+
+
+@router.post("/students", response_model=TeacherStudentsResponse)
+async def get_students(request: TeacherStudentsRequest) -> TeacherStudentsResponse:
+    """Endpoint 2: Get students in class with performance levels."""
+    return TeacherStudentsResponse(students=_generate_mock_students(request.class_id))
+
+
+@router.post("/notes/by-level", response_model=GeneratedNotesResponse)
+async def generate_notes_by_level(
+    request: GenerateNotesByLevelRequest,
+) -> GeneratedNotesResponse:
+    """Endpoint 3.1: Generate notes by student level."""
+    return _build_notes_response(request.topic_definition, request.subject)
+
+
+@router.post("/notes/individual", response_model=GeneratedNotesResponse)
+async def generate_notes_individual(
+    request: GenerateNotesByStudentRequest,
+) -> GeneratedNotesResponse:
+    """Endpoint 3.2: Generate notes for a student list."""
+    return _build_notes_response(request.topic_definition, request.subject)
+
+
+@router.post("/test/generate", response_model=GeneratedTestResponse)
+async def generate_test(request: GenerateTestRequest) -> GeneratedTestResponse:
+    """Endpoint 4: Generate test question pool."""
+    return _build_test_response(request.topic_definition, request.subject)
+
+
+@router.post("/student/details", response_model=StudentDetailsResponse)
+async def get_student_details(
+    request: StudentDetailsRequest,
+) -> StudentDetailsResponse:
+    """Endpoint 5: Get detailed student data."""
+    return StudentDetailsResponse(
+        average_subject_grade=6.5,
+        level="medium",
+        skipped_lessons=[
+            SkippedLesson(date="2024-09-15", topic="Дискримінант"),
+            SkippedLesson(date="2024-09-22", topic="Теорема Вієта"),
+        ],
+        problematic_topics=[
+            ProblemTopic(topic="Дискримінант", average_score=4.5),
+            ProblemTopic(topic="Квадратні нерівності", average_score=5.0),
+        ],
+    )
+
+
+@router.post("/student/recommendation", response_model=StudentRecommendationResponse)
+async def get_student_recommendation(
+    request: StudentRecommendationRequest,
+) -> StudentRecommendationResponse:
+    """Endpoint 6: Get AI recommendation for a student."""
+    return StudentRecommendationResponse(
+        feedback=(
+            "Учень має прогалини в темі 'Дискримінант'. "
+            "Рекомендую коротке повторення та 3-4 приклади для закріплення."
+        )
+    )

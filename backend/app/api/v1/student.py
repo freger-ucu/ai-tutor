@@ -89,6 +89,56 @@ class StudentSummaryResponse(BaseModel):
 
 
 # =============================================================================
+# Contract Models (api_flow_and_contracts.md)
+# =============================================================================
+
+
+class StudentLoginResponse(BaseModel):
+    """Student login response (class + subjects)."""
+    class_id: int
+    class_number: int
+    subjects: list[str]
+
+
+class CheckOpenRequest(BaseModel):
+    """Check open-ended answer request."""
+    student_id: int
+    subject: str
+    topic: str
+    subtopics: list[str]
+    question: str
+    answer: str
+
+
+class CheckOpenResponse(BaseModel):
+    """Check open-ended answer response."""
+    correct: bool
+    feedback: str
+
+
+class TestFeedbackQuestion(BaseModel):
+    """Question summary for feedback."""
+    question: str
+    answer: str
+    correct: bool
+    topic: str
+    subtopics: list[str]
+
+
+class TestFeedbackRequest(BaseModel):
+    """Test feedback request."""
+    student_id: int
+    teacher_id: int
+    subject: str
+    questions: list[TestFeedbackQuestion]
+
+
+class TestFeedbackResponse(BaseModel):
+    """Test feedback response."""
+    feedback: str
+
+
+# =============================================================================
 # Mock Data Generators
 # =============================================================================
 
@@ -301,3 +351,43 @@ async def get_student_summary(
     - Recommendations
     """
     return _generate_mock_summary(student_id, test_id)
+
+
+# =============================================================================
+# Contract Endpoints (api_flow_and_contracts.md)
+# =============================================================================
+
+
+@router.get("/{student_id}", response_model=StudentLoginResponse)
+async def get_student_data(student_id: int) -> StudentLoginResponse:
+    """Endpoint 8: Get student data (class + subjects)."""
+    return StudentLoginResponse(
+        class_id=9,
+        class_number=9,
+        subjects=["Алгебра", "Історія України", "Українська мова"],
+    )
+
+
+@router.post("/check-open", response_model=CheckOpenResponse)
+async def check_open_question(request: CheckOpenRequest) -> CheckOpenResponse:
+    """Endpoint 9: Check open-ended question."""
+    is_correct = bool(request.answer.strip())
+    feedback = (
+        "Правильно! Відповідь містить ключові поняття."
+        if is_correct
+        else "Потрібно більше деталей. Спробуйте пояснити поняття своїми словами."
+    )
+    return CheckOpenResponse(correct=is_correct, feedback=feedback)
+
+
+@router.post("/test-feedback", response_model=TestFeedbackResponse)
+async def get_test_feedback(request: TestFeedbackRequest) -> TestFeedbackResponse:
+    """Endpoint 10: Get overall test feedback."""
+    correct_count = sum(1 for item in request.questions if item.correct)
+    total = len(request.questions)
+    return TestFeedbackResponse(
+        feedback=(
+            f"Результат: {correct_count}/{total} правильних відповідей. "
+            "Рекомендація: повторіть теми з найбільшою кількістю помилок."
+        )
+    )
