@@ -264,42 +264,78 @@ class TestStudentRecommendationRequest:
 
     def test_valid_request(self):
         """StudentRecommendationRequest accepts valid data."""
-        req = StudentRecommendationRequest(student_id=102)
+        req = StudentRecommendationRequest(student_id=102, subject="Алгебра")
         assert req.student_id == 102
+        assert req.subject == "Алгебра"
 
-    def test_only_student_id_required(self):
-        """StudentRecommendationRequest only needs student_id."""
-        req = StudentRecommendationRequest(student_id=1)
-        assert hasattr(req, 'student_id')
+    def test_requires_student_id_and_subject(self):
+        """StudentRecommendationRequest requires both student_id and subject."""
+        with pytest.raises(ValidationError):
+            StudentRecommendationRequest(student_id=1)  # missing subject
+
+    def test_subject_is_required(self):
+        """StudentRecommendationRequest subject field is required."""
+        with pytest.raises(ValidationError):
+            StudentRecommendationRequest(student_id=102)  # missing subject
 
 
 class TestSolverRequest:
     """Tests for SolverRequest (EP7)."""
 
     def test_valid_request(self):
-        """SolverRequest accepts valid data."""
-        req = SolverRequest(questions=["2 + 2 = ?", "Solve x² = 4"])
-        assert len(req.questions) == 2
+        """SolverRequest accepts valid data with subject and grade."""
+        req = SolverRequest(
+            subject="Алгебра",
+            grade=8,
+            question="2 + 2 = ?"
+        )
+        assert req.question == "2 + 2 = ?"
+        assert req.subject == "Алгебра"
+        assert req.grade == 8
 
-    def test_empty_questions(self):
-        """SolverRequest accepts empty questions list."""
-        req = SolverRequest(questions=[])
-        assert req.questions == []
-
-    def test_single_question(self):
-        """SolverRequest accepts single question."""
-        req = SolverRequest(questions=["What is 2 + 2?"])
-        assert len(req.questions) == 1
-
-    def test_questions_must_be_strings(self):
-        """SolverRequest questions must be strings."""
+    def test_question_is_required(self):
+        """SolverRequest requires question field."""
         with pytest.raises(ValidationError):
-            SolverRequest(questions=[1, 2, 3])  # ints, not strings
+            SolverRequest(subject="Алгебра", grade=8)  # missing question
 
-    def test_unicode_questions(self):
+    def test_subject_is_required(self):
+        """SolverRequest requires subject field."""
+        with pytest.raises(ValidationError):
+            SolverRequest(grade=8, question="Test")  # missing subject
+
+    def test_grade_is_required(self):
+        """SolverRequest requires grade field."""
+        with pytest.raises(ValidationError):
+            SolverRequest(subject="Алгебра", question="Test")  # missing grade
+
+    def test_grade_must_be_8_or_9(self):
+        """SolverRequest grade must be 8 or 9."""
+        # Valid grades
+        req8 = SolverRequest(subject="Алгебра", grade=8, question="Test")
+        assert req8.grade == 8
+        req9 = SolverRequest(subject="Алгебра", grade=9, question="Test")
+        assert req9.grade == 9
+
+        # Invalid grades
+        with pytest.raises(ValidationError):
+            SolverRequest(subject="Алгебра", grade=7, question="Test")
+        with pytest.raises(ValidationError):
+            SolverRequest(subject="Алгебра", grade=10, question="Test")
+
+    def test_unicode_question(self):
         """SolverRequest handles Ukrainian text."""
-        req = SolverRequest(questions=["Розв'яжіть рівняння: x² - 4 = 0"])
-        assert "Розв'яжіть" in req.questions[0]
+        req = SolverRequest(
+            subject="Алгебра",
+            grade=8,
+            question="Розв'яжіть рівняння: x² - 4 = 0"
+        )
+        assert "Розв'яжіть" in req.question
+
+    def test_long_question(self):
+        """SolverRequest accepts long questions."""
+        long_q = "A" * 10000
+        req = SolverRequest(subject="Алгебра", grade=8, question=long_q)
+        assert len(req.question) == 10000
 
 
 class TestCheckOpenQuestionRequest:

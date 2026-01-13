@@ -50,13 +50,21 @@ class Settings(BaseSettings):
         """Path to embeddings directory."""
         return self.data_dir / "embeddings"
 
-    # LLM
+    # LLM Configuration
     llm_provider: str = "lapa"
     llm_api_key: str = ""
-    llm_base_url: str = ""
-    llm_model_name: str = ""
-    llm_temperature: float = 0.7
-    llm_max_tokens: int = 4096
+    llm_base_url: str = "http://146.59.127.106:4000"
+    llm_model: str = "mamay"
+    llm_embedding_model: str = "text-embedding-qwen"
+    llm_temperature: float = 0.0
+    llm_max_tokens: int = 500
+
+    # RAG Configuration
+    rag_embedding_type: str = "qwen"  # "qwen" or "gemini"
+    rag_retrieval_top_k: int = 4
+    rag_retrieval_max_chars: int = 4000
+    rag_rrf_k: int = 60
+    rag_theory_only: bool = True
 
     # Redis
     redis_url: str = "redis://localhost:6379"
@@ -69,6 +77,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"  # Ignore extra environment variables
 
 
 settings = Settings()

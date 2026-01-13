@@ -1,587 +1,745 @@
 """
-Teacher API Endpoints (T7)
+Teacher API Endpoints
 
-Handles teacher-facing lesson preparation flow:
-- Analyze class (insights, clusters)
-- Generate lesson content
-- Generate test pool
-- Create personalized tests
-- Generate post-test report
-- Full pipeline (all-in-one)
-
-All endpoints return MOCK data - will be connected to real services later.
+Implements EP1-EP7 per architecture.md contracts.
 """
 
-from typing import Any, Optional
+from fastapi import APIRouter, HTTPException
 
-from fastapi import APIRouter
-from pydantic import BaseModel, Field
+import json
+import re
+
+from app.models.requests import (
+    GetStudentListRequest,
+    StudentDetailsRequest,
+    StudentRecommendationRequest,
+    SolverRequest,
+    GenerateLevelNotesRequest,
+    GenerateIndividualNotesRequest,
+    GenerateTestRequest,
+)
+from app.models.responses import (
+    TeacherClassesResponse,
+    StudentListResponse,
+    StudentDetailsResponse,
+    StudentSummaryResponse,
+    SkippedLessonResponse,
+    ProblematicTopicResponse,
+    ClassInfoResponse,
+    RecommendationResponse,
+    SolverResponse,
+    NotesResponse,
+    TestResponse,
+)
+from app.models.domain import Question, AnswerOption
+from app.models.enums import QuestionType, Difficulty
+from app.services.data_loader import get_data_loader
+from app.rag.utils.llm_client import get_llm_client
+from app.rag.utils.hybrid_retriever import get_retriever, format_context
+from app.prompts.recommendation import (
+    RECOMMENDATION_SYSTEM_PROMPT,
+    build_recommendation_prompt,
+)
+from app.prompts.solver import (
+    SOLVER_SYSTEM_PROMPT,
+    build_solver_prompt,
+)
+from app.prompts.notes_generator import (
+    NOTES_SYSTEM_PROMPT,
+    build_level_notes_prompt,
+    build_individual_notes_prompt,
+)
+from app.prompts.test_generator import (
+    TEST_GENERATOR_SYSTEM_PROMPT,
+    build_test_generator_prompt,
+)
 
 router = APIRouter()
 
 
-# =============================================================================
-# Request Models
-# =============================================================================
-
-
-class ClassAnalysisRequest(BaseModel):
-    """Request to analyze a class."""
-    class_id: int
-    subject: str
-    topic: str
-
-
-class GenerateLessonRequest(BaseModel):
-    """Request to generate lesson content."""
-    class_id: int
-    subject: str
-    topic_id: str
-    grade: int
-    class_insights: Optional[dict] = None
-
-
-class GenerateTestPoolRequest(BaseModel):
-    """Request to generate exercise pool."""
-    topic_id: str
-    subject: str
-    grade: int
-    pool_size: int = 20
-
-
-class ClusterAssignmentInput(BaseModel):
-    """A single student's cluster assignment."""
-    student_id: int
-    cluster_type: str  # "weak", "medium", "strong"
-
-
-class CreatePersonalizedTestsRequest(BaseModel):
-    """Request to create personalized tests."""
-    pool_id: str
-    cluster_assignments: list[ClusterAssignmentInput]
-
-
-class StudentResultInput(BaseModel):
-    """A single student's result for report."""
-    student_id: int
-    score: float
-    percentage: float
-
-
-class GenerateReportRequest(BaseModel):
-    """Request to generate post-test report."""
-    class_id: int
-    test_id: str
-    student_results: list[StudentResultInput]
-
-
-class FullPipelineRequest(BaseModel):
-    """Request for full pipeline (all steps)."""
-    class_id: int
-    subject: str
-    topic: str
-    grade: int
-
-
-# =============================================================================
-# Response Models
-# =============================================================================
-
-
-class TopicRoutingResult(BaseModel):
-    """Result of topic routing."""
-    topic_id: str
-    topic_name: str
-    prerequisites: list[str]
-    subtopics: list[str]
-    page_ranges: list[str]
-
-
-class ClusterDistributionInfo(BaseModel):
-    """Cluster distribution info."""
-    weak: int
-    medium: int
-    strong: int
-
-
-class ClassInsights(BaseModel):
-    """Insights about a class."""
-    cluster_distribution: ClusterDistributionInfo
-    missed_prerequisites: dict[str, list[int]]  # topic -> student_ids
-    weak_topics: list[str]
-    students_needing_attention: list[int]
-
-
-class ClusterAssignmentOutput(BaseModel):
-    """A student's cluster assignment."""
-    student_id: int
-    cluster_type: str
-    percentile: float
-    avg_score: float
-
-
-class ClassAnalysisResponse(BaseModel):
-    """Response for class analysis."""
-    topic_routing: TopicRoutingResult
-    class_insights: ClassInsights
-    cluster_assignments: list[ClusterAssignmentOutput]
-
-
-class SourceReference(BaseModel):
-    """Reference to textbook source."""
-    page_id: str
-    page_title: str
-    page_range: str
-    relevance_score: float
-
-
-class TeacherLessonResponse(BaseModel):
-    """Response for generated lesson."""
-    insights_summary: dict
-    lesson_content: dict
-    control_questions: list[str]
-    sources: list[SourceReference]
-
-
-class ExerciseInPool(BaseModel):
-    """An exercise in the pool (with answer for teacher)."""
-    id: str
-    question: str
-    type: str
-    difficulty: str
-    options: Optional[list[str]] = None
-    correct_answer: str
-    subtopic: str
-    prerequisites: list[str] = Field(default_factory=list)
-
-
-class ValidationReport(BaseModel):
-    """Validation report for exercise pool."""
-    valid_count: int
-    invalid_count: int
-    issues: list[str]
-
-
-class ExercisePoolResponse(BaseModel):
-    """Response for generated exercise pool."""
-    pool_id: str
-    pool: list[ExerciseInPool]
-    validation_report: ValidationReport
-
-
-class PersonalizedTestsResponse(BaseModel):
-    """Response for personalized tests."""
-    tests_by_cluster: dict[str, list[ExerciseInPool]]  # "weak" -> exercises
-    student_test_assignments: dict[str, str]  # student_id -> cluster
-
-
-class ClassStats(BaseModel):
-    """Class statistics for report."""
-    average_score: float
-    median_score: float
-    min_score: float
-    max_score: float
-    below_50_percent: int
-    between_50_75_percent: int
-    above_75_percent: int
-
-
-class ProblemTopic(BaseModel):
-    """A problematic topic in the report."""
-    topic: str
-    error_percentage: float
-    typical_mistakes: list[str]
-
-
-class AttentionStudent(BaseModel):
-    """A student needing attention."""
-    student_id: int
-    score: float
-    main_problems: list[str]
-    recommendation: str
-
-
-class TeacherReportResponse(BaseModel):
-    """Response for post-test report."""
-    class_stats: ClassStats
-    problem_topics: list[ProblemTopic]
-    students_needing_attention: list[AttentionStudent]
-    recommendations: str
-
-
-class FullPipelineResponse(BaseModel):
-    """Response for full pipeline."""
-    class_analysis: ClassAnalysisResponse
-    teacher_lesson: TeacherLessonResponse
-    test_pool: ExercisePoolResponse
-    personalized_tests: PersonalizedTestsResponse
-
-
-# =============================================================================
-# Mock Data Generators
-# =============================================================================
-
-
-def _generate_mock_class_analysis(req: ClassAnalysisRequest) -> ClassAnalysisResponse:
-    """Generate mock class analysis."""
-    return ClassAnalysisResponse(
-        topic_routing=TopicRoutingResult(
-            topic_id="topic_quadratic_eq",
-            topic_name="Квадратні рівняння",
-            prerequisites=["Лінійні рівняння", "Розкладання на множники"],
-            subtopics=["Дискримінант", "Формула коренів", "Теорема Вієта"],
-            page_ranges=["45-52", "53-58"]
-        ),
-        class_insights=ClassInsights(
-            cluster_distribution=ClusterDistributionInfo(weak=5, medium=15, strong=5),
-            missed_prerequisites={"Розкладання на множники": [101, 102, 105]},
-            weak_topics=["Системи лінійних рівнянь"],
-            students_needing_attention=[101, 102, 107]
-        ),
-        cluster_assignments=[
-            ClusterAssignmentOutput(student_id=101, cluster_type="weak", percentile=15.0, avg_score=4.5),
-            ClusterAssignmentOutput(student_id=102, cluster_type="weak", percentile=20.0, avg_score=5.0),
-            ClusterAssignmentOutput(student_id=103, cluster_type="medium", percentile=45.0, avg_score=7.0),
-            ClusterAssignmentOutput(student_id=104, cluster_type="medium", percentile=55.0, avg_score=7.5),
-            ClusterAssignmentOutput(student_id=105, cluster_type="strong", percentile=85.0, avg_score=10.5),
-        ]
-    )
-
-
-def _generate_mock_lesson(req: GenerateLessonRequest) -> TeacherLessonResponse:
-    """Generate mock lesson content."""
-    return TeacherLessonResponse(
-        insights_summary={
-            "cluster_stats": "20% слабких, 60% середніх, 20% сильних",
-            "critical_absences": "3 учні пропустили тему 'Розкладання на множники'",
-            "recommendations": "Почніть з повторення основ"
-        },
-        lesson_content={
-            "intro": "Квадратні рівняння - один з найважливіших типів рівнянь в алгебрі.",
-            "main_material": "Квадратне рівняння має вигляд ax² + bx + c = 0, де a ≠ 0...",
-            "examples": {
-                "basic": "x² - 5x + 6 = 0 → D = 25 - 24 = 1 → x₁ = 2, x₂ = 3",
-                "medium": "2x² - 7x + 3 = 0 → ...",
-                "advanced": "x² - 2mx + m² - 1 = 0 при різних m"
-            },
-            "common_mistakes": [
-                "Забувають про від'ємний дискримінант",
-                "Плутають знаки у формулі коренів"
-            ]
-        },
-        control_questions=[
-            "Що таке дискримінант і як він впливає на кількість коренів?",
-            "Як знайти суму та добуток коренів без розв'язування рівняння?",
-            "Коли квадратне рівняння має один корінь?",
-            "Як перевірити правильність знайдених коренів?"
-        ],
-        sources=[
-            SourceReference(
-                page_id="p_45",
-                page_title="Квадратні рівняння: означення",
-                page_range="45-48",
-                relevance_score=0.95
-            ),
-            SourceReference(
-                page_id="p_49",
-                page_title="Дискримінант та його властивості",
-                page_range="49-52",
-                relevance_score=0.92
-            )
-        ]
-    )
-
-
-def _generate_mock_test_pool(req: GenerateTestPoolRequest) -> ExercisePoolResponse:
-    """Generate mock exercise pool."""
-    exercises = [
-        ExerciseInPool(
-            id=f"ex_{i:03d}",
-            question=q,
-            type=t,
-            difficulty=d,
-            options=opts,
-            correct_answer=ans,
-            subtopic=sub,
-            prerequisites=[]
-        )
-        for i, (q, t, d, opts, ans, sub) in enumerate([
-            ("Розв'яжіть: x² - 5x + 6 = 0", "single_choice", "easy",
-             ["x=2,3", "x=-2,-3", "x=1,6", "x=0,5"], "x=2,3", "Формула коренів"),
-            ("Знайдіть D: x² + 4x + 4 = 0", "open", "easy", None, "0", "Дискримінант"),
-            ("Скільки коренів при D < 0?", "single_choice", "easy",
-             ["0", "1", "2", "∞"], "0", "Дискримінант"),
-            ("Розв'яжіть: x² - 9 = 0", "open", "easy", None, "x=±3", "Неповні рівняння"),
-            ("Знайдіть D: 2x² - 3x + 1 = 0", "open", "easy", None, "1", "Дискримінант"),
-            ("Розв'яжіть: x² + 2x - 15 = 0", "open", "medium", None, "x=-5,3", "Формула коренів"),
-            ("Сума коренів x² - 7x + 10 = 0", "open", "medium", None, "7", "Теорема Вієта"),
-            ("Добуток коренів x² - 7x + 10 = 0", "open", "medium", None, "10", "Теорема Вієта"),
-            ("При якому k рівні корені: x² + kx + 9 = 0", "open", "medium", None, "k=±6", "Параметри"),
-            ("Розв'яжіть: 3x² - 12x = 0", "open", "medium", None, "x=0,4", "Неповні рівняння"),
-            ("Складіть рівняння з коренями 2 і 5", "open", "medium", None, "x²-7x+10=0", "Теорема Вієта"),
-            ("При якому m є 2 корені: x² - 4x + m = 0", "open", "difficult", None, "m<4", "Параметри"),
-            ("x + y = 7, xy = 12. Знайти x, y", "open", "difficult", None, "3,4 або 4,3", "Системи"),
-            ("Більший корінь x² - 5x + 4 = 0", "open", "difficult", None, "4", "Формула коренів"),
-            ("При якому k корені протилежні: x² + kx - 6 = 0", "open", "difficult", None, "k=0", "Параметри"),
-            ("Розв'яжіть: |x² - 4| = 3x", "open", "difficult", None, "...", "Модуль"),
-        ], start=1)
-    ]
-
-    return ExercisePoolResponse(
-        pool_id="pool_001",
-        pool=exercises,
-        validation_report=ValidationReport(
-            valid_count=len(exercises),
-            invalid_count=0,
-            issues=[]
-        )
-    )
-
-
-def _generate_mock_personalized_tests(
-    req: CreatePersonalizedTestsRequest
-) -> PersonalizedTestsResponse:
-    """Generate mock personalized tests."""
-    # Create simple exercises for each cluster
-    weak_exercises = [
-        ExerciseInPool(id="w1", question="x² - 4 = 0", type="open", difficulty="easy",
-                      correct_answer="x=±2", subtopic="Неповні"),
-        ExerciseInPool(id="w2", question="x² - 5x = 0", type="open", difficulty="easy",
-                      correct_answer="x=0,5", subtopic="Неповні"),
-        ExerciseInPool(id="w3", question="D для x² + 2x + 1", type="open", difficulty="easy",
-                      correct_answer="0", subtopic="Дискримінант"),
-        ExerciseInPool(id="w4", question="x² - 1 = 0", type="open", difficulty="easy",
-                      correct_answer="x=±1", subtopic="Неповні"),
-        ExerciseInPool(id="w5", question="x² - 6x + 9 = 0", type="open", difficulty="medium",
-                      correct_answer="x=3", subtopic="Формула"),
-        ExerciseInPool(id="w6", question="Скільки коренів при D=0?", type="single_choice",
-                      difficulty="easy", options=["0", "1", "2"], correct_answer="1", subtopic="Дискримінант"),
-    ]
-
-    medium_exercises = [
-        ExerciseInPool(id="m1", question="x² - 5x + 6 = 0", type="open", difficulty="medium",
-                      correct_answer="x=2,3", subtopic="Формула"),
-        ExerciseInPool(id="m2", question="2x² - 7x + 3 = 0", type="open", difficulty="medium",
-                      correct_answer="x=0.5,3", subtopic="Формула"),
-        ExerciseInPool(id="m3", question="Сума коренів x² - 9x + 20", type="open", difficulty="medium",
-                      correct_answer="9", subtopic="Вієта"),
-        ExerciseInPool(id="m4", question="x² + 4x - 5 = 0", type="open", difficulty="medium",
-                      correct_answer="x=-5,1", subtopic="Формула"),
-        ExerciseInPool(id="m5", question="При якому k D=0: x² + kx + 4 = 0", type="open",
-                      difficulty="medium", correct_answer="k=±4", subtopic="Параметри"),
-        ExerciseInPool(id="m6", question="Складіть рівняння: x₁=1, x₂=4", type="open",
-                      difficulty="medium", correct_answer="x²-5x+4=0", subtopic="Вієта"),
-        ExerciseInPool(id="m7", question="3x² - 12x = 0", type="open", difficulty="easy",
-                      correct_answer="x=0,4", subtopic="Неповні"),
-        ExerciseInPool(id="m8", question="x² - 8x + 15 = 0", type="open", difficulty="medium",
-                      correct_answer="x=3,5", subtopic="Формула"),
-    ]
-
-    strong_exercises = [
-        ExerciseInPool(id="s1", question="При якому m 2 корені: x² - 6x + m = 0", type="open",
-                      difficulty="difficult", correct_answer="m<9", subtopic="Параметри"),
-        ExerciseInPool(id="s2", question="x + y = 10, xy = 21", type="open", difficulty="difficult",
-                      correct_answer="x=3,y=7", subtopic="Системи"),
-        ExerciseInPool(id="s3", question="Більший корінь x² - 7x + 10 = 0", type="open",
-                      difficulty="medium", correct_answer="5", subtopic="Формула"),
-        ExerciseInPool(id="s4", question="При якому k корені x² + kx + k = 0 взаємно обернені",
-                      type="open", difficulty="difficult", correct_answer="k=1", subtopic="Параметри"),
-        ExerciseInPool(id="s5", question="x⁴ - 5x² + 4 = 0", type="open", difficulty="difficult",
-                      correct_answer="x=±1,±2", subtopic="Біквадратні"),
-        ExerciseInPool(id="s6", question="2x² - 7x + 3 = 0", type="open", difficulty="medium",
-                      correct_answer="x=0.5,3", subtopic="Формула"),
-        ExerciseInPool(id="s7", question="x² - (m+1)x + m = 0, знайти m якщо x₁ = 2x₂",
-                      type="open", difficulty="difficult", correct_answer="m=2", subtopic="Параметри"),
-        ExerciseInPool(id="s8", question="Сума квадратів коренів x² - 5x + 3 = 0",
-                      type="open", difficulty="difficult", correct_answer="19", subtopic="Вієта"),
-        ExerciseInPool(id="s9", question="x² + |x| - 6 = 0", type="open", difficulty="difficult",
-                      correct_answer="x=±2", subtopic="Модуль"),
-        ExerciseInPool(id="s10", question="При якому a рівняння x² + ax + a² = 0 має корені",
-                      type="open", difficulty="difficult", correct_answer="a=0", subtopic="Параметри"),
-    ]
-
-    # Build student assignments
-    assignments = {str(a.student_id): a.cluster_type for a in req.cluster_assignments}
-
-    return PersonalizedTestsResponse(
-        tests_by_cluster={
-            "weak": weak_exercises,
-            "medium": medium_exercises,
-            "strong": strong_exercises
-        },
-        student_test_assignments=assignments
-    )
-
-
-def _generate_mock_report(req: GenerateReportRequest) -> TeacherReportResponse:
-    """Generate mock post-test report."""
-    return TeacherReportResponse(
-        class_stats=ClassStats(
-            average_score=72.5,
-            median_score=75.0,
-            min_score=35.0,
-            max_score=98.0,
-            below_50_percent=4,
-            between_50_75_percent=12,
-            above_75_percent=9
-        ),
-        problem_topics=[
-            ProblemTopic(
-                topic="Параметричні рівняння",
-                error_percentage=65.0,
-                typical_mistakes=[
-                    "Не враховують умову D ≥ 0",
-                    "Плутають знаки нерівності"
-                ]
-            ),
-            ProblemTopic(
-                topic="Теорема Вієта",
-                error_percentage=40.0,
-                typical_mistakes=[
-                    "Плутають суму і добуток",
-                    "Забувають про знак c/a"
-                ]
-            )
-        ],
-        students_needing_attention=[
-            AttentionStudent(
-                student_id=101,
-                score=35.0,
-                main_problems=["Не розуміє поняття дискримінанта", "Пропустив базові теми"],
-                recommendation="Індивідуальні консультації, повторення основ"
-            ),
-            AttentionStudent(
-                student_id=107,
-                score=42.0,
-                main_problems=["Обчислювальні помилки", "Неуважність"],
-                recommendation="Більше практики з простими прикладами"
-            )
-        ],
-        recommendations="Рекомендую на наступному уроці повторити тему 'Параметричні рівняння'. "
-                       "Зверніть особливу увагу на учнів 101 та 107 - їм потрібна додаткова підтримка. "
-                       "Для сильних учнів можна запропонувати олімпіадні задачі."
-    )
-
-
-def _generate_mock_full_pipeline(req: FullPipelineRequest) -> FullPipelineResponse:
-    """Generate mock full pipeline response."""
-    analysis_req = ClassAnalysisRequest(
-        class_id=req.class_id,
-        subject=req.subject,
-        topic=req.topic
-    )
-    lesson_req = GenerateLessonRequest(
-        class_id=req.class_id,
-        subject=req.subject,
-        topic_id="topic_001",
-        grade=req.grade
-    )
-    pool_req = GenerateTestPoolRequest(
-        topic_id="topic_001",
-        subject=req.subject,
-        grade=req.grade
-    )
-    personalize_req = CreatePersonalizedTestsRequest(
-        pool_id="pool_001",
-        cluster_assignments=[
-            ClusterAssignmentInput(student_id=101, cluster_type="weak"),
-            ClusterAssignmentInput(student_id=102, cluster_type="medium"),
-            ClusterAssignmentInput(student_id=103, cluster_type="strong"),
-        ]
-    )
-
-    return FullPipelineResponse(
-        class_analysis=_generate_mock_class_analysis(analysis_req),
-        teacher_lesson=_generate_mock_lesson(lesson_req),
-        test_pool=_generate_mock_test_pool(pool_req),
-        personalized_tests=_generate_mock_personalized_tests(personalize_req)
-    )
-
-
-# =============================================================================
-# Endpoints
-# =============================================================================
-
-
-@router.post("/analyze-class", response_model=ClassAnalysisResponse)
-async def analyze_class(request: ClassAnalysisRequest) -> ClassAnalysisResponse:
+def _parse_notes_json(response: str, topic_definition: str) -> dict:
     """
-    Analyze a class for a specific topic.
+    Parse JSON response from LLM for notes generation.
+
+    Handles:
+    - Clean JSON
+    - JSON wrapped in ```json code blocks
+    - Malformed JSON with unescaped newlines
+    """
+    response_text = response.strip()
+
+    # Remove markdown code blocks if present
+    if "```json" in response_text:
+        response_text = response_text.split("```json", 1)[1]
+        if "```" in response_text:
+            response_text = response_text.split("```", 1)[0]
+        response_text = response_text.strip()
+    elif "```" in response_text:
+        parts = response_text.split("```")
+        if len(parts) >= 2:
+            response_text = parts[1].strip()
+            if response_text.startswith("json"):
+                response_text = response_text[4:].strip()
+
+    # Try to parse as JSON
+    if "{" in response_text and "}" in response_text:
+        start = response_text.find("{")
+        end = response_text.rfind("}") + 1
+        json_str = response_text[start:end]
+
+        # First try: direct parse
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            pass
+
+        # Second try: use regex to extract fields (handles malformed JSON)
+        try:
+            title_match = re.search(r'"title"\s*:\s*"([^"]*)"', json_str)
+
+            # For contents and teacher_notes, find the field and extract until next field or end
+            contents_match = re.search(r'"contents"\s*:\s*"(.*?)",\s*"teacher_notes"', json_str, re.DOTALL)
+            if not contents_match:
+                contents_match = re.search(r'"contents"\s*:\s*"(.*?)"(?:,|\s*})', json_str, re.DOTALL)
+
+            teacher_notes_match = re.search(r'"teacher_notes"\s*:\s*"(.*?)"(?:\s*}|$)', json_str, re.DOTALL)
+
+            result = {}
+            if title_match:
+                result["title"] = title_match.group(1)
+            if contents_match:
+                # Unescape the content
+                content = contents_match.group(1)
+                content = content.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
+                result["contents"] = content
+            if teacher_notes_match:
+                notes = teacher_notes_match.group(1)
+                notes = notes.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
+                result["teacher_notes"] = notes
+
+            if result:
+                # Ensure all required fields
+                if "title" not in result:
+                    result["title"] = f"Урок: {topic_definition[:50]}"
+                if "contents" not in result:
+                    result["contents"] = response_text
+                if "teacher_notes" not in result:
+                    result["teacher_notes"] = ""
+                return result
+        except Exception:
+            pass
+
+    # Fallback: return raw response as contents
+    return {
+        "title": f"Урок: {topic_definition[:50]}",
+        "contents": response_text if response_text else response,
+        "teacher_notes": ""
+    }
+
+
+# =============================================================================
+# LLM Helper Functions
+# =============================================================================
+
+
+async def generate_recommendation(
+    subject: str,
+    average_grade: float,
+    level: str,
+    good_topics: list[str],
+    bad_topics: list[str],
+    missed_topics: list[str]
+) -> str:
+    """
+    Generate AI recommendation for a student.
+
+    Uses LLM to create personalized feedback based on student performance.
+    """
+    prompt = build_recommendation_prompt(
+        subject=subject,
+        average_grade=average_grade,
+        level=level,
+        good_topics=good_topics,
+        bad_topics=bad_topics,
+        missed_topics=missed_topics
+    )
+
+    full_prompt = f"{RECOMMENDATION_SYSTEM_PROMPT}\n\n{prompt}"
+
+    llm_client = get_llm_client()
+    response = await llm_client.generate(
+        prompt=full_prompt,
+        temperature=0.7,
+        max_tokens=800
+    )
+
+    return response
+
+
+# =============================================================================
+# EP1: Get Teacher Classes
+# =============================================================================
+
+
+@router.get("/{teacher_id}", response_model=TeacherClassesResponse)
+def get_teacher(teacher_id: int) -> TeacherClassesResponse:
+    """
+    EP1: Get list of classes taught by a teacher.
+
+    Returns 404 if teacher not found in data.
+    """
+    data_loader = get_data_loader()
+
+    if not data_loader.teacher_exists(teacher_id):
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    classes = data_loader.get_teacher_classes(teacher_id)
+
+    return TeacherClassesResponse(
+        classes=[
+            ClassInfoResponse(
+                class_id=c.class_id,
+                class_number=c.class_number,
+                subject=c.subject
+            )
+            for c in classes
+        ]
+    )
+
+
+# =============================================================================
+# EP2: Get Student List
+# =============================================================================
+
+
+@router.post("/students", response_model=StudentListResponse)
+def get_students(request: GetStudentListRequest) -> StudentListResponse:
+    """
+    EP2: Get list of students in a class with their levels.
+
+    Returns 404 if class/subject combination not found.
+    """
+    data_loader = get_data_loader()
+
+    students = data_loader.get_class_students(
+        class_id=request.class_id,
+        subject=request.subject,
+        teacher_id=request.teacher_id
+    )
+
+    if not students:
+        # Check if the class exists at all
+        # If no students found, it could be invalid class/subject combination
+        raise HTTPException(
+            status_code=404,
+            detail="No students found for this class/subject combination"
+        )
+
+    return StudentListResponse(
+        students=[
+            StudentSummaryResponse(
+                student_id=s.student_id,
+                subject_level=s.subject_level.value,
+                average_subject_grade=s.average_subject_grade
+            )
+            for s in students
+        ]
+    )
+
+
+# =============================================================================
+# EP5: Get Student Details
+# =============================================================================
+
+
+@router.post("/student/details", response_model=StudentDetailsResponse)
+def get_student_details(request: StudentDetailsRequest) -> StudentDetailsResponse:
+    """
+    EP5: Get detailed information about a specific student.
+
+    Returns 404 if student not found in the class/subject.
+    """
+    data_loader = get_data_loader()
+
+    details = data_loader.get_student_details(
+        student_id=request.student_id,
+        class_id=request.class_id,
+        subject=request.subject
+    )
+
+    if details is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Student not found in this class/subject"
+        )
+
+    return StudentDetailsResponse(
+        average_subject_grade=details["average_subject_grade"],
+        level=details["level"].value,
+        skipped_lessons=[
+            SkippedLessonResponse(date=l.date, topic=l.topic)
+            for l in details["skipped_lessons"]
+        ],
+        problematic_topics=[
+            ProblematicTopicResponse(topic=t.topic, average_score=t.average_score)
+            for t in details["problematic_topics"]
+        ]
+    )
+
+
+# =============================================================================
+# EP6: Get Student Recommendation
+# =============================================================================
+
+
+@router.post("/student/recommendation", response_model=RecommendationResponse)
+async def get_student_recommendation(
+    request: StudentRecommendationRequest
+) -> RecommendationResponse:
+    """
+    EP6: Get AI-generated recommendation for a student.
+
+    Returns personalized feedback based on student's performance in a subject.
+    """
+    data_loader = get_data_loader()
+
+    # Get recommendation data
+    rec_data = data_loader.get_student_recommendation_data(
+        student_id=request.student_id,
+        subject=request.subject
+    )
+
+    if rec_data is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Student not found or does not have this subject"
+        )
+
+    # Generate recommendation using LLM
+    feedback = await generate_recommendation(
+        subject=request.subject,
+        average_grade=rec_data["average_grade"],
+        level=rec_data["level"],
+        good_topics=rec_data["good_topics"],
+        bad_topics=rec_data["bad_topics"],
+        missed_topics=rec_data["missed_topics"]
+    )
+
+    return RecommendationResponse(feedback=feedback)
+
+
+# =============================================================================
+# EP7: Solver - Solve Single Question with RAG
+# =============================================================================
+
+
+async def solve_question(
+    subject: str,
+    grade: int,
+    question: str
+) -> str:
+    """
+    Solve a single question using RAG + LLM.
+
+    Retrieves relevant textbook content and generates step-by-step solution.
+    """
+    # RAG retrieval
+    retriever = get_retriever()
+    docs = await retriever.retrieve(
+        query=question,
+        subject=subject,
+        grade=grade
+    )
+
+    # Format context from retrieved documents
+    context, _ = format_context(docs, max_chars=6000, subject=subject)
+
+    # Build prompt
+    prompt = build_solver_prompt(
+        subject=subject,
+        grade=grade,
+        question=question,
+        context=context
+    )
+
+    full_prompt = f"{SOLVER_SYSTEM_PROMPT}\n\n{prompt}"
+
+    # Generate solution
+    llm_client = get_llm_client()
+    response = await llm_client.generate(
+        prompt=full_prompt,
+        temperature=0.3,  # Lower temperature for more precise answers
+        max_tokens=1500   # Allow longer responses for detailed explanations
+    )
+
+    return response
+
+
+async def solver_endpoint(request: SolverRequest) -> SolverResponse:
+    """
+    EP7: Solve a single question with RAG-grounded explanation.
+
+    Uses textbook content to provide step-by-step solution.
+    Note: Route is registered in router.py at /solver (not under /teacher).
+    """
+    answer_explained = await solve_question(
+        subject=request.subject,
+        grade=request.grade,
+        question=request.question
+    )
+
+    return SolverResponse(
+        question=request.question,
+        answer_explained=answer_explained
+    )
+
+
+# =============================================================================
+# EP3: Generate Notes
+# =============================================================================
+
+
+async def generate_level_notes(
+    subject: str,
+    grade: int,
+    level: str,
+    topic_definition: str,
+    gap_warnings: list[str] | None = None
+) -> dict:
+    """
+    Generate notes for a student level using RAG + LLM.
 
     Returns:
-    - Topic routing (matched topic, prerequisites)
-    - Class insights (clusters, absences, weak areas)
-    - Cluster assignments for each student
+        dict with 'title', 'contents', 'teacher_notes'
     """
-    return _generate_mock_class_analysis(request)
+    # RAG retrieval
+    retriever = get_retriever()
+    docs = await retriever.retrieve(
+        query=topic_definition,
+        subject=subject,
+        grade=grade
+    )
+
+    # Format context
+    context, _ = format_context(docs, max_chars=6000, subject=subject)
+
+    # Build prompt
+    prompt = build_level_notes_prompt(
+        subject=subject,
+        grade=grade,
+        level=level,
+        topic_definition=topic_definition,
+        context=context,
+        gap_warnings=gap_warnings
+    )
+
+    full_prompt = f"{NOTES_SYSTEM_PROMPT}\n\n{prompt}"
+
+    # Generate notes
+    llm_client = get_llm_client()
+    response = await llm_client.generate(
+        prompt=full_prompt,
+        temperature=0.7,
+        max_tokens=2500
+    )
+
+    # Parse JSON response
+    return _parse_notes_json(response, topic_definition)
 
 
-@router.post("/generate-lesson", response_model=TeacherLessonResponse)
-async def generate_lesson(request: GenerateLessonRequest) -> TeacherLessonResponse:
+async def generate_individual_notes(
+    subject: str,
+    grade: int,
+    topic_definition: str,
+    student_info: dict
+) -> dict:
     """
-    Generate lesson content (Конспект #1) for teacher.
+    Generate notes for a specific student using RAG + LLM.
 
-    Returns structured lesson with:
-    - Insights summary
-    - Main content with examples by level
-    - Control questions
-    - Textbook references
+    Returns:
+        dict with 'title', 'contents', 'teacher_notes'
     """
-    return _generate_mock_lesson(request)
+    # RAG retrieval
+    retriever = get_retriever()
+    docs = await retriever.retrieve(
+        query=topic_definition,
+        subject=subject,
+        grade=grade
+    )
+
+    # Format context
+    context, _ = format_context(docs, max_chars=6000, subject=subject)
+
+    # Build prompt
+    prompt = build_individual_notes_prompt(
+        subject=subject,
+        grade=grade,
+        topic_definition=topic_definition,
+        context=context,
+        student_info=student_info
+    )
+
+    full_prompt = f"{NOTES_SYSTEM_PROMPT}\n\n{prompt}"
+
+    # Generate notes
+    llm_client = get_llm_client()
+    response = await llm_client.generate(
+        prompt=full_prompt,
+        temperature=0.7,
+        max_tokens=2500
+    )
+
+    # Parse JSON response
+    return _parse_notes_json(response, topic_definition)
 
 
-@router.post("/generate-test-pool", response_model=ExercisePoolResponse)
-async def generate_test_pool(request: GenerateTestPoolRequest) -> ExercisePoolResponse:
+@router.post("/notes/by-level", response_model=NotesResponse)
+async def generate_notes_by_level(
+    request: GenerateLevelNotesRequest
+) -> NotesResponse:
     """
-    Generate exercise pool for a topic.
+    EP3.1: Generate notes for students by level.
 
-    Returns 15-20 exercises with:
-    - Mixed difficulties (easy/medium/hard)
-    - Mixed types (choice/open)
-    - Correct answers (for teacher review)
-    - Validation report
+    Generates lesson notes adapted to specified student levels.
     """
-    return _generate_mock_test_pool(request)
+    data_loader = get_data_loader()
+
+    # Determine grade from class
+    class_info = data_loader.get_class_info(request.class_id)
+    if class_info is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    grade = class_info["class_number"]
+
+    # Get the first level (or combine if multiple)
+    # For simplicity, use the first level in the list
+    if request.level_list:
+        level = request.level_list[0].value
+    else:
+        level = "medium"
+
+    # Get gap warnings for this level (problematic topics)
+    gap_warnings = data_loader.get_level_gap_warnings(
+        class_id=request.class_id,
+        subject=request.subject,
+        level=level
+    )
+
+    # Generate notes
+    result = await generate_level_notes(
+        subject=request.subject,
+        grade=grade,
+        level=level,
+        topic_definition=request.topic_definition,
+        gap_warnings=gap_warnings
+    )
+
+    return NotesResponse(
+        title=result["title"],
+        contents=result["contents"],
+        teacher_notes=result["teacher_notes"]
+    )
 
 
-@router.post("/create-personalized-tests", response_model=PersonalizedTestsResponse)
-async def create_personalized_tests(
-    request: CreatePersonalizedTestsRequest
-) -> PersonalizedTestsResponse:
+@router.post("/notes/individual", response_model=NotesResponse)
+async def generate_notes_individual(
+    request: GenerateIndividualNotesRequest
+) -> NotesResponse:
     """
-    Create personalized tests for each cluster.
+    EP3.2: Generate notes for specific students.
 
-    Distributes exercises based on:
-    - Weak: more easy, fewer hard
-    - Medium: balanced mix
-    - Strong: more hard, fewer easy
+    Generates individualized lesson notes for selected students.
     """
-    return _generate_mock_personalized_tests(request)
+    data_loader = get_data_loader()
+
+    # Determine grade from class
+    class_info = data_loader.get_class_info(request.class_id)
+    if class_info is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    grade = class_info["class_number"]
+
+    # For simplicity, use the first student's info
+    if not request.student_list:
+        raise HTTPException(status_code=400, detail="student_list cannot be empty")
+
+    student_id = request.student_list[0]
+
+    # Get student's details
+    student_details = data_loader.get_student_details(
+        student_id=student_id,
+        class_id=request.class_id,
+        subject=request.subject
+    )
+
+    if student_details is None:
+        raise HTTPException(status_code=404, detail="Student not found in class")
+
+    # Build student info for prompt
+    student_info = {
+        "level": student_details["level"].value,
+        "problematic_topics": [t.topic for t in student_details["problematic_topics"]],
+        "missed_topics": [l.topic for l in student_details["skipped_lessons"]]
+    }
+
+    # Generate notes
+    result = await generate_individual_notes(
+        subject=request.subject,
+        grade=grade,
+        topic_definition=request.topic_definition,
+        student_info=student_info
+    )
+
+    return NotesResponse(
+        title=result["title"],
+        contents=result["contents"],
+        teacher_notes=result["teacher_notes"]
+    )
 
 
-@router.post("/generate-report", response_model=TeacherReportResponse)
-async def generate_report(request: GenerateReportRequest) -> TeacherReportResponse:
+# =============================================================================
+# EP4: Generate Test
+# =============================================================================
+
+
+async def generate_test_pool(
+    subject: str,
+    grade: int,
+    topic_definition: str,
+    num_questions: int = 30
+) -> dict:
     """
-    Generate post-test report for teacher.
+    Generate a pool of test questions using RAG + LLM.
 
-    Includes:
-    - Class statistics
-    - Problem topics
-    - Students needing attention
-    - Recommendations
+    Returns:
+        dict with 'title' and 'questions' list
     """
-    return _generate_mock_report(request)
+    # RAG retrieval
+    retriever = get_retriever()
+    docs = await retriever.retrieve(
+        query=topic_definition,
+        subject=subject,
+        grade=grade
+    )
+
+    # Format context
+    context, _ = format_context(docs, max_chars=6000, subject=subject)
+
+    # Build prompt
+    prompt = build_test_generator_prompt(
+        subject=subject,
+        grade=grade,
+        topic_definition=topic_definition,
+        context=context,
+        num_questions=num_questions
+    )
+
+    full_prompt = f"{TEST_GENERATOR_SYSTEM_PROMPT}\n\n{prompt}"
+
+    # Generate test questions
+    llm_client = get_llm_client()
+    response = await llm_client.generate(
+        prompt=full_prompt,
+        temperature=0.8,  # Higher temperature for variety
+        max_tokens=4000   # Allow long responses for many questions
+    )
+
+    # Parse JSON response
+    try:
+        response_text = response.strip()
+        if "{" in response_text and "}" in response_text:
+            start = response_text.find("{")
+            end = response_text.rfind("}") + 1
+            json_str = response_text[start:end]
+            result = json.loads(json_str)
+        else:
+            result = {
+                "title": f"Тест: {topic_definition[:50]}",
+                "questions": []
+            }
+
+        # Ensure required fields
+        if "title" not in result:
+            result["title"] = f"Тест: {topic_definition[:50]}"
+        if "questions" not in result:
+            result["questions"] = []
+
+        return result
+
+    except json.JSONDecodeError:
+        return {
+            "title": f"Тест: {topic_definition[:50]}",
+            "questions": []
+        }
 
 
-@router.post("/full-pipeline", response_model=FullPipelineResponse)
-async def full_pipeline(request: FullPipelineRequest) -> FullPipelineResponse:
+@router.post("/test", response_model=TestResponse)
+async def generate_test_endpoint(
+    request: GenerateTestRequest
+) -> TestResponse:
     """
-    Run full teacher pipeline in one call.
+    EP4: Generate a pool of test questions.
 
-    Combines:
-    1. Class analysis
-    2. Lesson generation
-    3. Test pool generation
-    4. Test personalization
+    Generates diverse questions (multiple choice and open) at various difficulty levels.
     """
-    return _generate_mock_full_pipeline(request)
+    data_loader = get_data_loader()
+
+    # Determine grade from class
+    class_info = data_loader.get_class_info(request.class_id)
+    if class_info is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    grade = class_info["class_number"]
+
+    # Generate test pool
+    result = await generate_test_pool(
+        subject=request.subject,
+        grade=grade,
+        topic_definition=request.topic_definition
+    )
+
+    # Convert raw questions to Question objects
+    questions = []
+    for q in result.get("questions", []):
+        try:
+            # Map type string to QuestionType enum
+            q_type_str = q.get("type", "open").lower()
+            if q_type_str == "multiple_choice":
+                q_type = QuestionType.SINGLE_CHOICE  # Standard MC = single choice
+            elif q_type_str == "single_choice":
+                q_type = QuestionType.SINGLE_CHOICE
+            else:
+                q_type = QuestionType.OPEN
+
+            # Map difficulty string to Difficulty enum
+            diff_str = q.get("difficulty", "medium").lower()
+            difficulty = Difficulty(diff_str) if diff_str in ["easy", "medium", "hard"] else Difficulty.MEDIUM
+
+            # Build answer options for multiple choice
+            answer_options = None
+            if q_type != QuestionType.OPEN and q.get("options"):
+                correct_answer = q.get("correct_answer", "").upper()
+                answer_options = []
+                for i, opt in enumerate(q.get("options", [])):
+                    letter = chr(65 + i)  # A, B, C, D
+                    is_correct = (letter == correct_answer)
+                    answer_options.append(AnswerOption(answer=opt, correct=is_correct))
+
+            question = Question(
+                question=q.get("question", ""),
+                type=q_type,
+                difficulty=difficulty,
+                answer_options=answer_options,
+                explanation=q.get("explanation", ""),
+                topic=q.get("topic", ""),
+                subtopics=[]
+            )
+            questions.append(question)
+        except Exception:
+            # Skip malformed questions
+            continue
+
+    return TestResponse(
+        title=result.get("title", f"Тест: {request.topic_definition[:50]}"),
+        questions=questions
+    )

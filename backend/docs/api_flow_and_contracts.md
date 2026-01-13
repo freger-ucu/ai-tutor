@@ -574,7 +574,7 @@ POST /api/v1/teacher/student/details
 
 #### Endpoint 6: Get Student Recommendation
 
-Get AI recommendation for a student.
+Get AI recommendation for a student in a specific subject.
 
 **Request:**
 ```http
@@ -583,7 +583,8 @@ POST /api/v1/teacher/student/recommendation
 
 ```typescript
 {
-  "student_id": number
+  "student_id": number,
+  "subject": string
 }
 ```
 
@@ -605,7 +606,7 @@ POST /api/v1/teacher/student/recommendation
 
 #### Endpoint 7: Solver
 
-Solve questions and provide explanations.
+Solve a single question and provide step-by-step explanation.
 
 **Request:**
 ```http
@@ -614,33 +615,38 @@ POST /api/v1/solver
 
 ```typescript
 {
-  "questions": string[]
+  "subject": string,
+  "grade": number,
+  "question": string    // Single question (not array)
 }
 ```
 
 **Response:**
 ```typescript
 {
-  "solutions": [
-    {
-      "question": string,
-      "answer_explained": string
-    }
-  ]
+  "question": string,
+  "answer_explained": string
 }
 ```
 
-**Example:**
+**Example Request:**
 ```json
 {
-  "solutions": [
-    {
-      "question": "Розв'яжіть: 2x² + 3x - 2 = 0",
-      "answer_explained": "Використаємо формулу дискримінанта:\nD = 9 + 16 = 25\nx = (-3 ± 5) / 4\nx₁ = 0.5, x₂ = -2\n\nВідповідь: x = 0.5 або x = -2"
-    }
-  ]
+  "subject": "Алгебра",
+  "grade": 8,
+  "question": "Розв'яжіть: 2x² + 3x - 2 = 0"
 }
 ```
+
+**Example Response:**
+```json
+{
+  "question": "Розв'яжіть: 2x² + 3x - 2 = 0",
+  "answer_explained": "Використаємо формулу дискримінанта:\nD = 9 + 16 = 25\nx = (-3 ± 5) / 4\nx₁ = 0.5, x₂ = -2\n\nВідповідь: x = 0.5 або x = -2"
+}
+```
+
+**Note:** This endpoint solves one question at a time. For multiple questions, call the endpoint multiple times.
 
 ---
 

@@ -17,6 +17,14 @@ from app.models.domain import (
     StudentSummary,
 )
 from app.models.enums import Level
+from app.services.levels import compute_quartiles, assign_level
+
+
+# =============================================================================
+# REQUIRED FILTERS (from architecture.md)
+# =============================================================================
+CURRENT_ACADEMIC_YEAR = "2025-2026"
+SUPPORTED_SUBJECTS = ["Алгебра", "Українська мова", "Історія України"]
 
 
 class DataLoader:
@@ -59,7 +67,14 @@ class DataLoader:
         self._build_indexes()
 
     def _load_data(self) -> None:
-        """Load data from parquet files into memory."""
+        """
+        Load data from parquet files into memory.
+
+        Applies required filters from architecture.md:
+        1. academic_year == '2025-2026'
+        2. discipline_name in SUPPORTED_SUBJECTS
+        3. For multi-class students, use latest class
+        """
         scores_path = self.data_path / "benchmark_scores.parquet"
         absences_path = self.data_path / "benchmark_absences.parquet"
 
@@ -71,6 +86,21 @@ class DataLoader:
 
         # Load scores data
         self.scores_df = pd.read_parquet(scores_path)
+
+        # FILTER 1: Current academic year only
+        self.scores_df = self.scores_df[
+            self.scores_df["academic_year"] == CURRENT_ACADEMIC_YEAR
+        ]
+
+        # FILTER 2: Supported subjects only
+        self.scores_df = self.scores_df[
+            self.scores_df["discipline_name"].isin(SUPPORTED_SUBJECTS)
+        ]
+
+        # FILTER 3: For multi-class students, keep only latest class
+        self.scores_df = self._resolve_student_classes(self.scores_df)
+
+        # Type conversions
         self.scores_df["teacher_id"] = self.scores_df["teacher_id"].astype(int)
         self.scores_df["student_id"] = self.scores_df["student_id"].astype(int)
         self.scores_df["class_id"] = self.scores_df["class_id"].astype(int)
@@ -78,8 +108,49 @@ class DataLoader:
 
         # Load absences data
         self.absences_df = pd.read_parquet(absences_path)
+
+        # Apply same filters to absences
+        self.absences_df = self.absences_df[
+            self.absences_df["academic_year"] == CURRENT_ACADEMIC_YEAR
+        ]
+        self.absences_df = self.absences_df[
+            self.absences_df["discipline_name"].isin(SUPPORTED_SUBJECTS)
+        ]
+
+        # Type conversions
         self.absences_df["student_id"] = self.absences_df["student_id"].astype(int)
         self.absences_df["class_id"] = self.absences_df["class_id"].astype(int)
+
+    def _resolve_student_classes(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Resolve multi-class students to their latest class.
+
+        22 students appear in 2 classes (transfers). For each student,
+        keep only records from their most recent class (by lesson_date).
+        """
+        # Find students with multiple classes
+        student_classes = df.groupby("student_id")["class_id"].nunique()
+        multi_class_students = student_classes[student_classes > 1].index.tolist()
+
+        if not multi_class_students:
+            return df
+
+        # For each multi-class student, find their latest class
+        latest_classes = {}
+        for student_id in multi_class_students:
+            student_df = df[df["student_id"] == student_id]
+            # Get the class_id from the row with the latest lesson_date
+            latest_row = student_df.loc[student_df["lesson_date"].idxmax()]
+            latest_classes[student_id] = latest_row["class_id"]
+
+        # Filter: keep rows where student is NOT multi-class OR is in their latest class
+        def keep_row(row):
+            student_id = row["student_id"]
+            if student_id not in latest_classes:
+                return True  # Not a multi-class student, keep all
+            return row["class_id"] == latest_classes[student_id]
+
+        return df[df.apply(keep_row, axis=1)]
 
     def _build_indexes(self) -> None:
         """Build lookup indexes for faster queries."""
@@ -112,13 +183,13 @@ class DataLoader:
         ):
             student_avgs = group.groupby("student_id")["score_numeric"].mean()
 
-            # Calculate percentiles for level assignment
-            q1 = student_avgs.quantile(0.25)
-            q3 = student_avgs.quantile(0.75)
+            # Calculate quartiles for level assignment using shared utility
+            scores_list = student_avgs.tolist()
+            q1, q3 = compute_quartiles(scores_list)
 
             students = []
             for student_id, avg_grade in student_avgs.items():
-                level = self._compute_level(avg_grade, q1, q3)
+                level = assign_level(float(avg_grade), q1, q3)
                 students.append(
                     StudentSummary(
                         student_id=int(student_id),
@@ -129,25 +200,6 @@ class DataLoader:
 
             students.sort(key=lambda s: s.student_id)
             self._class_students[(int(class_id), subject)] = students
-
-    def _compute_level(self, avg_score: float, q1: float, q3: float) -> Level:
-        """
-        Compute student level based on percentiles.
-
-        Args:
-            avg_score: Student's average score
-            q1: First quartile (25th percentile)
-            q3: Third quartile (75th percentile)
-
-        Returns:
-            Level enum value
-        """
-        if avg_score < q1:
-            return Level.WEAK
-        elif avg_score > q3:
-            return Level.STRONG
-        else:
-            return Level.MEDIUM
 
     # =========================================================================
     # EP1: Get Teacher Classes
@@ -339,6 +391,112 @@ class DataLoader:
         problematic.sort(key=lambda p: p.average_score)
         return problematic
 
+    def _get_good_topics(
+        self,
+        student_scores: pd.DataFrame
+    ) -> list[str]:
+        """
+        Get topics where student scores well (>= 10).
+
+        Used for EP6 recommendation to highlight strengths.
+        """
+        if student_scores.empty:
+            return []
+
+        # Group by topic and calculate average
+        topic_avgs = student_scores.groupby("topic_name")["score_numeric"].mean()
+
+        # Filter topics with avg >= 10
+        good_topics = [
+            str(topic) for topic, avg in topic_avgs.items()
+            if avg >= 10
+        ]
+
+        return sorted(good_topics)
+
+    def _get_missed_topics(
+        self,
+        student_id: int,
+        class_id: int,
+        subject: str
+    ) -> list[str]:
+        """
+        Get topics from missed lessons.
+
+        Used for EP6 recommendation to suggest catching up.
+        """
+        skipped = self._get_skipped_lessons(student_id, class_id, subject)
+        return [lesson.topic for lesson in skipped if lesson.topic]
+
+    # =========================================================================
+    # EP6: Get Student Recommendation Data
+    # =========================================================================
+
+    def get_student_recommendation_data(
+        self,
+        student_id: int,
+        subject: str
+    ) -> Optional[dict]:
+        """
+        Get all data needed for EP6 recommendation generation.
+
+        Args:
+            student_id: Student identifier
+            subject: Subject name
+
+        Returns:
+            Dict with average_grade, level, good_topics, bad_topics, missed_topics
+            or None if student not found
+        """
+        if self.scores_df is None or self.scores_df.empty:
+            return None
+
+        # Get student info to find their class
+        student_info = self.get_student_info(student_id)
+        if student_info is None:
+            return None
+
+        class_id = student_info["class_id"]
+
+        # Check if student has this subject
+        if subject not in student_info["subjects"]:
+            return None
+
+        # Get student's scores for this subject
+        mask = (
+            (self.scores_df["student_id"] == student_id) &
+            (self.scores_df["class_id"] == class_id) &
+            (self.scores_df["discipline_name"] == subject)
+        )
+        student_scores = self.scores_df[mask]
+
+        if student_scores.empty:
+            return None
+
+        # Get from pre-computed index
+        class_students = self.get_class_students(class_id, subject)
+        student_summary = next(
+            (s for s in class_students if s.student_id == student_id),
+            None
+        )
+
+        if student_summary is None:
+            return None
+
+        # Get topics
+        good_topics = self._get_good_topics(student_scores)
+        problematic_topics = self._get_problematic_topics(student_scores)
+        bad_topics = [t.topic for t in problematic_topics]
+        missed_topics = self._get_missed_topics(student_id, class_id, subject)
+
+        return {
+            "average_grade": student_summary.average_subject_grade,
+            "level": student_summary.subject_level.value,
+            "good_topics": good_topics,
+            "bad_topics": bad_topics,
+            "missed_topics": missed_topics
+        }
+
     # =========================================================================
     # EP8: Get Student Info
     # =========================================================================
@@ -399,6 +557,82 @@ class DataLoader:
         if self.scores_df is None or self.scores_df.empty:
             return []
         return sorted(self.scores_df["student_id"].unique().tolist())
+
+    def get_class_info(self, class_id: int) -> Optional[dict]:
+        """
+        Get class info by class_id.
+
+        Returns:
+            dict with 'class_id', 'class_number' or None if not found.
+        """
+        if self.scores_df is None or self.scores_df.empty:
+            return None
+
+        class_data = self.scores_df[self.scores_df["class_id"] == class_id]
+        if class_data.empty:
+            return None
+
+        # Get class_number (grade) from the first matching row
+        class_number = int(class_data["grade"].iloc[0])
+
+        return {
+            "class_id": class_id,
+            "class_number": class_number
+        }
+
+    def get_level_gap_warnings(
+        self,
+        class_id: int,
+        subject: str,
+        level: str
+    ) -> list[str]:
+        """
+        Get problematic topics for students at a given level in a class.
+
+        Used for EP3.1 to warn teachers about common gaps.
+
+        Args:
+            class_id: Class ID
+            subject: Subject name
+            level: Student level (weak/medium/strong)
+
+        Returns:
+            List of topic names that students at this level struggle with.
+        """
+        if self.scores_df is None or self.scores_df.empty:
+            return []
+
+        # Get students in this class/subject at the specified level
+        students = self.get_class_students(class_id, subject)
+        if not students:
+            return []
+
+        # Filter to students at the specified level
+        level_students = [s for s in students if s.subject_level.value == level]
+        if not level_students:
+            return []
+
+        student_ids = [s.student_id for s in level_students]
+
+        # Get scores for these students
+        # Note: column is 'discipline_name' in scores_df
+        mask = (
+            (self.scores_df["class_id"] == class_id) &
+            (self.scores_df["discipline_name"] == subject) &
+            (self.scores_df["student_id"].isin(student_ids))
+        )
+        level_scores = self.scores_df[mask]
+
+        if level_scores.empty:
+            return []
+
+        # Find topics with low average scores (< 6)
+        # Note: column is 'score_numeric' in scores_df
+        topic_scores = level_scores.groupby("topic_name")["score_numeric"].mean()
+        problematic = topic_scores[topic_scores < 6].sort_values()
+
+        # Return top 5 problematic topics
+        return problematic.head(5).index.tolist()
 
 
 # Singleton instance for app-wide use
