@@ -1,0 +1,630 @@
+# Technical Architecture Documentation
+
+This document describes the LangGraph flows, RAG system, and technical relationships in the backend.
+
+---
+
+## Table of Contents
+
+- [System Overview](#system-overview)
+- [LangGraph Flows](#langgraph-flows)
+  - [Test Generation Flow (EP4)](#test-generation-flow-ep4)
+  - [Solver Flow (EP7)](#solver-flow-ep7)
+  - [Notes Generation Flow (EP3)](#notes-generation-flow-ep3)
+  - [Feedback Flow (EP10)](#feedback-flow-ep10)
+  - [Check Answer Flow (EP9)](#check-answer-flow-ep9)
+  - [Recommendation Flow (EP6)](#recommendation-flow-ep6)
+- [RAG System](#rag-system)
+- [Shared Components](#shared-components)
+- [Data Layer](#data-layer)
+- [Configuration](#configuration)
+- [Key Patterns](#key-patterns)
+
+---
+
+## System Overview
+
+```mermaid
+graph TB
+    subgraph "API Layer"
+        T[Teacher Endpoints<br/>EP1-EP7]
+        S[Student Endpoints<br/>EP8-EP10]
+    end
+
+    subgraph "LangGraph Flows"
+        TG[Test Generation]
+        SV[Solver]
+        NT[Notes]
+        FB[Feedback]
+        CA[Check Answer]
+        RC[Recommendation]
+    end
+
+    subgraph "Core Services"
+        RAG[RAG System<br/>Hybrid Retrieval]
+        LLM[LLM Client<br/>LapaLLM]
+        DL[Data Loader<br/>Parquet Files]
+    end
+
+    subgraph "Data Storage"
+        PQ[(Parquet Files)]
+        EMB[(Embeddings)]
+        TOC[(Table of Contents)]
+    end
+
+    T --> TG & SV & NT & RC
+    S --> FB & CA
+
+    TG & SV & NT & CA --> RAG
+    TG & SV & NT & FB & CA & RC --> LLM
+    T & S --> DL
+
+    RAG --> EMB & TOC
+    DL --> PQ
+```
+
+---
+
+## LangGraph Flows
+
+### Test Generation Flow (EP4)
+
+Generates 30 validated test questions using batch generation with quality validation.
+
+```mermaid
+graph LR
+    A[retrieve_context] --> B[init_batches]
+    B --> C[generate_batches]
+    C --> D[validate_samples]
+    D --> E{Check Retry}
+    E -->|"retry needed"| F[prepare_retry]
+    F --> C
+    E -->|"all valid"| G[finalize]
+    G --> H((END))
+
+    style A fill:#e1f5fe
+    style C fill:#fff3e0
+    style D fill:#f3e5f5
+    style G fill:#e8f5e9
+```
+
+**State:** `TestGenState`
+
+| Key Field | Type | Description |
+|-----------|------|-------------|
+| subject | string | Subject name |
+| grade | int | Grade level (8-9) |
+| topic_definition | string | Topic to generate questions for |
+| easy_batch | BatchState | Easy difficulty questions |
+| medium_batch | BatchState | Medium difficulty questions |
+| hard_batch | BatchState | Hard difficulty questions |
+| questions | list | Final validated questions |
+
+**Flow Details:**
+
+1. **retrieve_context**: RAG retrieval for topic content (top_k=4, max_chars=6000)
+2. **init_batches**: Initialize 3 batch states (easy/medium/hard)
+3. **generate_batches**: Parallel LLM generation for all 3 batches (10 questions each)
+4. **validate_samples**:
+   - CPU validation: format, structure, duplicates
+   - LLM validation: 3 random MC questions per batch via solver
+   - Pass threshold: ≥2 of 3 must pass
+5. **check_retry**: If any batch invalid and attempts < 2, retry
+6. **finalize**: Collect all valid questions
+
+**LLM Calls:** ~12 (3 generation + 9 validation)
+
+---
+
+### Solver Flow (EP7)
+
+Solves questions using RAG-enhanced generation with subject-specific prompts.
+
+```mermaid
+graph LR
+    A[retrieve_rag] --> B[generate_answer]
+    B --> C((END))
+
+    style A fill:#e1f5fe
+    style B fill:#fff3e0
+```
+
+**State:** `SolverState`
+
+| Key Field | Type | Description |
+|-----------|------|-------------|
+| question_text | string | Question to solve |
+| subject | string | Subject name |
+| grade | int | Grade level |
+| answers | list[str] | Answer options (for MC) |
+| rag_context | string | Retrieved textbook content |
+| answer_index | int | Selected answer index |
+| confidence | float | Confidence score |
+| reasoning | string | Step-by-step explanation |
+
+**Flow Details:**
+
+1. **retrieve_rag**: Hybrid retrieval (BM25 + vector) with RRF fusion
+2. **generate_answer**: Subject-specific prompt → JSON response with answer and reasoning
+
+**Subject-Specific Prompts:**
+- **Algebra**: Focus on formulas, step-by-step calculation
+- **Ukrainian**: Grammar rules, examples
+- **History**: Facts, dates, context
+
+**LLM Calls:** 1
+
+---
+
+### Notes Generation Flow (EP3)
+
+Generates lesson notes adapted to student levels with prerequisite-aware recap. Uses intersection logic to only include prereqs that students actually missed.
+
+```mermaid
+graph LR
+    A[aggregate_gaps] --> B[filter_prereqs]
+    B --> C[retrieve_rag]
+    C --> D[generate_notes]
+    D --> E((END))
+
+    style A fill:#e8f5e9
+    style B fill:#fce4ec
+    style C fill:#e1f5fe
+    style D fill:#fff3e0
+```
+
+**State:** `NotesState`
+
+| Key Field | Type | Description |
+|-----------|------|-------------|
+| topic_definition | string | Main topic |
+| level | string | Target level (weak/medium/strong) |
+| aggregated_gaps | dict | Weak topics and skipped topics |
+| missed_prereqs | list[str] | Prerequisites that students actually missed (gaps ∩ topic prereqs) |
+| rag_context | string | Main topic content |
+| prereq_context | string | Prerequisite content (for missed prereqs only) |
+| topic_references | list | Main topic sources |
+| prereq_references | list | Prerequisite sources |
+| contents | string | Generated notes (markdown with Recap/Lesson sections) |
+| teacher_notes | string | Tips for the teacher (includes recap recommendation) |
+
+**Flow Details:**
+
+1. **aggregate_gaps**: Collect weak/skipped topics from student data
+2. **filter_prereqs**: Find intersection of student gaps and topic prerequisites
+   - Get known prerequisites for the current topic from `PREREQ_MAP`
+   - Find which of those prereqs students actually missed/struggled with
+   - Return only the intersection (gaps ∩ prereqs)
+3. **retrieve_rag**:
+   - Always retrieve main topic content (top_k=5, max_chars=6000)
+   - If there are missed prereqs, also retrieve prereq content (top_k=3, max_chars=3000)
+4. **generate_notes**: LLM generation with combined context
+   - If missed prereqs exist: `## Повторення (Recap)` → `## Урок (Lesson)` structure
+   - If no missed prereqs: `## Урок (Lesson)` only
+   - Teacher notes include recap recommendation when applicable
+
+**Prerequisite Intersection Logic:**
+```
+missed_prereqs = student_gaps ∩ topic_prerequisites
+
+Example:
+  Topic: "квадратні рівняння"
+  Topic prereqs: ["дискримінант", "формули коренів", "квадратний тричлен", "лінійні рівняння"]
+  Student gaps: ["дискримінант", "функції", "графіки"]
+  Missed prereqs: ["дискримінант"]  # Only prereqs that are also gaps
+```
+
+**Prerequisite Mapping (PREREQ_MAP):**
+```
+"квадратні рівняння" → ["дискримінант", "формули коренів", "квадратний тричлен", "лінійні рівняння"]
+"дієприкметники" → ["дієслово", "прикметник", "дієприкметниковий зворот"]
+"друга світова війна" → ["міжвоєнний період", "передумови війни", "версальський договір"]
+```
+
+**Output Structure:**
+```markdown
+## Повторення
+[Recap of missed prerequisites - only if missed_prereqs is not empty]
+
+## Урок
+[Main lesson content]
+```
+
+**Sources:** Combined topic + prereq references
+
+**LLM Calls:** 1
+
+---
+
+### Feedback Flow (EP10)
+
+Generates constructive feedback after a test, grouped by topic.
+
+```mermaid
+graph LR
+    A[aggregate_topics] --> B[generate_feedback]
+    B --> C[format_response]
+    C --> D((END))
+
+    style A fill:#e8f5e9
+    style B fill:#fff3e0
+```
+
+**State:** `FeedbackState`
+
+| Key Field | Type | Description |
+|-----------|------|-------------|
+| questions | list | Test results |
+| correct_count | int | Number correct |
+| total_count | int | Total questions |
+| incorrect_by_topic | dict | Failed questions grouped by topic |
+| correct_by_topic | dict | Passed questions grouped by topic |
+| feedback | string | Generated feedback text |
+
+**Flow Details:**
+
+1. **aggregate_topics**: Group questions by topic/subtopic, count correct/incorrect
+2. **generate_feedback**: LLM generates motivating feedback
+3. **format_response**: Passthrough (formatting done in generation)
+
+**Note:** This flow does NOT use RAG (design decision — prompts work well without it).
+
+**LLM Calls:** 1
+
+---
+
+### Check Answer Flow (EP9)
+
+Evaluates open-ended answers using RAG-grounded evaluation.
+
+```mermaid
+graph LR
+    A[build_query] --> B[retrieve_rag]
+    B --> C[evaluate_answer]
+    C --> D[format_response]
+    D --> E((END))
+
+    style A fill:#e8f5e9
+    style B fill:#e1f5fe
+    style C fill:#fff3e0
+```
+
+**State:** `CheckAnswerState`
+
+| Key Field | Type | Description |
+|-----------|------|-------------|
+| topic | string | Question topic |
+| question | string | Question text |
+| student_answer | string | Answer to evaluate |
+| rag_context | string | Retrieved reference content |
+| is_correct | bool | Evaluation result |
+| feedback | string | Constructive feedback |
+
+**Flow Details:**
+
+1. **build_query**: Combine topic + question for RAG
+2. **retrieve_rag**: Get reference content (top_k=4, max_chars=4000)
+3. **evaluate_answer**: LLM evaluates answer against context
+4. **format_response**: Passthrough
+
+**LLM Calls:** 1
+
+---
+
+### Recommendation Flow (EP6)
+
+Generates teacher-facing recommendations based on student performance.
+
+```mermaid
+graph LR
+    A[prepare_data] --> B[generate_recommendation]
+    B --> C[format_response]
+    C --> D((END))
+
+    style A fill:#e8f5e9
+    style B fill:#fff3e0
+```
+
+**State:** `RecommendationState`
+
+| Key Field | Type | Description |
+|-----------|------|-------------|
+| average_grade | float | Student's average (0-12) |
+| level | string | Performance level |
+| good_topics | list[str] | Topics with score ≥ 10 |
+| bad_topics | list[str] | Topics with score < 6 |
+| missed_topics | list[str] | Topics from missed lessons |
+| recommendation | string | Generated advice |
+
+**Flow Details:**
+
+1. **prepare_data**: Validate and normalize input
+2. **generate_recommendation**: LLM generates professional advice
+3. **format_response**: Passthrough
+
+**Note:** This flow does NOT use RAG (design decision).
+
+**LLM Calls:** 1
+
+---
+
+## RAG System
+
+### Architecture
+
+```mermaid
+graph TB
+    subgraph "Query Processing"
+        Q[Query] --> L[Ukrainian Lemmatizer<br/>pymorphy2]
+        L --> BM25[BM25 Search<br/>Surface + Lemma]
+        L --> VEC[Vector Search<br/>Pre-computed Embeddings]
+    end
+
+    subgraph "Fusion"
+        BM25 --> RRF[RRF Fusion]
+        VEC --> RRF
+        RRF --> FILTER[Subject/Grade Filter]
+    end
+
+    subgraph "Output"
+        FILTER --> DOCS[Retrieved Documents]
+        DOCS --> CTX[Formatted Context]
+    end
+```
+
+### Hybrid Retriever
+
+**Location:** `app/rag/utils/hybrid_retriever.py`
+
+**Features:**
+- **Zero-LLM retrieval** using pre-computed embeddings
+- **Dual-Field BM25**: Separate indices for surface text and lemmatized text
+- **RRF (Reciprocal Rank Fusion)**: Combines BM25 and vector scores
+- **Ukrainian morphology**: pymorphy2 for lemmatization
+
+**Configuration (V9):**
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| bm25_weight | 0.4 | BM25 contribution to RRF |
+| vector_weight | 0.6 | Vector contribution to RRF |
+| rrf_k | 60 | RRF constant |
+| top_k | 5 | Documents to retrieve |
+
+### Subject-Specific RAG Prompts
+
+**Location:** `app/rag/prompts/`
+
+| File | Subject | Special Handling |
+|------|---------|------------------|
+| algebra_rules.py | Алгебра | Full worked examples, formula emphasis |
+| ukrainian_rules.py | Українська мова | Grammar rules, examples, exceptions |
+| history_rules.py | Історія України | Dates, facts, context |
+
+---
+
+## Shared Components
+
+### RAG Node Factory
+
+**Location:** `app/graph/shared/rag_node.py`
+
+Creates configurable RAG nodes for different flows:
+
+```python
+@dataclass
+class RAGConfig:
+    max_chars: int = 6000      # Max context length
+    top_k: int = 5             # Documents to retrieve
+    parallel_queries: bool = False  # Enable parallel retrieval
+    include_references: bool = True  # Return source references
+```
+
+### LLM Node Factory
+
+**Location:** `app/graph/shared/llm_node.py`
+
+Creates LLM generation nodes:
+
+```python
+@dataclass
+class LLMConfig:
+    temperature: float = 0.7
+    max_tokens: int = 2000
+    json_output: bool = False
+```
+
+### CPU Validators
+
+**Location:** `app/graph/shared/cpu_validators.py`
+
+Fast validation without LLM calls:
+
+- `validate_question_format()`: Check structure, required fields
+- `validate_batch_questions()`: Format, duplicates, field validation
+
+---
+
+## Data Layer
+
+### Data Loader
+
+**Location:** `app/services/data_loader.py`
+
+**Class:** `BenchmarkDataLoader` (singleton)
+
+**Data Sources:**
+| File | Content |
+|------|---------|
+| benchmark_scores.parquet | Student grades per subject/topic |
+| benchmark_absences.parquet | Missed lessons with dates |
+
+**Key Methods:**
+| Method | Description |
+|--------|-------------|
+| get_teacher_classes(teacher_id) | Classes taught by teacher |
+| get_class_students(class_id, subject, teacher_id) | Students with levels |
+| get_student_details(student_id, ...) | Detailed performance data |
+| aggregate_student_gaps(student_ids, ...) | Combined weak/skipped topics |
+
+### Level Computation
+
+**Location:** `app/services/levels.py`
+
+Quartile-based student level assignment:
+
+```
+WEAK:   score < Q1 (25th percentile)
+MEDIUM: Q1 ≤ score ≤ Q3
+STRONG: score > Q3 (75th percentile)
+```
+
+---
+
+## Configuration
+
+### Environment Variables
+
+**Location:** `app/config.py`
+
+| Category | Variables |
+|----------|-----------|
+| App | APP_NAME, APP_VERSION, DEBUG, ENVIRONMENT |
+| Data | DATA_SCORES_PATH, DATA_ABSENCES_PATH, TOC_PATH |
+| LLM | LLM_PROVIDER, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL |
+| RAG | RAG_EMBEDDING_TYPE, RAG_TOP_K, RAG_MAX_CHARS |
+| Redis | REDIS_URL, REDIS_PASSWORD |
+| Tracing | PHOENIX_ENABLED, LANGSMITH_ENABLED |
+
+### Supported Subjects
+
+```
+Алгебра | Українська мова | Історія України
+```
+
+### Supported Grades
+
+```
+8 | 9
+```
+
+---
+
+## Key Patterns
+
+### Lazy Initialization
+
+All LangGraph imports and graph compilations are lazy to avoid grpcio mutex issues on macOS:
+
+```python
+_graph = None
+
+def get_graph():
+    global _graph
+    if _graph is None:
+        from langgraph.graph import StateGraph, END
+        _graph = build_graph()
+    return _graph
+```
+
+### Singleton Pattern
+
+Data loader, LLM client, and retriever use singletons:
+
+```python
+_data_loader = None
+
+def get_data_loader():
+    global _data_loader
+    if _data_loader is None:
+        _data_loader = BenchmarkDataLoader()
+    return _data_loader
+```
+
+### TypedDict State Management
+
+All LangGraph flows use TypedDict for type-safe state:
+
+```python
+class FlowState(TypedDict, total=False):
+    # Input fields
+    subject: str
+
+    # Intermediate fields
+    rag_context: str
+
+    # Output fields
+    result: str
+
+    # Metadata
+    llm_calls_count: int
+    error_message: Optional[str]
+```
+
+### Error Handling with Fallbacks
+
+JSON parsing with multiple strategies:
+
+```python
+def parse_json_response(response, fallback, context):
+    # 1. Try direct parse
+    # 2. Strip markdown code blocks
+    # 3. Regex field extraction
+    # 4. Return fallback
+```
+
+---
+
+## File Structure
+
+```
+backend/
+├── app/
+│   ├── api/v1/           # HTTP endpoints
+│   │   ├── router.py     # Main router
+│   │   ├── teacher.py    # EP1-EP7
+│   │   ├── student.py    # EP8-EP10
+│   │   └── health.py     # Health checks
+│   │
+│   ├── graph/            # LangGraph workflows
+│   │   ├── flows/        # Individual flows
+│   │   │   ├── test_gen.py
+│   │   │   ├── solver.py
+│   │   │   ├── notes.py
+│   │   │   ├── feedback.py
+│   │   │   ├── check_answer.py
+│   │   │   └── recommendation.py
+│   │   └── shared/       # Reusable components
+│   │       ├── rag_node.py
+│   │       ├── llm_node.py
+│   │       └── cpu_validators.py
+│   │
+│   ├── rag/              # RAG system
+│   │   ├── utils/        # Core utilities
+│   │   │   ├── hybrid_retriever.py
+│   │   │   ├── llm_client.py
+│   │   │   └── topic_retriever.py
+│   │   └── prompts/      # Subject-specific prompts
+│   │
+│   ├── models/           # Pydantic models
+│   │   ├── domain.py     # Core business objects
+│   │   ├── requests.py   # API input
+│   │   ├── responses.py  # API output
+│   │   └── enums.py      # Level, Difficulty, QuestionType
+│   │
+│   ├── services/         # Business logic
+│   │   ├── data_loader.py
+│   │   ├── levels.py
+│   │   └── tracing.py
+│   │
+│   ├── prompts/          # LLM prompt templates
+│   └── utils/            # Helpers
+│
+├── data/                 # Runtime data
+│   ├── benchmark_scores.parquet
+│   ├── benchmark_absences.parquet
+│   ├── toc/
+│   ├── pages/
+│   └── embeddings/
+│
+└── docs/                 # Documentation
+```
