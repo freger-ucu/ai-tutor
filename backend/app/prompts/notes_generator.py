@@ -163,6 +163,7 @@ def build_level_notes_prompt(
     context: str,
     gap_warnings: list[str] | None = None,
     aggregated_gaps: dict | None = None,
+    missed_prereqs: list[str] | None = None,
 ) -> str:
     """
     Build prompt for generating notes for a student level (EP3.1).
@@ -172,9 +173,10 @@ def build_level_notes_prompt(
         grade: Grade level (8 or 9)
         level: Student level (weak/medium/strong)
         topic_definition: Topic description
-        context: Retrieved textbook context
+        context: Retrieved textbook context (may include prereq context section)
         gap_warnings: (deprecated) List of topics - use aggregated_gaps instead
         aggregated_gaps: Dict from aggregate_student_gaps() with detailed statistics
+        missed_prereqs: List of prerequisite topics that students missed/struggled with
 
     Returns:
         Formatted prompt string
@@ -196,6 +198,32 @@ def build_level_notes_prompt(
 
 Зверни увагу на ці теми при поясненні нового матеріалу!
 """
+
+    # Build structure instructions based on whether there are missed prereqs
+    has_recap = missed_prereqs and len(missed_prereqs) > 0
+    prereq_list = ", ".join(missed_prereqs) if missed_prereqs else ""
+
+    if has_recap:
+        structure_instructions = f"""Структура (ОБОВ'ЯЗКОВО дотримуйся!):
+1. **## Повторення** - коротке нагадування пропущених/слабких пререквізитів: {prereq_list}
+   - Стисло поясни ключові поняття з цих тем
+   - Дай 1-2 приклади для кожного пререквізиту
+2. **## Урок** - основний матеріал нової теми
+   - Теорія: означення, формули, правила
+   - Приклади: задачі з розв'язками
+   - Підсумок: ключові формули
+
+ВАЖЛИВО: Секція "## Повторення" ОБОВ'ЯЗКОВА, бо учні мають прогалини у пререквізитах!"""
+        teacher_recap_note = f"""
+ВАЖЛИВО: Учні мають прогалини у пререквізитах ({prereq_list}).
+РЕКОМЕНДАЦІЯ: Почніть урок з повторення цих тем. Переконайтесь, що учні розуміють базові поняття перед переходом до нового матеріалу."""
+    else:
+        structure_instructions = """Структура:
+1. **## Урок** - основний матеріал теми
+   - Теорія: означення, формули, правила (складність відповідно до рівня!)
+   - Приклади: задачі з розв'язками (складність відповідно до рівня!)
+   - Підсумок: ключові формули"""
+        teacher_recap_note = ""
 
     prompt = f"""Створи навчальний матеріал для учнів {grade} класу з предмету "{subject}".
 
@@ -227,17 +255,14 @@ def build_level_notes_prompt(
 - НЕ пиши "Привіт!", "Друзі!", "Сьогодні ми вивчимо..."
 - Починай одразу з матеріалу
 
-Структура:
-1. **Повторення** - коротко нагадати пов'язані поняття
-2. **Теорія** - означення, формули, правила (складність відповідно до рівня!)
-3. **Приклади** - задачі з розв'язками (складність відповідно до рівня!)
-4. **Підсумок** - ключові формули
+{structure_instructions}
 
 ### TEACHER_NOTES (нотатки ДЛЯ ВЧИТЕЛЯ):
 ОБОВ'ЯЗКОВО почни з характеристики рівня учнів:
 - СЛАБКИЙ рівень → "Учні потребують додаткової підтримки. Поясніть матеріал повільно, з багатьма прикладами. Перевіряйте розуміння на кожному кроці."
 - СЕРЕДНІЙ рівень → "Учні мають базові знання. Можна рухатись у стандартному темпі з типовими завданнями."
 - СИЛЬНИЙ рівень → "Учні добре підготовлені. Можна давати складніші завдання, олімпіадні задачі, заохочувати самостійний пошук розв'язків."
+{teacher_recap_note}
 
 ЯКЩО є "ДАНІ ПРО УЧНІВ" вище:
 - "Пропущені уроки" → порадь коротко нагадати цю тему на початку
@@ -264,6 +289,7 @@ def build_individual_notes_prompt(
     student_info: dict | None = None,
     aggregated_gaps: dict | None = None,
     level: str | None = None,
+    missed_prereqs: list[str] | None = None,
 ) -> str:
     """
     Build prompt for generating notes for specific students (EP3.2).
@@ -272,10 +298,11 @@ def build_individual_notes_prompt(
         subject: Subject name in Ukrainian
         grade: Grade level (8 or 9)
         topic_definition: Topic description
-        context: Retrieved textbook context
+        context: Retrieved textbook context (may include prereq context section)
         student_info: (deprecated) Dict with single student's data - use aggregated_gaps
         aggregated_gaps: Dict from aggregate_student_gaps() with detailed statistics
         level: Target level for the notes (weak/medium/strong)
+        missed_prereqs: List of prerequisite topics that students missed/struggled with
 
     Returns:
         Formatted prompt string
@@ -318,6 +345,32 @@ def build_individual_notes_prompt(
 """
         gap_section = f"{problems_text}{missed_text}"
 
+    # Build structure instructions based on whether there are missed prereqs
+    has_recap = missed_prereqs and len(missed_prereqs) > 0
+    prereq_list = ", ".join(missed_prereqs) if missed_prereqs else ""
+
+    if has_recap:
+        structure_instructions = f"""Структура (ОБОВ'ЯЗКОВО дотримуйся!):
+1. **## Повторення** - коротке нагадування пропущених/слабких пререквізитів: {prereq_list}
+   - Стисло поясни ключові поняття з цих тем
+   - Дай 1-2 приклади для кожного пререквізиту
+2. **## Урок** - основний матеріал нової теми
+   - Теорія: означення, формули, правила
+   - Приклади: задачі з розв'язками
+   - Підсумок: ключові формули
+
+ВАЖЛИВО: Секція "## Повторення" ОБОВ'ЯЗКОВА, бо учні мають прогалини у пререквізитах!"""
+        teacher_recap_note = f"""
+ВАЖЛИВО: Учні мають прогалини у пререквізитах ({prereq_list}).
+РЕКОМЕНДАЦІЯ: Почніть урок з повторення цих тем. Переконайтесь, що учні розуміють базові поняття перед переходом до нового матеріалу."""
+    else:
+        structure_instructions = """Структура:
+1. **## Урок** - основний матеріал теми
+   - Теорія: означення, формули, правила (складність відповідно до рівня!)
+   - Приклади: задачі з розв'язками (складність відповідно до рівня!)
+   - Підсумок: ключові формули"""
+        teacher_recap_note = ""
+
     prompt = f"""Створи навчальний матеріал для учнів {grade} класу з предмету "{subject}".
 
 ## ТЕМА:
@@ -348,17 +401,14 @@ def build_individual_notes_prompt(
 - НЕ пиши "Привіт!", "Друзі!", "Сьогодні ми вивчимо..."
 - Починай одразу з матеріалу
 
-Структура:
-1. **Повторення** - коротко нагадати пов'язані поняття
-2. **Теорія** - означення, формули, правила (складність відповідно до рівня!)
-3. **Приклади** - задачі з розв'язками (складність відповідно до рівня!)
-4. **Підсумок** - ключові формули
+{structure_instructions}
 
 ### TEACHER_NOTES (нотатки ДЛЯ ВЧИТЕЛЯ):
 ОБОВ'ЯЗКОВО почни з характеристики рівня учнів:
 - СЛАБКИЙ рівень → "Учні потребують додаткової підтримки. Поясніть матеріал повільно, з багатьма прикладами. Перевіряйте розуміння на кожному кроці."
 - СЕРЕДНІЙ рівень → "Учні мають базові знання. Можна рухатись у стандартному темпі з типовими завданнями."
 - СИЛЬНИЙ рівень → "Учні добре підготовлені. Можна давати складніші завдання, олімпіадні задачі, заохочувати самостійний пошук розв'язків."
+{teacher_recap_note}
 
 ЯКЩО є "ДАНІ ПРО УЧНІВ" вище:
 - "Пропущені уроки" → порадь коротко нагадати цю тему на початку
