@@ -87,6 +87,53 @@ def extract_json_object(text: str) -> Optional[str]:
     return None
 
 
+def fix_latex_escapes(json_str: str) -> str:
+    """
+    Fix LaTeX escape sequences that break JSON parsing.
+
+    LaTeX uses backslashes like \\begin, \\frac which Python JSON
+    interprets as invalid escape sequences (\\b = backspace, \\f = formfeed).
+    This converts single backslashes to double backslashes inside strings.
+    """
+    result = []
+    in_string = False
+    i = 0
+
+    while i < len(json_str):
+        char = json_str[i]
+
+        if char == '"' and (i == 0 or json_str[i-1] != '\\'):
+            in_string = not in_string
+            result.append(char)
+            i += 1
+            continue
+
+        if in_string and char == '\\':
+            # Check if next char forms an invalid JSON escape
+            if i + 1 < len(json_str):
+                next_char = json_str[i + 1]
+                # Valid JSON escapes: " \ / b f n r t u
+                valid_escapes = {'"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'}
+                if next_char not in valid_escapes:
+                    # It's a LaTeX command like \begin, \frac - double the backslash
+                    result.append('\\\\')
+                    i += 1
+                    continue
+                elif next_char == '\\':
+                    # Already escaped, skip both
+                    result.append('\\\\')
+                    i += 2
+                    continue
+            result.append(char)
+            i += 1
+            continue
+
+        result.append(char)
+        i += 1
+
+    return ''.join(result)
+
+
 def fix_json_newlines(json_str: str) -> str:
     """
     Fix unescaped newlines inside JSON string values.
@@ -181,10 +228,24 @@ def parse_json_response(
         try:
             fixed = fix_json_newlines(json_str)
             return json.loads(fixed)
+        except json.JSONDecodeError:
+            pass
+
+        # Strategy 5: Fix LaTeX escape sequences (like \begin, \frac)
+        try:
+            fixed = fix_latex_escapes(json_str)
+            return json.loads(fixed)
+        except json.JSONDecodeError:
+            pass
+
+        # Strategy 6: Fix both newlines and LaTeX
+        try:
+            fixed = fix_latex_escapes(fix_json_newlines(json_str))
+            return json.loads(fixed)
         except json.JSONDecodeError as e:
             logger.debug(
-                f"[{context}] JSON decode error after newline fix: {e}" if context
-                else f"JSON decode error after newline fix: {e}"
+                f"[{context}] JSON decode error after all fixes: {e}" if context
+                else f"JSON decode error after all fixes: {e}"
             )
 
     # All strategies failed - log first 500 chars for debugging

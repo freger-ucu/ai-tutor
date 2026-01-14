@@ -1,40 +1,90 @@
 """
-Test Generation Flow (EP4).
+Test Generation Flow (EP4) - Parallel Architecture with Planning.
 
-Generates a pool of validated test questions using batch generation.
+Generates a pool of validated test questions using batch processing
+with an intelligent planning phase for concept coverage.
 
 Flow:
-    retrieve_context → generate_batches (parallel) → validate_samples → retry_failed → finalize
+    retrieve_context → plan_test → retrieve_concepts → batch_generate
+                                                            ↓
+                                                      batch_validate
+                                                            ↓
+                                                      prepare_retry ──┐
+                                                            ↓         │
+                                                        finalize ◄────┘
 
 Key Design:
-- 3 batch calls (easy/medium/hard), each generating 10 questions
-- CPU validation on all questions (format, fields, uniqueness)
-- Sample validation: 3 random MC questions per batch via solver
-- If >1 of 3 fail → regenerate entire batch
-- Max 2 retries per batch
-
-LLM Call Estimate:
-- 3 generation calls (easy/medium/hard batches)
-- 9 solver calls for validation (3 per batch, in parallel)
-- Total: ~12 LLM calls (vs 60+ in old design)
+- Planning phase: 1 LLM call to design entire test structure
+- Per-concept RAG: Parallel retrieval for each identified concept
+- Batch generation: All questions generated in parallel
+- Hybrid validation: MC reuses concept context, Open gets fresh RAG
+- Smart retry: Up to 2 retry iterations for failed questions
 """
 
 import asyncio
 import logging
-import random
+import time
 from typing import TypedDict, List, Dict, Any, Optional, Literal
 
 from app.services.tracing import trace_chain
 from app.rag.utils.llm_client import get_llm_client
+from app.rag.utils.hybrid_retriever import get_retriever, format_context
 from app.utils.json_parser import parse_json_response
 from app.prompts.test_generator import (
-    build_chunked_test_prompt,
+    build_single_question_prompt,
+    build_planner_prompt,
     TEST_GENERATOR_SYSTEM_PROMPT,
+    TEST_PLANNER_SYSTEM_PROMPT,
 )
+from app.services.question_checker import check_mc_question, check_open_question
 from ..shared.rag_node import create_rag_node, RAGConfig
-from ..shared.cpu_validators import validate_batch_questions, ValidationError
+from ..shared.cpu_validators import validate_single_question
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+MAX_RETRY_ITERATIONS = 2
+MAX_CONCURRENT_LLM = 10
+MAX_CONCURRENT_RAG = 5
+
+
+# =============================================================================
+# Data Types
+# =============================================================================
+
+
+class QuestionSpec(TypedDict):
+    """Specification for a question from planner."""
+    spec_id: int
+    difficulty: Literal["easy", "medium", "hard"]
+    question_type: Literal["single_choice", "multiple_choice", "open"]
+    concept: str  # What concept to assess
+    focus: str    # Specific aspect to test
+
+
+class TestPlan(TypedDict):
+    """Output of planning phase."""
+    concepts: List[str]
+    question_specs: List[QuestionSpec]
+    rationale: str
+
+
+class GenerationResult(TypedDict):
+    """Result of generating a single question."""
+    spec_id: int
+    question: Optional[Dict[str, Any]]
+    success: bool
+    error: Optional[str]
+
+
+class FailedQuestion(TypedDict):
+    """A question that failed validation."""
+    spec_id: int
+    reason: str
 
 
 # =============================================================================
@@ -42,66 +92,55 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-class BatchState(TypedDict):
-    """State for a single difficulty batch."""
-
-    difficulty: str
-    questions: List[Dict[str, Any]]
-    is_valid: bool
-    attempts: int
-    validation_failures: List[str]
-
-
 class TestGenState(TypedDict, total=False):
-    """State for test generation flow."""
+    """State for parallel test generation flow."""
 
-    # Input
+    # === INPUT ===
     subject: str
     grade: int
     topic_definition: str
-    num_questions: int  # Target total (default 30)
-    max_retries: int  # Max retries per batch (default 2)
+    easy_count: int
+    medium_count: int
+    hard_count: int
 
-    # RAG output
+    # === TOPIC RAG (retrieved once at start) ===
     rag_context: str
     rag_references: List[Dict[str, Any]]
-    retrieved_docs: List[Dict[str, Any]]
 
-    # Batch states
-    easy_batch: BatchState
-    medium_batch: BatchState
-    hard_batch: BatchState
+    # === PLANNING ===
+    test_plan: Optional[TestPlan]
+    concepts: List[str]
+    concept_contexts: Dict[str, str]  # concept → RAG context
 
-    # Final output
-    questions: List[Dict[str, Any]]  # All valid questions
-    existing_question_texts: List[str]  # For deduplication
+    # === BATCH PROCESSING ===
+    pending_specs: List[QuestionSpec]
+    generated_questions: List[GenerationResult]
 
-    # Statistics
-    total_generation_calls: int
-    total_validation_calls: int
-    retries_used: int
-    batches_regenerated: int
+    # === RETRY ===
+    retry_count: int
+    failed_specs: List[FailedQuestion]
 
-    # Metadata
+    # === OUTPUT ===
+    validated_questions: List[Dict[str, Any]]
+    failed_questions: List[FailedQuestion]
+
+    # === STATISTICS ===
+    total_generated: int
+    total_passed: int
+    total_failed: int
     llm_calls_count: int
+    planning_time_ms: int
+    generation_time_ms: int
+    validation_time_ms: int
+
+    # === METADATA ===
     error_message: Optional[str]
-    trace_id: str
 
 
 # =============================================================================
-# Constants
+# RAG Node (lazy initialization for topic context)
 # =============================================================================
 
-QUESTIONS_PER_BATCH = 10
-SAMPLE_SIZE = 3  # Questions to validate per batch
-PASS_THRESHOLD = 2  # At least 2 of 3 must pass
-
-
-# =============================================================================
-# Graph Nodes
-# =============================================================================
-
-# Lazy RAG node initialization to avoid grpcio at module load (macOS mutex.cc issue)
 _test_gen_rag_node = None
 
 
@@ -120,368 +159,699 @@ def _get_test_gen_rag_node():
     return _test_gen_rag_node
 
 
+# =============================================================================
+# Node: Retrieve Context (Topic RAG)
+# =============================================================================
+
+
 async def retrieve_context_node(state: TestGenState) -> Dict[str, Any]:
-    """Retrieve RAG context for the topic."""
-    logger.info(f"Retrieving context for topic: {state.get('topic_definition', '')}")
+    """Retrieve RAG context for the topic (used for planning and fallback)."""
+    logger.info(f"Retrieving context for topic: {state.get('topic_definition', '')[:50]}...")
+
     rag_node = _get_test_gen_rag_node()
-    return await rag_node(state)
+    rag_result = await rag_node(state)
 
-
-def init_batches_node(state: TestGenState) -> Dict[str, Any]:
-    """Initialize batch states for each difficulty level."""
     return {
-        "easy_batch": {
-            "difficulty": "easy",
-            "questions": [],
-            "is_valid": False,
-            "attempts": 0,
-            "validation_failures": [],
-        },
-        "medium_batch": {
-            "difficulty": "medium",
-            "questions": [],
-            "is_valid": False,
-            "attempts": 0,
-            "validation_failures": [],
-        },
-        "hard_batch": {
-            "difficulty": "hard",
-            "questions": [],
-            "is_valid": False,
-            "attempts": 0,
-            "validation_failures": [],
-        },
-        "questions": [],
-        "existing_question_texts": [],
-        "total_generation_calls": 0,
-        "total_validation_calls": 0,
-        "retries_used": 0,
-        "batches_regenerated": 0,
+        **rag_result,
+        "validated_questions": [],
+        "failed_questions": [],
+        "failed_specs": [],
+        "total_generated": 0,
+        "total_passed": 0,
+        "total_failed": 0,
+        "llm_calls_count": 0,
+        "retry_count": 0,
+        "planning_time_ms": 0,
+        "generation_time_ms": 0,
+        "validation_time_ms": 0,
     }
 
 
-@trace_chain(name="generate_batch")
-async def _generate_single_batch(
-    subject: str,
-    grade: int,
-    topic_definition: str,
-    context: str,
-    difficulty: str,
-    existing_texts: List[str],
-) -> tuple[List[Dict[str, Any]], List[str]]:
-    """
-    Generate a batch of questions for one difficulty level.
+# =============================================================================
+# Node: Plan Test
+# =============================================================================
 
-    Returns:
-        Tuple of (valid_questions, validation_errors)
+
+@trace_chain(name="plan_test")
+async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     """
+    Plan test structure using LLM.
+
+    Identifies key concepts and creates question specifications
+    with intelligent type/difficulty distribution.
+    """
+    start_time = time.time()
+
+    subject = state.get("subject", "")
+    grade = state.get("grade", 9)
+    topic = state.get("topic_definition", "")
+    context = state.get("rag_context", "")
+    easy_count = state.get("easy_count", 1)
+    medium_count = state.get("medium_count", 1)
+    hard_count = state.get("hard_count", 1)
+    total_count = easy_count + medium_count + hard_count
+
+    logger.info(f"Planning test: {easy_count} easy, {medium_count} medium, {hard_count} hard")
+
     client = get_llm_client()
 
-    prompt = build_chunked_test_prompt(
+    prompt = build_planner_prompt(
         subject=subject,
         grade=grade,
-        topic_definition=topic_definition,
+        topic_definition=topic,
         context=context,
-        difficulty=difficulty,
-        num_questions=QUESTIONS_PER_BATCH,
+        easy_count=easy_count,
+        medium_count=medium_count,
+        hard_count=hard_count,
     )
 
     response = await client.generate(
-        prompt=f"{TEST_GENERATOR_SYSTEM_PROMPT}\n\n{prompt}",
-        temperature=0.7,
-        max_tokens=4000,
+        prompt=f"{TEST_PLANNER_SYSTEM_PROMPT}\n\n{prompt}",
+        temperature=0.3,
+        max_tokens=3000,
     )
 
-    # Parse response
     parsed = parse_json_response(
         response,
-        fallback={"questions": []},
-        context=f"TestGen-{difficulty}",
+        fallback=_generate_fallback_plan(topic, easy_count, medium_count, hard_count),
+        context="TestPlanner",
     )
 
-    raw_questions = parsed.get("questions", [])
-    if not isinstance(raw_questions, list):
-        raw_questions = []
+    # Normalize and validate specs
+    question_specs = parsed.get("question_specs", [])
+    concepts = parsed.get("concepts", [topic])
 
-    # Normalize question format
-    normalized = []
-    for q in raw_questions:
-        if not isinstance(q, dict):
-            continue
+    normalized_specs: List[QuestionSpec] = []
+    for i, spec in enumerate(question_specs):
+        normalized_specs.append({
+            "spec_id": spec.get("spec_id", i + 1),
+            "difficulty": spec.get("difficulty", "medium"),
+            "question_type": spec.get("question_type", "single_choice"),
+            "concept": spec.get("concept", topic),
+            "focus": spec.get("focus", ""),
+        })
 
-        # Ensure required fields
-        q["difficulty"] = difficulty
-        if "type" not in q:
-            q["type"] = "multiple_choice" if "options" in q else "open"
-
-        # Convert correct_answer letter to index for MC questions
-        if q.get("type") == "multiple_choice" and "correct_answer" in q:
-            answer_letter = str(q["correct_answer"]).strip().upper()
-            letter_to_index = {"A": 0, "B": 1, "C": 2, "D": 3}
-            q["correct_answer_index"] = letter_to_index.get(answer_letter, 0)
-
-        normalized.append(q)
-
-    # CPU validation
-    existing_set = set(existing_texts)
-    valid_questions, failures = validate_batch_questions(normalized, existing_set)
-
-    validation_errors = [
-        f"Q{i}: {', '.join(r.issues)}" for i, r in failures
-    ]
-
-    return valid_questions, validation_errors
-
-
-async def generate_batches_node(state: TestGenState) -> Dict[str, Any]:
-    """
-    Generate all three difficulty batches in parallel.
-    """
-    subject = state.get("subject", "")
-    grade = state.get("grade", 9)
-    topic_definition = state.get("topic_definition", "")
-    context = state.get("rag_context", "")
-    existing_texts = state.get("existing_question_texts", [])
-
-    # Get current batch states
-    easy_batch = state.get("easy_batch", {})
-    medium_batch = state.get("medium_batch", {})
-    hard_batch = state.get("hard_batch", {})
-
-    # Only generate for batches that need it
-    batches_to_generate = []
-    if not easy_batch.get("is_valid", False):
-        batches_to_generate.append(("easy", easy_batch))
-    if not medium_batch.get("is_valid", False):
-        batches_to_generate.append(("medium", medium_batch))
-    if not hard_batch.get("is_valid", False):
-        batches_to_generate.append(("hard", hard_batch))
-
-    if not batches_to_generate:
-        return {}
-
-    # Generate batches in parallel
-    tasks = []
-    for difficulty, batch in batches_to_generate:
-        task = _generate_single_batch(
-            subject=subject,
-            grade=grade,
-            topic_definition=topic_definition,
-            context=context,
-            difficulty=difficulty,
-            existing_texts=existing_texts,
+    # If planner didn't produce enough specs, add fallback
+    if len(normalized_specs) < total_count:
+        logger.warning(f"Planner produced {len(normalized_specs)} specs, need {total_count}")
+        normalized_specs.extend(
+            _generate_fallback_specs(
+                topic=topic,
+                count=total_count - len(normalized_specs),
+                start_id=len(normalized_specs) + 1,
+                easy_count=max(0, easy_count - sum(1 for s in normalized_specs if s["difficulty"] == "easy")),
+                medium_count=max(0, medium_count - sum(1 for s in normalized_specs if s["difficulty"] == "medium")),
+                hard_count=max(0, hard_count - sum(1 for s in normalized_specs if s["difficulty"] == "hard")),
+            )
         )
-        tasks.append((difficulty, task))
 
-    results = await asyncio.gather(*[t[1] for t in tasks], return_exceptions=True)
-
-    # Update batch states
-    updates = {
-        "total_generation_calls": state.get("total_generation_calls", 0) + len(batches_to_generate),
-        "llm_calls_count": state.get("llm_calls_count", 0) + len(batches_to_generate),
+    test_plan: TestPlan = {
+        "concepts": concepts,
+        "question_specs": normalized_specs,
+        "rationale": parsed.get("rationale", ""),
     }
 
-    for i, (difficulty, _) in enumerate(tasks):
-        result = results[i]
-        if isinstance(result, Exception):
-            logger.error(f"Batch generation failed for {difficulty}: {result}")
-            batch_update = {
-                "difficulty": difficulty,
-                "questions": [],
-                "is_valid": False,
-                "attempts": state.get(f"{difficulty}_batch", {}).get("attempts", 0) + 1,
-                "validation_failures": [str(result)],
-            }
+    planning_time = int((time.time() - start_time) * 1000)
+    logger.info(f"Test plan created in {planning_time}ms: {len(normalized_specs)} specs, concepts: {concepts}")
+
+    return {
+        "test_plan": test_plan,
+        "pending_specs": normalized_specs,
+        "concepts": concepts,
+        "llm_calls_count": state.get("llm_calls_count", 0) + 1,
+        "planning_time_ms": planning_time,
+    }
+
+
+def _generate_fallback_plan(topic: str, easy: int, medium: int, hard: int) -> Dict[str, Any]:
+    """Generate fallback plan if LLM fails."""
+    specs = _generate_fallback_specs(topic, easy + medium + hard, 1, easy, medium, hard)
+    return {
+        "concepts": [topic],
+        "question_specs": specs,
+        "rationale": "Fallback plan (LLM planning failed)",
+    }
+
+
+def _generate_fallback_specs(
+    topic: str,
+    count: int,
+    start_id: int,
+    easy_count: int,
+    medium_count: int,
+    hard_count: int,
+) -> List[QuestionSpec]:
+    """Generate fallback specs with proper distribution."""
+    import random
+    specs: List[QuestionSpec] = []
+    spec_id = start_id
+
+    difficulties = (
+        ["easy"] * easy_count +
+        ["medium"] * medium_count +
+        ["hard"] * hard_count
+    )
+    random.shuffle(difficulties)
+
+    for i, diff in enumerate(difficulties[:count]):
+        # Type distribution based on difficulty
+        if diff == "easy":
+            q_type = random.choice(["single_choice", "single_choice", "open"])
+        elif diff == "hard":
+            q_type = random.choice(["open", "open", "multiple_choice"])
         else:
-            questions, errors = result
-            batch_update = {
-                "difficulty": difficulty,
-                "questions": questions,
-                "is_valid": False,  # Will be set after sample validation
-                "attempts": state.get(f"{difficulty}_batch", {}).get("attempts", 0) + 1,
-                "validation_failures": errors,
-            }
+            q_type = random.choice(["single_choice", "multiple_choice", "open"])
 
-        updates[f"{difficulty}_batch"] = batch_update
+        specs.append({
+            "spec_id": spec_id + i,
+            "difficulty": diff,
+            "question_type": q_type,
+            "concept": topic,
+            "focus": "",
+        })
 
-    return updates
+    return specs
 
 
-@trace_chain(name="validate_samples")
-async def _validate_sample_questions(
-    questions: List[Dict[str, Any]],
-    subject: str,
-    grade: int,
-    sample_size: int = SAMPLE_SIZE,
-) -> tuple[int, int, List[str]]:
+# =============================================================================
+# Node: Retrieve Concepts (Per-Concept RAG)
+# =============================================================================
+
+
+@trace_chain(name="retrieve_concepts")
+async def retrieve_concepts_node(state: TestGenState) -> Dict[str, Any]:
     """
-    Validate a sample of MC questions using the solver.
+    Retrieve RAG context for each concept identified by planner.
 
-    Returns:
-        Tuple of (passed_count, total_validated, failure_reasons)
+    Parallel retrieval for all concepts to provide targeted context
+    for question generation.
     """
-    # Lazy import to avoid grpcio initialization at module load (macOS mutex.cc issue)
-    from .solver import solve_question
+    start_time = time.time()
 
-    # Filter MC questions only
-    mc_questions = [q for q in questions if q.get("type") == "multiple_choice"]
+    concepts = state.get("concepts", [])
+    subject = state.get("subject", "")
+    grade = state.get("grade", 9)
+    base_context = state.get("rag_context", "")
 
-    if not mc_questions:
-        # No MC questions to validate, assume pass
-        return sample_size, sample_size, []
+    if not concepts:
+        logger.warning("No concepts to retrieve, using base context")
+        return {"concept_contexts": {}}
 
-    # Select random sample
-    sample = random.sample(mc_questions, min(sample_size, len(mc_questions)))
+    logger.info(f"Retrieving RAG context for {len(concepts)} concepts")
 
-    # Validate each in parallel
-    tasks = []
-    for q in sample:
-        task = solve_question(
-            question_id=f"validation-{random.randint(1000, 9999)}",
-            question_text=q.get("question", ""),
-            subject=subject,
-            grade=grade,
-            answers=q.get("options", []),
-            correct_indices=[q.get("correct_answer_index", 0)],
-        )
-        tasks.append((q, task))
+    retriever = get_retriever()
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_RAG)
 
-    results = await asyncio.gather(*[t[1] for t in tasks], return_exceptions=True)
+    async def retrieve_for_concept(concept: str) -> tuple:
+        async with semaphore:
+            try:
+                docs = await retriever.retrieve(
+                    query=concept,
+                    subject=subject,
+                    grade=grade,
+                    top_k=3,
+                )
+                context, _ = format_context(docs, max_chars=4000, subject=subject)
+                return concept, context if context else base_context
+            except Exception as e:
+                logger.error(f"RAG failed for concept '{concept}': {e}")
+                return concept, base_context
 
-    # Check results
-    passed = 0
-    failures = []
+    results = await asyncio.gather(*[retrieve_for_concept(c) for c in concepts])
+    concept_contexts = {concept: ctx for concept, ctx in results}
 
-    for i, (q, _) in enumerate(tasks):
-        result = results[i]
-        if isinstance(result, Exception):
-            failures.append(f"Solver error: {result}")
+    retrieval_time = int((time.time() - start_time) * 1000)
+    logger.info(f"Retrieved context for {len(concept_contexts)} concepts in {retrieval_time}ms")
+
+    return {"concept_contexts": concept_contexts}
+
+
+# =============================================================================
+# Node: Batch Generate
+# =============================================================================
+
+
+@trace_chain(name="batch_generate")
+async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
+    """
+    Generate all pending questions in parallel.
+
+    Uses concept-specific context for each question.
+    """
+    start_time = time.time()
+
+    pending_specs = state.get("pending_specs", [])
+    concept_contexts = state.get("concept_contexts", {})
+    base_context = state.get("rag_context", "")
+    subject = state.get("subject", "")
+    grade = state.get("grade", 9)
+    topic = state.get("topic_definition", "")
+
+    if not pending_specs:
+        logger.warning("No pending specs to generate")
+        return {"generated_questions": [], "pending_specs": []}
+
+    logger.info(f"Batch generating {len(pending_specs)} questions")
+
+    client = get_llm_client()
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM)
+
+    async def generate_one(spec: QuestionSpec) -> GenerationResult:
+        async with semaphore:
+            try:
+                # Get concept-specific context
+                context = concept_contexts.get(spec["concept"], base_context)
+
+                # Map internal type to prompt type
+                prompt_type = "multiple_choice" if spec["question_type"] in {"single_choice", "multiple_choice"} else "open"
+
+                prompt = build_single_question_prompt(
+                    subject=subject,
+                    grade=grade,
+                    topic=topic,
+                    context=context,
+                    difficulty=spec["difficulty"],
+                    question_type=prompt_type,
+                    concept=spec["concept"],
+                    focus=spec["focus"],
+                )
+
+                # Open questions need more tokens for explanations
+                max_tokens = 3000 if spec["question_type"] == "open" else 1500
+
+                response = await client.generate(
+                    prompt=f"{TEST_GENERATOR_SYSTEM_PROMPT}\n\n{prompt}",
+                    temperature=0.7,
+                    max_tokens=max_tokens,
+                )
+
+                parsed = parse_json_response(
+                    response,
+                    fallback={},
+                    context=f"TestGen-{spec['spec_id']}",
+                )
+
+                if not parsed:
+                    # Log raw response for debugging
+                    response_preview = response[:500] if response else "(empty)"
+                    logger.info(
+                        f"[GEN] spec_id={spec['spec_id']} - JSON parse failed | "
+                        f"type={spec['question_type']}, raw={response_preview}"
+                    )
+                    return {
+                        "spec_id": spec["spec_id"],
+                        "question": None,
+                        "success": False,
+                        "error": f"Empty or invalid JSON response: {response_preview[:100]}",
+                    }
+
+                # Handle wrong format: LLM returned test structure instead of single question
+                if "questions" in parsed and isinstance(parsed.get("questions"), list):
+                    questions_list = parsed["questions"]
+                    if questions_list:
+                        parsed = questions_list[0]  # Take first question
+                        logger.info(f"[GEN] spec_id={spec['spec_id']} - Extracted from nested 'questions' array")
+                    else:
+                        return {
+                            "spec_id": spec["spec_id"],
+                            "question": None,
+                            "success": False,
+                            "error": "LLM returned empty questions array",
+                        }
+
+                # Handle wrong format: answer_options instead of options
+                if "answer_options" in parsed and "options" not in parsed:
+                    answer_opts = parsed["answer_options"]
+                    if isinstance(answer_opts, list) and answer_opts:
+                        # Convert answer_options format to options format
+                        parsed["options"] = [opt.get("answer", str(opt)) for opt in answer_opts]
+                        # Find correct answer index
+                        found_correct = False
+                        for i, opt in enumerate(answer_opts):
+                            if opt.get("correct", False):
+                                parsed["correct_answer_index"] = i
+                                found_correct = True
+                                break
+                        if not found_correct:
+                            logger.warning(
+                                f"[GEN] spec_id={spec['spec_id']} - answer_options has NO correct answer! "
+                                f"All options marked correct=false"
+                            )
+                            # Don't default - let CPU validation catch this
+                        else:
+                            logger.info(f"[GEN] spec_id={spec['spec_id']} - Converted answer_options to options")
+
+                # Normalize the question
+                question = parsed
+                question["difficulty"] = spec["difficulty"]
+                question["type"] = spec["question_type"]
+                question["spec_id"] = spec["spec_id"]
+                question["concept"] = spec["concept"]
+
+                # Ensure correct_answer_index for choice questions
+                if spec["question_type"] in {"single_choice", "multiple_choice"}:
+                    # If LLM provided correct_answer_index directly (new format), use it
+                    if "correct_answer_index" in question:
+                        idx = question["correct_answer_index"]
+                        if not isinstance(idx, int) or idx < 0 or idx > 3:
+                            logger.warning(f"[GEN] spec_id={spec['spec_id']} - Invalid correct_answer_index: {idx}")
+                            # Don't default - let CPU validation catch this
+                            del question["correct_answer_index"]
+                    # If LLM provided correct_answer as letter (old format), convert
+                    elif "correct_answer" in question:
+                        answer_letter = str(question["correct_answer"]).strip().upper()
+                        letter_to_index = {"A": 0, "B": 1, "C": 2, "D": 3}
+                        if answer_letter in letter_to_index:
+                            question["correct_answer_index"] = letter_to_index[answer_letter]
+                        else:
+                            logger.warning(f"[GEN] spec_id={spec['spec_id']} - Invalid correct_answer letter: {answer_letter}")
+                            # Don't default - let CPU validation catch this
+                    # else: no correct answer - CPU validation will catch this
+
+                return {
+                    "spec_id": spec["spec_id"],
+                    "question": question,
+                    "success": True,
+                    "error": None,
+                }
+
+            except Exception as e:
+                logger.error(f"Generation failed for spec {spec['spec_id']}: {e}")
+                return {
+                    "spec_id": spec["spec_id"],
+                    "question": None,
+                    "success": False,
+                    "error": str(e),
+                }
+
+    results = await asyncio.gather(*[generate_one(spec) for spec in pending_specs])
+
+    successful = sum(1 for r in results if r["success"])
+    generation_time = int((time.time() - start_time) * 1000)
+
+    logger.info(f"Batch generation complete in {generation_time}ms: {successful}/{len(pending_specs)} successful")
+
+    return {
+        "generated_questions": list(results),
+        "pending_specs": [],
+        "total_generated": state.get("total_generated", 0) + len(results),
+        "llm_calls_count": state.get("llm_calls_count", 0) + len(pending_specs),
+        "generation_time_ms": state.get("generation_time_ms", 0) + generation_time,
+    }
+
+
+# =============================================================================
+# Node: Batch Validate (Hybrid Approach)
+# =============================================================================
+
+
+@trace_chain(name="batch_validate")
+async def batch_validate_node(state: TestGenState) -> Dict[str, Any]:
+    """
+    Validate generated questions using hybrid approach.
+
+    1. CPU validation (format, dedup) - instant
+    2. LLM validation (parallel):
+       - MC: reuses concept_context (no extra RAG)
+       - Open: retrieves fresh context per question
+    """
+    start_time = time.time()
+
+    generated = state.get("generated_questions", [])
+    concept_contexts = state.get("concept_contexts", {})
+    base_context = state.get("rag_context", "")
+    subject = state.get("subject", "")
+    grade = state.get("grade", 9)
+
+    validated = state.get("validated_questions", [])
+    existing_texts = {q.get("question", "") for q in validated}
+
+    if not generated:
+        logger.warning("No generated questions to validate")
+        return {"failed_specs": []}
+
+    logger.info(f"Batch validating {len(generated)} questions")
+
+    # ═══════════════════════════════════════════════════════
+    # Phase 1: CPU Validation (instant)
+    # ═══════════════════════════════════════════════════════
+    cpu_passed: List[Dict[str, Any]] = []
+    cpu_failed: List[FailedQuestion] = []
+
+    for gen_result in generated:
+        if not gen_result.get("success") or not gen_result.get("question"):
+            cpu_failed.append({
+                "spec_id": gen_result.get("spec_id", 0),
+                "reason": gen_result.get("error", "Generation failed"),
+            })
+            logger.info(f"[CPU] spec_id={gen_result.get('spec_id')} - Generation failed: {gen_result.get('error')}")
             continue
 
-        expected_index = q.get("correct_answer_index", 0)
-        solver_index = result.answer_index
-        confidence = result.confidence
+        question = gen_result["question"]
+        is_valid, reason = validate_single_question(question, existing_texts)
 
-        # Pass criteria:
-        # 1. Solver finds the same answer
-        # 2. Confidence is high (>0.7)
-        if solver_index == expected_index and confidence >= 0.7:
-            passed += 1
+        if is_valid:
+            existing_texts.add(question.get("question", ""))
+            cpu_passed.append(question)
+            logger.debug(f"[CPU] spec_id={question.get('spec_id')} - PASSED")
         else:
-            failures.append(
-                f"Q: {q.get('question', '')[:50]}... "
-                f"Expected: {expected_index}, Got: {solver_index}, Conf: {confidence:.2f}"
+            cpu_failed.append({
+                "spec_id": question.get("spec_id", 0),
+                "reason": f"CPU: {reason}",
+            })
+            logger.info(
+                f"[CPU] spec_id={question.get('spec_id')} - REJECTED: {reason} | "
+                f"type={question.get('type')}, options={len(question.get('options', []))}, "
+                f"q={question.get('question', '')[:50]}..."
             )
 
-    return passed, len(sample), failures
+    logger.info(f"CPU validation: {len(cpu_passed)} passed, {len(cpu_failed)} failed")
 
+    # ═══════════════════════════════════════════════════════
+    # Phase 2: LLM Validation (parallel, type-specific)
+    # ═══════════════════════════════════════════════════════
+    retriever = get_retriever()
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM)
 
-async def validate_samples_node(state: TestGenState) -> Dict[str, Any]:
-    """
-    Validate samples from each batch using the solver.
+    async def validate_mc(question: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        MC validation with support scoring.
 
-    For each batch, validate 3 random MC questions.
-    If >= 2 pass, mark batch as valid.
-    """
-    subject = state.get("subject", "")
-    grade = state.get("grade", 9)
+        Uses support scoring (V3) to:
+        - Score how well each option is supported by context
+        - Detect ambiguous questions with multiple high-scoring options
+        - Return confidence score based on support level
+        """
+        concept = question.get("concept", "")
+        context = concept_contexts.get(concept, base_context)
 
-    updates = {
-        "total_validation_calls": state.get("total_validation_calls", 0),
-        "llm_calls_count": state.get("llm_calls_count", 0),
-    }
+        result = await check_mc_question(
+            question_text=question.get("question", ""),
+            options=question.get("options", []),
+            expected_index=question.get("correct_answer_index", 0),
+            context=context,
+            subject=subject,
+            grade=grade,
+            use_support_scoring=True,  # V3: Enable support scoring for better validation
+        )
 
-    for difficulty in ["easy", "medium", "hard"]:
-        batch = state.get(f"{difficulty}_batch", {})
+        # Log validation details for debugging
+        if result.option_scores:
+            logger.debug(
+                f"[LLM-MC] spec_id={question.get('spec_id')} - "
+                f"scores={result.option_scores}, confidence={result.confidence:.2f}"
+            )
 
-        # Skip already valid batches
-        if batch.get("is_valid", False):
-            continue
+        return {
+            "question": question,
+            "is_valid": result.is_valid,
+            "reason": result.reason,
+            "confidence": result.confidence,
+            "option_scores": result.option_scores,
+        }
 
-        questions = batch.get("questions", [])
-        if not questions:
-            continue
+    async def validate_open(question: Dict[str, Any]) -> Dict[str, Any]:
+        """Open: Retrieve fresh context for answerability check."""
+        try:
+            docs = await retriever.retrieve(
+                query=question.get("question", ""),
+                subject=subject,
+                grade=grade,
+                top_k=3,
+            )
+            context, _ = format_context(docs, max_chars=4000, subject=subject)
+        except Exception as e:
+            logger.error(f"Validation RAG failed: {e}")
+            context = base_context
 
-        # Validate sample
-        passed, total, failures = await _validate_sample_questions(
-            questions=questions,
+        result = await check_open_question(
+            question_text=question.get("question", ""),
+            expected_answer=question.get("explanation", ""),
+            context=context,
             subject=subject,
             grade=grade,
         )
+        return {"question": question, "is_valid": result.is_valid, "reason": result.reason}
 
-        updates["total_validation_calls"] += total
-        updates["llm_calls_count"] += total
+    async def validate_one(question: Dict[str, Any]) -> Dict[str, Any]:
+        async with semaphore:
+            try:
+                q_type = question.get("type", "open")
+                if q_type in {"single_choice", "multiple_choice"}:
+                    return await validate_mc(question)
+                else:
+                    return await validate_open(question)
+            except Exception as e:
+                logger.error(f"Validation failed for question: {e}")
+                return {"question": question, "is_valid": False, "reason": str(e)}
 
-        # Check if batch passes
-        if passed >= PASS_THRESHOLD:
-            batch_update = dict(batch)
-            batch_update["is_valid"] = True
-            batch_update["validation_failures"] = []
-            logger.info(f"✓ {difficulty} batch passed validation ({passed}/{total})")
+    # Run all validations in parallel
+    validation_results = await asyncio.gather(
+        *[validate_one(q) for q in cpu_passed],
+        return_exceptions=True
+    )
+
+    # Collect results
+    passed_questions: List[Dict[str, Any]] = []
+    llm_failed: List[FailedQuestion] = []
+
+    for result in validation_results:
+        if isinstance(result, Exception):
+            logger.error(f"Validation exception: {result}")
+            continue
+        if result["is_valid"]:
+            passed_questions.append(result["question"])
         else:
-            batch_update = dict(batch)
-            batch_update["is_valid"] = False
-            batch_update["validation_failures"] = failures
-            logger.info(f"✗ {difficulty} batch failed validation ({passed}/{total}): {failures}")
+            llm_failed.append({
+                "spec_id": result["question"].get("spec_id", 0),
+                "reason": f"LLM: {result['reason']}",
+            })
 
-        updates[f"{difficulty}_batch"] = batch_update
+    validation_time = int((time.time() - start_time) * 1000)
+    all_failed = cpu_failed + llm_failed
 
-    return updates
+    logger.info(
+        f"Validation complete in {validation_time}ms: "
+        f"{len(passed_questions)} passed, {len(all_failed)} failed"
+    )
+
+    return {
+        "validated_questions": validated + passed_questions,
+        "failed_specs": all_failed,
+        "generated_questions": [],  # Clear for next iteration
+        "total_passed": state.get("total_passed", 0) + len(passed_questions),
+        "total_failed": state.get("total_failed", 0) + len(all_failed),
+        "llm_calls_count": state.get("llm_calls_count", 0) + len(cpu_passed),
+        "validation_time_ms": state.get("validation_time_ms", 0) + validation_time,
+    }
 
 
-def check_retry_needed(state: TestGenState) -> Literal["retry", "finalize"]:
-    """Check if any batches need retry."""
-    max_retries = state.get("max_retries", 2)
-
-    for difficulty in ["easy", "medium", "hard"]:
-        batch = state.get(f"{difficulty}_batch", {})
-        if not batch.get("is_valid", False) and batch.get("attempts", 0) < max_retries:
-            return "retry"
-
-    return "finalize"
+# =============================================================================
+# Node: Prepare Retry
+# =============================================================================
 
 
 def prepare_retry_node(state: TestGenState) -> Dict[str, Any]:
-    """Prepare state for retry of failed batches."""
-    updates = {
-        "retries_used": state.get("retries_used", 0) + 1,
-        "batches_regenerated": state.get("batches_regenerated", 0),
+    """
+    Prepare failed specs for retry.
+
+    Finds original specs for failed questions and queues them
+    for another generation attempt (max 2 iterations).
+    """
+    retry_count = state.get("retry_count", 0)
+    failed_specs = state.get("failed_specs", [])
+    test_plan = state.get("test_plan") or {}
+
+    if retry_count >= MAX_RETRY_ITERATIONS:
+        logger.info(f"Max retry iterations ({MAX_RETRY_ITERATIONS}) reached")
+        # Move remaining failed to final failed list
+        return {
+            "pending_specs": [],
+            "failed_questions": state.get("failed_questions", []) + failed_specs,
+            "failed_specs": [],
+        }
+
+    if not failed_specs:
+        logger.info("No failed specs to retry")
+        return {"pending_specs": []}
+
+    # Find original specs for failed questions
+    original_specs = {s["spec_id"]: s for s in test_plan.get("question_specs", [])}
+    failed_ids = {f["spec_id"] for f in failed_specs}
+
+    retry_specs: List[QuestionSpec] = []
+    for spec_id in failed_ids:
+        if spec_id in original_specs:
+            # Create modified spec for retry with new ID
+            original = original_specs[spec_id]
+            retry_specs.append({
+                "spec_id": spec_id + 1000 * (retry_count + 1),
+                "difficulty": original["difficulty"],
+                "question_type": original["question_type"],
+                "concept": original["concept"],
+                "focus": f"{original.get('focus', '')} (retry {retry_count + 1})".strip(),
+            })
+
+    logger.info(f"Prepared {len(retry_specs)} specs for retry iteration {retry_count + 1}")
+
+    return {
+        "pending_specs": retry_specs,
+        "retry_count": retry_count + 1,
+        "failed_specs": [],  # Clear for next iteration
     }
 
-    # Count batches that will be regenerated
-    for difficulty in ["easy", "medium", "hard"]:
-        batch = state.get(f"{difficulty}_batch", {})
-        if not batch.get("is_valid", False):
-            updates["batches_regenerated"] += 1
 
-    return updates
+def should_retry(state: TestGenState) -> Literal["batch_generate", "finalize"]:
+    """Decide whether to retry or finalize."""
+    pending_specs = state.get("pending_specs", [])
+
+    if pending_specs:
+        return "batch_generate"
+    return "finalize"
+
+
+# =============================================================================
+# Node: Finalize
+# =============================================================================
 
 
 def finalize_node(state: TestGenState) -> Dict[str, Any]:
     """
-    Collect all valid questions from batches.
+    Finalize the test generation.
+
+    Logs statistics and returns final state.
     """
-    all_questions = []
-    existing_texts = set()
+    validated = state.get("validated_questions", [])
 
-    for difficulty in ["easy", "medium", "hard"]:
-        batch = state.get(f"{difficulty}_batch", {})
-        if batch.get("is_valid", False):
-            for q in batch.get("questions", []):
-                q_text = q.get("question", "")
-                if q_text and q_text not in existing_texts:
-                    all_questions.append(q)
-                    existing_texts.add(q_text)
+    # Count by difficulty
+    easy_count = sum(1 for q in validated if q.get("difficulty") == "easy")
+    medium_count = sum(1 for q in validated if q.get("difficulty") == "medium")
+    hard_count = sum(1 for q in validated if q.get("difficulty") == "hard")
 
-    logger.info(f"Finalized test generation with {len(all_questions)} questions")
-    logger.info(f"Stats: generation_calls={state.get('total_generation_calls', 0)}, "
-                f"validation_calls={state.get('total_validation_calls', 0)}, "
-                f"retries={state.get('retries_used', 0)}")
+    # Count by type
+    single_count = sum(1 for q in validated if q.get("type") == "single_choice")
+    multiple_count = sum(1 for q in validated if q.get("type") == "multiple_choice")
+    open_count = sum(1 for q in validated if q.get("type") == "open")
 
-    return {
-        "questions": all_questions,
-        "existing_question_texts": list(existing_texts),
-    }
+    logger.info(
+        f"Test generation complete: {len(validated)} questions "
+        f"(easy={easy_count}, medium={medium_count}, hard={hard_count}, "
+        f"single_choice={single_count}, multiple_choice={multiple_count}, open={open_count})"
+    )
+    logger.info(
+        f"Stats: generated={state.get('total_generated', 0)}, "
+        f"passed={state.get('total_passed', 0)}, "
+        f"failed={state.get('total_failed', 0)}, "
+        f"llm_calls={state.get('llm_calls_count', 0)}, "
+        f"retries={state.get('retry_count', 0)}"
+    )
+    logger.info(
+        f"Timing: planning={state.get('planning_time_ms', 0)}ms, "
+        f"generation={state.get('generation_time_ms', 0)}ms, "
+        f"validation={state.get('validation_time_ms', 0)}ms"
+    )
+
+    return {}
 
 
 # =============================================================================
@@ -491,41 +861,48 @@ def finalize_node(state: TestGenState) -> Dict[str, Any]:
 
 def build_test_gen_graph():
     """
-    Build the LangGraph workflow for test generation.
+    Build the LangGraph workflow for parallel test generation.
 
     Flow:
-        retrieve_context → init_batches → generate_batches → validate_samples
-        → (retry if needed) → finalize → END
+        retrieve_context → plan_test → retrieve_concepts → batch_generate
+                                                                ↓
+                                                          batch_validate
+                                                                ↓
+                                                          prepare_retry ──┐
+                                                                ↓         │
+                                                            finalize ◄────┘
     """
-    # Lazy import to avoid grpcio initialization at module load (macOS mutex.cc issue)
     from langgraph.graph import StateGraph, END
 
     workflow = StateGraph(TestGenState)
 
     # Add nodes
     workflow.add_node("retrieve_context", retrieve_context_node)
-    workflow.add_node("init_batches", init_batches_node)
-    workflow.add_node("generate_batches", generate_batches_node)
-    workflow.add_node("validate_samples", validate_samples_node)
+    workflow.add_node("plan_test", plan_test_node)
+    workflow.add_node("retrieve_concepts", retrieve_concepts_node)
+    workflow.add_node("batch_generate", batch_generate_node)
+    workflow.add_node("batch_validate", batch_validate_node)
     workflow.add_node("prepare_retry", prepare_retry_node)
     workflow.add_node("finalize", finalize_node)
 
-    # Add edges
+    # Setup edges
     workflow.set_entry_point("retrieve_context")
-    workflow.add_edge("retrieve_context", "init_batches")
-    workflow.add_edge("init_batches", "generate_batches")
-    workflow.add_edge("generate_batches", "validate_samples")
+    workflow.add_edge("retrieve_context", "plan_test")
+    workflow.add_edge("plan_test", "retrieve_concepts")
+    workflow.add_edge("retrieve_concepts", "batch_generate")
+    workflow.add_edge("batch_generate", "batch_validate")
+    workflow.add_edge("batch_validate", "prepare_retry")
 
-    # Conditional: retry or finalize
+    # Conditional retry loop
     workflow.add_conditional_edges(
-        "validate_samples",
-        check_retry_needed,
+        "prepare_retry",
+        should_retry,
         {
-            "retry": "prepare_retry",
+            "batch_generate": "batch_generate",
             "finalize": "finalize",
         },
     )
-    workflow.add_edge("prepare_retry", "generate_batches")
+
     workflow.add_edge("finalize", END)
 
     return workflow.compile()
@@ -543,48 +920,72 @@ def get_test_gen_graph():
     return _test_gen_graph
 
 
-# For backwards compatibility
-test_gen_graph = None  # Will be set on first use
-
-
 # =============================================================================
 # Public API
 # =============================================================================
 
 
 class GenerationStats:
-    """Statistics about the generation process."""
+    """Statistics about the parallel generation process."""
 
     def __init__(self, state: TestGenState):
-        self.total_questions = len(state.get("questions", []))
-        self.generation_calls = state.get("total_generation_calls", 0)
-        self.validation_calls = state.get("total_validation_calls", 0)
+        self.total_questions = len(state.get("validated_questions", []))
+        self.total_generated = state.get("total_generated", 0)
+        self.total_passed = state.get("total_passed", 0)
+        self.total_failed = state.get("total_failed", 0)
         self.total_llm_calls = state.get("llm_calls_count", 0)
-        self.retries_used = state.get("retries_used", 0)
-        self.batches_regenerated = state.get("batches_regenerated", 0)
 
         # Per-difficulty stats
-        self.easy_count = len(state.get("easy_batch", {}).get("questions", []))
-        self.medium_count = len(state.get("medium_batch", {}).get("questions", []))
-        self.hard_count = len(state.get("hard_batch", {}).get("questions", []))
+        validated = state.get("validated_questions", [])
+        self.easy_count = sum(1 for q in validated if q.get("difficulty") == "easy")
+        self.medium_count = sum(1 for q in validated if q.get("difficulty") == "medium")
+        self.hard_count = sum(1 for q in validated if q.get("difficulty") == "hard")
+
+        # Per-type stats
+        self.single_choice_count = sum(1 for q in validated if q.get("type") == "single_choice")
+        self.multiple_choice_count = sum(1 for q in validated if q.get("type") == "multiple_choice")
+        self.open_count = sum(1 for q in validated if q.get("type") == "open")
+
+        # Timing stats
+        self.planning_time_ms = state.get("planning_time_ms", 0)
+        self.generation_time_ms = state.get("generation_time_ms", 0)
+        self.validation_time_ms = state.get("validation_time_ms", 0)
+        self.retry_count = state.get("retry_count", 0)
+
+        # Planning info
+        test_plan = state.get("test_plan") or {}
+        self.concepts_covered = test_plan.get("concepts", [])
+
+        # Failed questions for debugging
+        self.failed_questions = state.get("failed_questions", [])
 
 
 async def generate_test_pool(
     subject: str,
     grade: int,
     topic_definition: str,
-    num_questions: int = 30,
-    max_retries: int = 2,
+    easy_count: int = 5,
+    medium_count: int = 10,
+    hard_count: int = 5,
 ) -> tuple[List[Dict[str, Any]], GenerationStats]:
     """
-    Generate a validated pool of test questions using LangGraph workflow.
+    Generate a validated pool of test questions using parallel LangGraph workflow.
+
+    New architecture:
+    1. Retrieve RAG context (1 call)
+    2. Plan test structure (1 LLM call)
+    3. Retrieve per-concept context (N parallel RAG)
+    4. Batch generate questions (N parallel LLM)
+    5. Batch validate questions (hybrid: MC reuse context, Open fresh RAG)
+    6. Retry failed questions (up to 2 iterations)
 
     Args:
         subject: Subject name (Алгебра, Українська мова, etc.)
         grade: Grade level (8 or 9)
         topic_definition: Topic description
-        num_questions: Target number of questions (default 30)
-        max_retries: Max retries per batch (default 2)
+        easy_count: Number of easy questions (default 5)
+        medium_count: Number of medium questions (default 10)
+        hard_count: Number of hard questions (default 5)
 
     Returns:
         Tuple of (list of validated question dicts, GenerationStats)
@@ -593,49 +994,46 @@ async def generate_test_pool(
         "subject": subject,
         "grade": grade,
         "topic_definition": topic_definition,
-        "num_questions": num_questions,
-        "max_retries": max_retries,
+        "easy_count": easy_count,
+        "medium_count": medium_count,
+        "hard_count": hard_count,
         "rag_context": "",
         "rag_references": [],
-        "retrieved_docs": [],
-        "easy_batch": {
-            "difficulty": "easy",
-            "questions": [],
-            "is_valid": False,
-            "attempts": 0,
-            "validation_failures": [],
-        },
-        "medium_batch": {
-            "difficulty": "medium",
-            "questions": [],
-            "is_valid": False,
-            "attempts": 0,
-            "validation_failures": [],
-        },
-        "hard_batch": {
-            "difficulty": "hard",
-            "questions": [],
-            "is_valid": False,
-            "attempts": 0,
-            "validation_failures": [],
-        },
-        "questions": [],
-        "existing_question_texts": [],
-        "total_generation_calls": 0,
-        "total_validation_calls": 0,
-        "retries_used": 0,
-        "batches_regenerated": 0,
+        "test_plan": None,
+        "concepts": [],
+        "concept_contexts": {},
+        "pending_specs": [],
+        "generated_questions": [],
+        "retry_count": 0,
+        "failed_specs": [],
+        "validated_questions": [],
+        "failed_questions": [],
+        "total_generated": 0,
+        "total_passed": 0,
+        "total_failed": 0,
         "llm_calls_count": 0,
+        "planning_time_ms": 0,
+        "generation_time_ms": 0,
+        "validation_time_ms": 0,
         "error_message": None,
-        "trace_id": "",
     }
 
     try:
         graph = get_test_gen_graph()
-        final_state = await graph.ainvoke(initial_state)
-        questions = final_state.get("questions", [])
+        # New flow has much lower recursion limit
+        # Base nodes (4) + retry iterations (2) * nodes per iteration (3) + buffer
+        recursion_limit = 20
+
+        final_state = await graph.ainvoke(
+            initial_state,
+            config={"recursion_limit": recursion_limit}
+        )
+
+        questions = final_state.get("validated_questions", [])
         stats = GenerationStats(final_state)
+
         return questions, stats
+
     except Exception as e:
         logger.error(f"Test generation failed: {e}", exc_info=True)
         return [], GenerationStats(initial_state)
