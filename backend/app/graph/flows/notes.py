@@ -127,20 +127,22 @@ def analyze_students_node(state: NotesState) -> Dict[str, Any]:
 
     This node:
     1. Loads student data from BenchmarkDataLoader
-    2. Computes average score across all students
-    3. Determines level (weak/medium/strong) based on class quartiles
-    4. Aggregates gaps (weak_topics + skipped_topics)
+    2. If level not provided: computes level from class quartiles
+    3. Aggregates gaps (weak_topics + skipped_topics)
+
+    If level is already set in state (from API), it will be preserved.
     """
     from app.services.data_loader import get_benchmark_loader
     from app.services.levels import compute_quartiles, assign_level
 
     student_ids = state.get("student_ids", [])
     subject = state.get("subject", "")
+    provided_level = state.get("level", "")  # Level may be pre-set from API
 
     if not student_ids:
         logger.warning("No student_ids provided, using defaults")
         return {
-            "level": "medium",
+            "level": provided_level or "medium",
             "aggregated_gaps": {"weak_topics": {}, "skipped_topics": {}, "total_students": 0},
             "class_id": 0,
             "teacher_id": 0,
@@ -153,7 +155,7 @@ def analyze_students_node(state: NotesState) -> Dict[str, Any]:
     if not first_student_info:
         logger.warning(f"Student {student_ids[0]} not found")
         return {
-            "level": "medium",
+            "level": provided_level or "medium",
             "aggregated_gaps": {"weak_topics": {}, "skipped_topics": {}, "total_students": 0},
             "class_id": 0,
             "teacher_id": 0,
@@ -176,28 +178,28 @@ def analyze_students_node(state: NotesState) -> Dict[str, Any]:
     else:
         teacher_id = 0
 
-    # Get all class students to compute quartiles
-    all_class_students = loader.get_class_students(class_id, subject, teacher_id)
-
-    if not all_class_students:
-        return {
-            "level": "medium",
-            "aggregated_gaps": {"weak_topics": {}, "skipped_topics": {}, "total_students": len(student_ids)},
-            "class_id": class_id,
-            "teacher_id": teacher_id,
-        }
-
-    # Compute quartiles from all class scores
-    all_scores = [s.average_subject_grade for s in all_class_students]
-    q1, q3 = compute_quartiles(all_scores)
-
-    # Compute average score for requested students
-    requested_students = [s for s in all_class_students if s.student_id in student_ids]
-    if requested_students:
-        avg_score = sum(s.average_subject_grade for s in requested_students) / len(requested_students)
-        level = assign_level(avg_score, q1, q3).value
+    # Compute level only if not already provided
+    if provided_level:
+        level = provided_level
+        logger.info(f"Using provided level: {level}")
     else:
-        level = "medium"
+        # Get all class students to compute quartiles
+        all_class_students = loader.get_class_students(class_id, subject, teacher_id)
+
+        if not all_class_students:
+            level = "medium"
+        else:
+            # Compute quartiles from all class scores
+            all_scores = [s.average_subject_grade for s in all_class_students]
+            q1, q3 = compute_quartiles(all_scores)
+
+            # Compute average score for requested students
+            requested_students = [s for s in all_class_students if s.student_id in student_ids]
+            if requested_students:
+                avg_score = sum(s.average_subject_grade for s in requested_students) / len(requested_students)
+                level = assign_level(avg_score, q1, q3).value
+            else:
+                level = "medium"
 
     # Aggregate gaps for these students
     aggregated_gaps = loader.aggregate_student_gaps(
@@ -448,6 +450,7 @@ async def generate_notes(
     subject: str,
     grade: int,
     topic_definition: str,
+    level: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Generate notes using the LangGraph workflow.
@@ -457,6 +460,8 @@ async def generate_notes(
         subject: Subject name (Алгебра, Українська мова, Історія України)
         grade: Grade level (8 or 9)
         topic_definition: Topic description
+        level: Optional level override (weak/medium/strong). If not provided,
+               computed from student scores using class quartiles.
 
     Returns:
         Dict with:
@@ -464,8 +469,8 @@ async def generate_notes(
         - contents: Markdown content with Recap (if prereqs missed) + Lesson
         - teacher_notes: Tips including recap recommendation
         - references: Combined sources (topic + prereqs)
-        - level: Computed student level
-        - missed_prereqs: List of prerequisite topics that need recap
+        - level: Student level (provided or computed)
+        - student_gaps: List of prerequisite topics that need recap
         - llm_calls: Number of LLM calls made
     """
     initial_state: NotesState = {
@@ -473,7 +478,7 @@ async def generate_notes(
         "subject": subject,
         "grade": grade,
         "topic_definition": topic_definition,
-        "level": "",
+        "level": level or "",  # If provided, analyze_students will use it
         "aggregated_gaps": {},
         "class_id": 0,
         "teacher_id": 0,

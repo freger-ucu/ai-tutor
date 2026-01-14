@@ -4,9 +4,7 @@ Teacher API Endpoints
 Implements EP1-EP7 per architecture.md contracts.
 """
 
-import json
 import logging
-import re
 
 from fastapi import APIRouter, HTTPException
 
@@ -49,11 +47,7 @@ from app.prompts.solver import (
     SOLVER_SYSTEM_PROMPT,
     build_solver_prompt,
 )
-from app.prompts.notes_generator import (
-    NOTES_SYSTEM_PROMPT,
-    build_level_notes_prompt,
-    build_individual_notes_prompt,
-)
+# Notes generation now uses the LangGraph flow in app.graph.flows.notes
 
 # NOTE: generate_test_pool is imported lazily in generate_test_endpoint()
 # to avoid loading grpcio/langsmith at module import time (macOS mutex.cc issue)
@@ -138,86 +132,6 @@ def _build_notes_statistics(aggregated_gaps: dict | None) -> NotesStatistics | N
         weak_topics=weak_topics,
         skipped_topics=skipped_topics
     )
-
-
-def _parse_notes_json(response: str, topic_definition: str) -> dict:
-    """
-    Parse JSON response from LLM for notes generation.
-
-    Handles:
-    - Clean JSON
-    - JSON wrapped in ```json code blocks
-    - Malformed JSON with unescaped newlines
-    """
-    response_text = response.strip()
-
-    # Remove markdown code blocks if present
-    if "```json" in response_text:
-        response_text = response_text.split("```json", 1)[1]
-        if "```" in response_text:
-            response_text = response_text.split("```", 1)[0]
-        response_text = response_text.strip()
-    elif "```" in response_text:
-        parts = response_text.split("```")
-        if len(parts) >= 2:
-            response_text = parts[1].strip()
-            if response_text.startswith("json"):
-                response_text = response_text[4:].strip()
-
-    # Try to parse as JSON
-    if "{" in response_text and "}" in response_text:
-        start = response_text.find("{")
-        end = response_text.rfind("}") + 1
-        json_str = response_text[start:end]
-
-        # First try: direct parse
-        try:
-            return json.loads(json_str)
-        except json.JSONDecodeError:
-            pass
-
-        # Second try: use regex to extract fields (handles malformed JSON)
-        try:
-            title_match = re.search(r'"title"\s*:\s*"([^"]*)"', json_str)
-
-            # For contents and teacher_notes, find the field and extract until next field or end
-            contents_match = re.search(r'"contents"\s*:\s*"(.*?)",\s*"teacher_notes"', json_str, re.DOTALL)
-            if not contents_match:
-                contents_match = re.search(r'"contents"\s*:\s*"(.*?)"(?:,|\s*})', json_str, re.DOTALL)
-
-            teacher_notes_match = re.search(r'"teacher_notes"\s*:\s*"(.*?)"(?:\s*}|$)', json_str, re.DOTALL)
-
-            result = {}
-            if title_match:
-                result["title"] = title_match.group(1)
-            if contents_match:
-                # Unescape the content
-                content = contents_match.group(1)
-                content = content.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
-                result["contents"] = content
-            if teacher_notes_match:
-                notes = teacher_notes_match.group(1)
-                notes = notes.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
-                result["teacher_notes"] = notes
-
-            if result:
-                # Ensure all required fields
-                if "title" not in result:
-                    result["title"] = f"Урок: {topic_definition[:50]}"
-                if "contents" not in result:
-                    result["contents"] = response_text
-                if "teacher_notes" not in result:
-                    result["teacher_notes"] = ""
-                return result
-        except Exception:
-            pass
-
-    # Fallback: return raw response as contents
-    return {
-        "title": f"Урок: {topic_definition[:50]}",
-        "contents": response_text if response_text else response,
-        "teacher_notes": ""
-    }
 
 
 # =============================================================================
@@ -483,126 +397,6 @@ async def solver_endpoint(request: SolverRequest) -> SolverResponse:
 # =============================================================================
 
 
-async def generate_level_notes(
-    subject: str,
-    grade: int,
-    level: str,
-    topic_definition: str,
-    gap_warnings: list[str] | None = None,
-    aggregated_gaps: dict | None = None
-) -> dict:
-    """
-    Generate notes for a student level using RAG + LLM.
-
-    Args:
-        subject: Subject name
-        grade: Grade level (8 or 9)
-        level: Student level (weak/medium/strong)
-        topic_definition: Topic description
-        gap_warnings: (deprecated) Simple list of topics
-        aggregated_gaps: Aggregated statistics from aggregate_student_gaps()
-
-    Returns:
-        dict with 'title', 'contents', 'teacher_notes', 'references'
-    """
-    # RAG retrieval
-    retriever = get_retriever()
-    docs = await retriever.retrieve(
-        query=topic_definition,
-        subject=subject,
-        grade=grade
-    )
-
-    # Format context and get references
-    context, references = format_context(docs, max_chars=6000, subject=subject)
-
-    # Build prompt with aggregated gaps
-    prompt = build_level_notes_prompt(
-        subject=subject,
-        grade=grade,
-        level=level,
-        topic_definition=topic_definition,
-        context=context,
-        gap_warnings=gap_warnings,
-        aggregated_gaps=aggregated_gaps
-    )
-
-    full_prompt = f"{NOTES_SYSTEM_PROMPT}\n\n{prompt}"
-
-    # Generate notes
-    llm_client = get_llm_client()
-    response = await llm_client.generate(
-        prompt=full_prompt,
-        temperature=0.7,
-        max_tokens=2500
-    )
-
-    # Parse JSON response and add references
-    result = _parse_notes_json(response, topic_definition)
-    result["references"] = references
-    return result
-
-
-async def generate_individual_notes(
-    subject: str,
-    grade: int,
-    topic_definition: str,
-    student_info: dict | None = None,
-    aggregated_gaps: dict | None = None,
-    level: str | None = None
-) -> dict:
-    """
-    Generate notes for specific students using RAG + LLM.
-
-    Args:
-        subject: Subject name
-        grade: Grade level (8 or 9)
-        topic_definition: Topic description
-        student_info: (deprecated) Single student data - use aggregated_gaps
-        aggregated_gaps: Aggregated statistics from aggregate_student_gaps()
-        level: Target level for the notes
-
-    Returns:
-        dict with 'title', 'contents', 'teacher_notes', 'references'
-    """
-    # RAG retrieval
-    retriever = get_retriever()
-    docs = await retriever.retrieve(
-        query=topic_definition,
-        subject=subject,
-        grade=grade
-    )
-
-    # Format context and get references
-    context, references = format_context(docs, max_chars=6000, subject=subject)
-
-    # Build prompt with aggregated gaps
-    prompt = build_individual_notes_prompt(
-        subject=subject,
-        grade=grade,
-        topic_definition=topic_definition,
-        context=context,
-        student_info=student_info,
-        aggregated_gaps=aggregated_gaps,
-        level=level
-    )
-
-    full_prompt = f"{NOTES_SYSTEM_PROMPT}\n\n{prompt}"
-
-    # Generate notes
-    llm_client = get_llm_client()
-    response = await llm_client.generate(
-        prompt=full_prompt,
-        temperature=0.7,
-        max_tokens=2500
-    )
-
-    # Parse JSON response and add references
-    result = _parse_notes_json(response, topic_definition)
-    result["references"] = references
-    return result
-
-
 @router.post("/notes/by-level", response_model=NotesResponse, response_model_exclude_none=True)
 async def generate_notes_by_level(
     request: GenerateLevelNotesRequest
@@ -611,8 +405,16 @@ async def generate_notes_by_level(
     EP3.1: Generate notes for students by level.
 
     Generates lesson notes adapted to specified student levels.
-    Uses aggregated statistics from all students at the specified level(s).
+    Uses LangGraph flow that:
+    1. Analyzes students to aggregate gaps
+    2. Filters gaps to prerequisites using LLM
+    3. Retrieves RAG context for topic and prerequisites
+    4. Generates notes with optional recap section
+
+    The level is provided by the request (not computed from students).
     """
+    from app.graph.flows.notes import generate_notes
+
     data_loader = get_data_loader()
 
     # Determine grade from class
@@ -622,11 +424,8 @@ async def generate_notes_by_level(
 
     grade = class_info["class_number"]
 
-    # Get the first level (or combine if multiple)
-    if request.level_list:
-        level = request.level_list[0].value
-    else:
-        level = "medium"
+    # Get the target level from request (use first one if multiple)
+    target_level = request.level_list[0].value if request.level_list else "medium"
 
     # Get students at the specified level(s)
     all_students = data_loader.get_class_students(
@@ -642,25 +441,31 @@ async def generate_notes_by_level(
         if s.subject_level.value in target_levels
     ]
 
-    # Aggregate gaps across all students at this level
+    if not student_ids:
+        raise HTTPException(status_code=404, detail="No students found at specified levels")
+
+    # Generate notes using LangGraph flow with explicit level
+    result = await generate_notes(
+        student_ids=student_ids,
+        subject=request.subject,
+        grade=grade,
+        topic_definition=request.topic_definition,
+        level=target_level,  # Pass the requested level explicitly
+    )
+
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    # Format sources for response
+    sources = _format_sources(result.get("references", []))
+
+    # Build statistics from the flow's aggregated_gaps (need to get from data_loader for response)
     aggregated_gaps = data_loader.aggregate_student_gaps(
         student_ids=student_ids,
         class_id=request.class_id,
         subject=request.subject,
         teacher_id=request.teacher_id
     )
-
-    # Generate notes with aggregated statistics
-    result = await generate_level_notes(
-        subject=request.subject,
-        grade=grade,
-        level=level,
-        topic_definition=request.topic_definition,
-        aggregated_gaps=aggregated_gaps
-    )
-
-    # Format sources and statistics for response
-    sources = _format_sources(result.get("references", []))
     statistics = _build_notes_statistics(aggregated_gaps)
 
     return NotesResponse(
@@ -679,9 +484,15 @@ async def generate_notes_individual(
     """
     EP3.2: Generate notes for specific students.
 
-    Generates lesson notes for selected students, using aggregated statistics
-    from all students in the list (not just the first one).
+    Generates lesson notes for selected students.
+    Uses LangGraph flow that:
+    1. Analyzes students to compute level and gaps
+    2. Filters gaps to prerequisites using LLM
+    3. Retrieves RAG context for topic and prerequisites
+    4. Generates notes with optional recap section
     """
+    from app.graph.flows.notes import generate_notes
+
     data_loader = get_data_loader()
 
     # Determine grade from class
@@ -706,37 +517,27 @@ async def generate_notes_individual(
     if not valid_students:
         raise HTTPException(status_code=404, detail="No valid students found in class")
 
-    # Determine the predominant level for the group
-    student_levels = [
-        s.subject_level.value for s in all_students
-        if s.student_id in valid_students
-    ]
-    if student_levels:
-        # Use the most common level
-        from collections import Counter
-        level = Counter(student_levels).most_common(1)[0][0]
-    else:
-        level = "medium"
+    # Generate notes using LangGraph flow
+    result = await generate_notes(
+        student_ids=valid_students,
+        subject=request.subject,
+        grade=grade,
+        topic_definition=request.topic_definition,
+    )
 
-    # Aggregate gaps across ALL students in the list
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    # Format sources for response
+    sources = _format_sources(result.get("references", []))
+
+    # Build statistics from the flow's aggregated_gaps (need to get from data_loader for response)
     aggregated_gaps = data_loader.aggregate_student_gaps(
         student_ids=valid_students,
         class_id=request.class_id,
         subject=request.subject,
         teacher_id=request.teacher_id
     )
-
-    # Generate notes with aggregated statistics
-    result = await generate_individual_notes(
-        subject=request.subject,
-        grade=grade,
-        topic_definition=request.topic_definition,
-        aggregated_gaps=aggregated_gaps,
-        level=level
-    )
-
-    # Format sources and statistics for response
-    sources = _format_sources(result.get("references", []))
     statistics = _build_notes_statistics(aggregated_gaps)
 
     return NotesResponse(

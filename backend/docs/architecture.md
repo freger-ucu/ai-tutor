@@ -202,8 +202,8 @@ Only 4 fields required:
 **Flow Details:**
 
 1. **analyze_students**: Load student data from BenchmarkDataLoader
-   - Compute average score across all provided students
-   - Determine level using class quartiles (weak < Q1, strong > Q3)
+   - If level provided: use it directly (EP3.1 passes level from request)
+   - If level not provided: compute from class quartiles (EP3.2)
    - Aggregate gaps (weak_topics + skipped_topics) from student records
    - Detect class_id and teacher_id from student data
 
@@ -221,7 +221,9 @@ Only 4 fields required:
    - If no prerequisites: `## Урок (Lesson)` only
    - Teacher notes include recap recommendation when applicable
 
-**Level Computation:**
+**Level Handling:**
+- **EP3.1 (by-level)**: Level is provided by request → passed directly to flow
+- **EP3.2 (individual)**: Level computed from students using class quartiles:
 ```
 Q1, Q3 = quartiles(all_class_scores)
 
