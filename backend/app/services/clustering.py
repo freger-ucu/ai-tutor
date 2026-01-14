@@ -19,10 +19,10 @@ from app.models.domain import (
     ClusterAssignment,
     ClusterDistribution,
     StudentCluster,
-    StudentSummary,
 )
 from app.models.enums import Level
 from app.services.data_loader import DataLoader, get_data_loader
+from app.services.levels import compute_quartiles, assign_level, calculate_percentile
 
 
 class ClusteringService:
@@ -54,7 +54,8 @@ class ClusteringService:
     def cluster_students(
         self,
         class_id: int,
-        subject: str
+        subject: str,
+        teacher_id: int
     ) -> list[StudentCluster]:
         """
         Cluster all students in a class by performance.
@@ -62,11 +63,12 @@ class ClusteringService:
         Args:
             class_id: Class identifier
             subject: Subject name
+            teacher_id: Teacher identifier
 
         Returns:
             List of 3 StudentCluster objects (weak, medium, strong)
         """
-        students = self.data_loader.get_class_students(class_id, subject)
+        students = self.data_loader.get_class_students(class_id, subject, teacher_id)
 
         # Initialize empty clusters
         clusters = {
@@ -90,12 +92,12 @@ class ClusteringService:
         # Get scores for quartile calculation
         scores = [s.average_subject_grade for s in students]
 
-        # Calculate quartiles
-        q1, q3 = self._compute_quartiles(scores)
+        # Calculate quartiles using shared utility
+        q1, q3 = compute_quartiles(scores)
 
-        # Assign students to clusters
+        # Assign students to clusters using shared utility
         for student in students:
-            level = self._assign_cluster(student.average_subject_grade, q1, q3)
+            level = assign_level(student.average_subject_grade, q1, q3)
             clusters[level].append(student)
 
         # Build result
@@ -128,7 +130,8 @@ class ClusteringService:
         self,
         student_id: int,
         class_id: int,
-        subject: str
+        subject: str,
+        teacher_id: int
     ) -> Optional[ClusterAssignment]:
         """
         Get cluster assignment for a specific student.
@@ -137,11 +140,12 @@ class ClusteringService:
             student_id: Student identifier
             class_id: Class identifier
             subject: Subject name
+            teacher_id: Teacher identifier
 
         Returns:
             ClusterAssignment or None if student not found
         """
-        students = self.data_loader.get_class_students(class_id, subject)
+        students = self.data_loader.get_class_students(class_id, subject, teacher_id)
 
         if not students:
             return None
@@ -152,14 +156,14 @@ class ClusteringService:
             return None
 
         # Get all scores for percentile calculation
-        scores = sorted([s.average_subject_grade for s in students])
-        q1, q3 = self._compute_quartiles(scores)
+        scores = [s.average_subject_grade for s in students]
+        q1, q3 = compute_quartiles(scores)
 
-        # Calculate percentile
-        percentile = self._calculate_percentile(student.average_subject_grade, scores)
+        # Calculate percentile using shared utility
+        percentile = calculate_percentile(student.average_subject_grade, scores)
 
-        # Determine cluster
-        cluster_type = self._assign_cluster(student.average_subject_grade, q1, q3)
+        # Determine cluster using shared utility
+        cluster_type = assign_level(student.average_subject_grade, q1, q3)
 
         return ClusterAssignment(
             student_id=student_id,
@@ -171,7 +175,8 @@ class ClusteringService:
     def get_cluster_distribution(
         self,
         class_id: int,
-        subject: str
+        subject: str,
+        teacher_id: int
     ) -> ClusterDistribution:
         """
         Get distribution of students across clusters.
@@ -179,11 +184,12 @@ class ClusteringService:
         Args:
             class_id: Class identifier
             subject: Subject name
+            teacher_id: Teacher identifier
 
         Returns:
             ClusterDistribution with counts and percentages
         """
-        clusters = self.cluster_students(class_id, subject)
+        clusters = self.cluster_students(class_id, subject, teacher_id)
 
         weak = next(c for c in clusters if c.cluster_type == Level.WEAK)
         medium = next(c for c in clusters if c.cluster_type == Level.MEDIUM)
@@ -211,87 +217,6 @@ class ClusteringService:
             strong_percentage=round(len(strong.student_ids) / total * 100, 1),
             total_count=total
         )
-
-    def _compute_quartiles(self, scores: list[float]) -> tuple[float, float]:
-        """
-        Compute Q1 (25th percentile) and Q3 (75th percentile).
-
-        Args:
-            scores: List of scores
-
-        Returns:
-            Tuple of (Q1, Q3)
-        """
-        if not scores:
-            return 0.0, 0.0
-
-        sorted_scores = sorted(scores)
-        n = len(sorted_scores)
-
-        if n == 1:
-            # Single score: Q1 = Q3 = score
-            return sorted_scores[0], sorted_scores[0]
-
-        # Q1: 25th percentile
-        q1_idx = (n - 1) * 0.25
-        q1_lower = int(q1_idx)
-        q1_frac = q1_idx - q1_lower
-        if q1_lower + 1 < n:
-            q1 = sorted_scores[q1_lower] * (1 - q1_frac) + sorted_scores[q1_lower + 1] * q1_frac
-        else:
-            q1 = sorted_scores[q1_lower]
-
-        # Q3: 75th percentile
-        q3_idx = (n - 1) * 0.75
-        q3_lower = int(q3_idx)
-        q3_frac = q3_idx - q3_lower
-        if q3_lower + 1 < n:
-            q3 = sorted_scores[q3_lower] * (1 - q3_frac) + sorted_scores[q3_lower + 1] * q3_frac
-        else:
-            q3 = sorted_scores[q3_lower]
-
-        return q1, q3
-
-    def _assign_cluster(self, score: float, q1: float, q3: float) -> Level:
-        """
-        Assign a cluster based on score and quartiles.
-
-        Args:
-            score: Student's score
-            q1: First quartile
-            q3: Third quartile
-
-        Returns:
-            Level (WEAK, MEDIUM, or STRONG)
-        """
-        if score < q1:
-            return Level.WEAK
-        elif score > q3:
-            return Level.STRONG
-        else:
-            return Level.MEDIUM
-
-    def _calculate_percentile(self, score: float, sorted_scores: list[float]) -> float:
-        """
-        Calculate percentile rank of a score.
-
-        Args:
-            score: The score to rank
-            sorted_scores: All scores in sorted order
-
-        Returns:
-            Percentile (0-100)
-        """
-        if not sorted_scores:
-            return 50.0
-
-        n = len(sorted_scores)
-        count_below = sum(1 for s in sorted_scores if s < score)
-        count_equal = sum(1 for s in sorted_scores if s == score)
-
-        # Percentile formula: (count_below + 0.5 * count_equal) / n * 100
-        percentile = (count_below + 0.5 * count_equal) / n * 100
-        return percentile
 
 
 # Singleton instance

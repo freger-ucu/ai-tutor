@@ -4,6 +4,15 @@ AI Tutor Backend - Main Application
 FastAPI application entry point.
 """
 
+# IMPORTANT: Set environment variables BEFORE any imports
+# This fixes the mutex.cc issue on macOS caused by grpcio fork safety
+import os as _os
+_os.environ.setdefault("GRPC_ENABLE_FORK_SUPPORT", "0")
+_os.environ.setdefault("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES")
+_os.environ.setdefault("GRPC_POLL_STRATEGY", "poll")
+_os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
+
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,18 +20,34 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.config import settings
+from app.telemetry import setup_phoenix, shutdown_phoenix
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup and shutdown events."""
     # Startup
-    print("Starting AI Tutor Backend...")
-    # TODO: Initialize resources (Redis, embeddings, etc.)
+    logger.info("Starting AI Tutor Backend...")
+
+    # Initialize Phoenix telemetry
+    phoenix_ok = setup_phoenix()
+    if phoenix_ok:
+        logger.info("Phoenix telemetry enabled - traces will be collected")
+    else:
+        logger.info("Phoenix telemetry disabled")
+
     yield
+
     # Shutdown
-    print("Shutting down AI Tutor Backend...")
-    # TODO: Cleanup resources
+    logger.info("Shutting down AI Tutor Backend...")
+    shutdown_phoenix()
 
 
 app = FastAPI(
@@ -38,6 +63,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",  # Vite dev server
         "http://localhost:3000",  # Alternative frontend port
+        "http://localhost:8080",  # Test frontend
+        "http://127.0.0.1:8080",  # Test frontend (alt)
+        "null",  # For file:// protocol (opening HTML directly)
     ],
     allow_credentials=True,
     allow_methods=["*"],

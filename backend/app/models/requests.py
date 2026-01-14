@@ -62,11 +62,14 @@ class StudentDetailsRequest(BaseModel):
 class StudentRecommendationRequest(BaseModel):
     """EP6: Get AI recommendation for a student."""
     student_id: int
+    subject: str = Field(..., description="Subject name in Ukrainian")
 
 
 class SolverRequest(BaseModel):
-    """EP7: Solve questions."""
-    questions: list[str] = Field(..., description="Questions to solve")
+    """EP7: Solve a single question with RAG-grounded explanation."""
+    subject: str = Field(..., description="Subject name in Ukrainian")
+    grade: int = Field(..., ge=8, le=9, description="Grade level (8 or 9)")
+    question: str = Field(..., description="Question to solve")
 
 
 # =============================================================================
@@ -90,3 +93,16 @@ class TestFeedbackRequest(BaseModel):
     teacher_id: int
     subject: str
     questions: list[QuestionResult]
+
+
+# =============================================================================
+# INTERNAL REQUESTS (Testing only)
+# =============================================================================
+
+
+class FullPipelineRequest(BaseModel):
+    """Internal: Full pipeline integration test request."""
+    class_id: int
+    teacher_id: int
+    subject: str = Field(..., description="Subject name in Ukrainian")
+    topic_definition: str = Field(..., description="Topic description text")

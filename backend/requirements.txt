@@ -8,13 +8,31 @@ python-dotenv>=1.0.0
 # Data processing
 pandas>=2.1.0
 numpy>=1.26.0
+pyarrow>=14.0.0
 
 # LLM & AI
+openai>=1.10.0
 langchain>=0.1.0
-langgraph>=0.0.20
+langchain-core>=0.3.0
+langgraph>=0.2.0
+
+# RAG
+rank-bm25>=0.2.2
+tqdm>=4.66.0
+
+# Optional: Advanced RAG features
+sentence-transformers>=2.2.0
+pymorphy2>=0.9.0
 
 # Caching
 redis>=5.0.0
+
+# Telemetry/Observability
+arize-phoenix>=4.0.0
+openinference-instrumentation-openai>=0.1.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp>=1.20.0
+langsmith>=0.1.0
 
 # HTTP client
 httpx>=0.26.0
@@ -22,4 +40,5 @@ httpx>=0.26.0
 # Dev dependencies
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
 ruff>=0.1.0
