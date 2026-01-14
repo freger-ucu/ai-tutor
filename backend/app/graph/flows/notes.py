@@ -3,20 +3,20 @@ Notes Generation Flow (EP3.1 + EP3.2).
 
 Generates lesson notes adapted to student levels with prerequisite-aware recap.
 
-Flow:
-    aggregate_gaps → filter_missed_prereqs → retrieve_rag (topic + prereqs) → generate_notes → END
+Input (minimal):
+    - student_ids: List of student IDs to generate notes for
+    - subject: Subject name (Алгебра, Українська мова, Історія України)
+    - grade: Grade level (8 or 9)
+    - topic_definition: Topic to generate notes about
 
-Logic:
-1. Aggregate gaps: collect weak_topics and skipped_topics from student data
-2. Filter prereqs: find which gaps are prerequisites of the CURRENT topic
-   - Only include prereqs that students actually missed/struggled with
-   - Don't include all prereqs - just the ones that overlap with gaps
-3. RAG retrieve: get content for main topic + missed prerequisites
-4. Generate notes with structure:
-   - ## Повторення (Recap) - if there are missed prereqs
-   - ## Урок (Lesson) - main topic content
-5. Teacher notes mention to do recap first if applicable
-6. Sources include both topic and recap references
+Flow:
+    analyze_students → collect_gaps → retrieve_rag → generate_notes → END
+
+Nodes:
+    - analyze_students: Computes level (weak/medium/strong) and aggregated_gaps
+    - collect_gaps: Uses LLM to filter gaps to actual prerequisites for the topic
+    - retrieve_rag: Retrieves RAG context for topic and prerequisite gaps
+    - generate_notes: Generates final notes with recap section if prereqs exist
 """
 
 import logging
@@ -30,7 +30,6 @@ from app.prompts.notes_generator import (
     build_individual_notes_prompt,
     NOTES_SYSTEM_PROMPT,
 )
-from ..shared.rag_node import create_rag_node, RAGConfig
 
 logger = logging.getLogger(__name__)
 
@@ -43,147 +42,78 @@ logger = logging.getLogger(__name__)
 class NotesState(TypedDict, total=False):
     """State for notes generation flow."""
 
-    # Input
-    subject: str
-    grade: int
-    topic_definition: str
-    level: str  # "weak" | "medium" | "strong"
-    student_ids: Optional[List[str]]
-    aggregated_gaps: Optional[Dict[str, Any]]
+    # === INPUT (required) ===
+    student_ids: List[int]  # Student IDs to generate notes for
+    subject: str  # Алгебра, Українська мова, Історія України
+    grade: int  # 8 or 9
+    topic_definition: str  # Topic to teach
 
-    # Prerequisite filtering (gaps ∩ topic prereqs)
-    missed_prereqs: List[str]  # Prerequisites that students actually missed/struggled with
+    # === COMPUTED BY analyze_students node ===
+    level: str  # "weak" | "medium" | "strong" (computed from student scores)
+    aggregated_gaps: Dict[str, Any]  # {weak_topics, skipped_topics, total_students}
+    class_id: int  # Detected from student data
+    teacher_id: int  # Detected from student data
 
-    # RAG output
+    # === COMPUTED BY collect_gaps node ===
+    student_gaps: List[str]  # All gaps (weak + skipped topics) for potential recap
+
+    # === COMPUTED BY retrieve_rag node ===
     rag_context: str  # Main topic context
-    prereq_context: str  # Prerequisites context (for missed prereqs only)
-    rag_references: List[Dict[str, Any]]  # Combined: topic + prereq references
-    topic_references: List[Dict[str, Any]]  # Topic-only references
-    prereq_references: List[Dict[str, Any]]  # Prereq-only references
+    gaps_context: str  # Context for student gaps (for recap)
+    rag_references: List[Dict[str, Any]]  # Combined references
 
-    # Generation output
+    # === OUTPUT (from generate_notes node) ===
     title: str
     contents: str
     teacher_notes: str
 
-    # Metadata
+    # === METADATA ===
     llm_calls_count: int
     error_message: Optional[str]
-    trace_id: str
 
 
 # =============================================================================
-# Prerequisite Detection
+# Gap Collection & Filtering
 # =============================================================================
 
-# Static mapping of topics to their prerequisites
-# This can be expanded or replaced with LLM-based detection later
-PREREQ_MAP: Dict[str, List[str]] = {
-    # Algebra topics
-    "квадратні рівняння": ["дискримінант", "формули коренів", "квадратний тричлен", "лінійні рівняння"],
-    "системи рівнянь": ["лінійні рівняння", "метод підстановки", "метод додавання"],
-    "нерівності": ["властивості нерівностей", "числова пряма", "лінійні рівняння"],
-    "квадратні нерівності": ["квадратні рівняння", "дискримінант", "парабола"],
-    "функції": ["графіки", "область визначення", "множина значень", "координатна площина"],
-    "квадратична функція": ["квадратні рівняння", "парабола", "вершина параболи"],
-    "геометрична прогресія": ["арифметична прогресія", "послідовності"],
-    "арифметична прогресія": ["послідовності", "формули"],
-    # Ukrainian language topics
-    "дієприкметники": ["дієслово", "прикметник", "дієприкметниковий зворот"],
-    "дієприслівники": ["дієслово", "прислівник", "дієприслівниковий зворот"],
-    "складне речення": ["просте речення", "сполучники сурядності", "сполучники підрядності"],
-    "складнопідрядне речення": ["складне речення", "сполучники підрядності", "підрядні частини"],
-    "пунктуація": ["розділові знаки", "кома", "тире", "двокрапка"],
-    # History topics
-    "друга світова війна": ["міжвоєнний період", "передумови війни", "версальський договір"],
-    "незалежність україни": ["перебудова", "розпад срср", "референдум 1991"],
-    "українська революція": ["перша світова війна", "російська революція"],
-}
 
-
-def get_topic_prerequisites(topic: str) -> List[str]:
+def get_all_gaps(gaps: Dict[str, Any]) -> List[str]:
     """
-    Get known prerequisites for a topic.
-
-    Args:
-        topic: Topic name to look up
-
-    Returns:
-        List of prerequisite topic names
+    Collect all student gaps (weak_topics + skipped_topics) as a simple list.
     """
-    topic_lower = topic.lower().strip()
+    weak_topics = list(gaps.get("weak_topics", {}).keys())
+    skipped_topics = list(gaps.get("skipped_topics", {}).keys())
 
-    # Direct match
-    for key, prereqs in PREREQ_MAP.items():
-        if key in topic_lower or topic_lower in key:
-            return prereqs
+    # Union, remove duplicates, clean whitespace
+    all_gaps = []
+    seen = set()
+    for topic in weak_topics + skipped_topics:
+        clean = topic.strip()
+        if clean and clean.lower() not in seen:
+            all_gaps.append(clean)
+            seen.add(clean.lower())
 
-    # Partial match - check if any key words match
-    for key, prereqs in PREREQ_MAP.items():
-        key_words = set(key.split())
-        topic_words = set(topic_lower.split())
-        if key_words & topic_words:  # Intersection
-            return prereqs
-
-    return []
+    return all_gaps[:15]  # Limit to 15 candidates
 
 
-def filter_missed_prerequisites(
-    gaps: Dict[str, Any],
-    topic: str,
-) -> List[str]:
-    """
-    Find prerequisites of the current topic that students actually missed or struggled with.
+PREREQ_FILTER_PROMPT = """Ти — експерт з навчальних програм української школи.
 
-    This is the intersection of:
-    - Prerequisites of the current topic (from PREREQ_MAP)
-    - Student gaps (weak_topics + skipped_topics)
+Тема уроку: {topic}
+Предмет: {subject}
 
-    Args:
-        gaps: Aggregated gaps with weak_topics and skipped_topics
-        topic: Current topic being studied
+Список тем, з якими учні мають проблеми (погані оцінки або пропуски):
+{gaps_list}
 
-    Returns:
-        List of prerequisite topics that need recap (gaps ∩ prereqs)
-    """
-    # Get all known prerequisites for this topic
-    topic_prereqs = set(p.lower() for p in get_topic_prerequisites(topic))
+Твоє завдання: визначити, які з цих тем є ПРЕРЕКВІЗИТАМИ для теми "{topic}".
+Пререквізит — це тема, яку НЕОБХІДНО знати, щоб зрозуміти нову тему.
 
-    if not topic_prereqs:
-        logger.info(f"No known prerequisites for topic: {topic}")
-        return []
+Відповідай ТІЛЬКИ у форматі JSON:
+{{"prerequisites": ["тема1", "тема2"]}}
 
-    # Collect all student gaps (weak + skipped)
-    weak_topics = set(t.strip().lower() for t in gaps.get("weak_topics", {}).keys())
-    skipped_topics = set(t.strip().lower() for t in gaps.get("skipped_topics", {}).keys())
-    all_gaps = weak_topics | skipped_topics
+Якщо жодна тема не є пререквізитом — поверни порожній список:
+{{"prerequisites": []}}
 
-    if not all_gaps:
-        logger.info("No student gaps found")
-        return []
-
-    # Find intersection: prereqs that students actually missed
-    missed_prereqs = []
-    for gap in all_gaps:
-        for prereq in topic_prereqs:
-            # Fuzzy match - check if gap contains prereq or vice versa
-            if prereq in gap or gap in prereq:
-                # Use the original gap name (preserves case)
-                original_name = next(
-                    (t for t in list(gaps.get("weak_topics", {}).keys()) +
-                     list(gaps.get("skipped_topics", {}).keys())
-                     if t.strip().lower() == gap),
-                    prereq
-                )
-                if original_name not in missed_prereqs:
-                    missed_prereqs.append(original_name)
-                break
-
-    logger.info(f"Topic '{topic}' prereqs: {topic_prereqs}")
-    logger.info(f"Student gaps: {all_gaps}")
-    logger.info(f"Missed prereqs (intersection): {missed_prereqs}")
-
-    return missed_prereqs[:5]  # Limit to 5
+ВАЖЛИВО: включай ТІЛЬКИ ті теми, які дійсно є пререквізитами. Не вигадуй нових тем."""
 
 
 # =============================================================================
@@ -191,129 +121,210 @@ def filter_missed_prerequisites(
 # =============================================================================
 
 
-async def aggregate_gaps_node(state: NotesState) -> Dict[str, Any]:
+def analyze_students_node(state: NotesState) -> Dict[str, Any]:
     """
-    Aggregate student gaps from input or fetch from student data.
+    Analyze students to compute level and aggregated gaps.
 
-    This node prepares the aggregated_gaps if not already provided.
+    This node:
+    1. Loads student data from BenchmarkDataLoader
+    2. Computes average score across all students
+    3. Determines level (weak/medium/strong) based on class quartiles
+    4. Aggregates gaps (weak_topics + skipped_topics)
     """
-    logger.info(f"Aggregating gaps for topic: {state.get('topic_definition', '')}")
+    from app.services.data_loader import get_benchmark_loader
+    from app.services.levels import compute_quartiles, assign_level
 
-    # If gaps already provided, pass through
-    if state.get("aggregated_gaps"):
-        return {}
+    student_ids = state.get("student_ids", [])
+    subject = state.get("subject", "")
 
-    # Otherwise return empty gaps (no preprocessing needed)
-    return {"aggregated_gaps": {"weak_topics": {}, "skipped_topics": {}, "total_students": 0}}
+    if not student_ids:
+        logger.warning("No student_ids provided, using defaults")
+        return {
+            "level": "medium",
+            "aggregated_gaps": {"weak_topics": {}, "skipped_topics": {}, "total_students": 0},
+            "class_id": 0,
+            "teacher_id": 0,
+        }
+
+    loader = get_benchmark_loader()
+
+    # Get student info to find class_id
+    first_student_info = loader.get_student_info(student_ids[0])
+    if not first_student_info:
+        logger.warning(f"Student {student_ids[0]} not found")
+        return {
+            "level": "medium",
+            "aggregated_gaps": {"weak_topics": {}, "skipped_topics": {}, "total_students": 0},
+            "class_id": 0,
+            "teacher_id": 0,
+        }
+
+    class_id = first_student_info["class_id"]
+
+    # Find teacher_id from scores data
+    if loader.scores_df is not None and not loader.scores_df.empty:
+        mask = (
+            (loader.scores_df["class_id"] == class_id) &
+            (loader.scores_df["discipline_name"] == subject) &
+            (loader.scores_df["student_id"].isin(student_ids))
+        )
+        matching = loader.scores_df[mask]
+        if not matching.empty:
+            teacher_id = int(matching["teacher_id"].iloc[0])
+        else:
+            teacher_id = 0
+    else:
+        teacher_id = 0
+
+    # Get all class students to compute quartiles
+    all_class_students = loader.get_class_students(class_id, subject, teacher_id)
+
+    if not all_class_students:
+        return {
+            "level": "medium",
+            "aggregated_gaps": {"weak_topics": {}, "skipped_topics": {}, "total_students": len(student_ids)},
+            "class_id": class_id,
+            "teacher_id": teacher_id,
+        }
+
+    # Compute quartiles from all class scores
+    all_scores = [s.average_subject_grade for s in all_class_students]
+    q1, q3 = compute_quartiles(all_scores)
+
+    # Compute average score for requested students
+    requested_students = [s for s in all_class_students if s.student_id in student_ids]
+    if requested_students:
+        avg_score = sum(s.average_subject_grade for s in requested_students) / len(requested_students)
+        level = assign_level(avg_score, q1, q3).value
+    else:
+        level = "medium"
+
+    # Aggregate gaps for these students
+    aggregated_gaps = loader.aggregate_student_gaps(
+        student_ids=student_ids,
+        class_id=class_id,
+        subject=subject,
+        teacher_id=teacher_id
+    )
+
+    logger.info(f"Analyzed {len(student_ids)} students: level={level}, "
+                f"weak_topics={len(aggregated_gaps.get('weak_topics', {}))}, "
+                f"skipped_topics={len(aggregated_gaps.get('skipped_topics', {}))}")
+
+    return {
+        "level": level,
+        "aggregated_gaps": aggregated_gaps,
+        "class_id": class_id,
+        "teacher_id": teacher_id,
+    }
 
 
-def filter_prereqs_node(state: NotesState) -> Dict[str, Any]:
+async def collect_gaps_node(state: NotesState) -> Dict[str, Any]:
     """
-    Filter prerequisites: find which student gaps are actually prereqs of the current topic.
+    Collect student gaps and filter to prerequisites using LLM.
 
-    Only includes prereqs that students missed/struggled with (intersection logic).
+    Steps:
+    1. Get all gaps (weak_topics + skipped_topics)
+    2. Use LLM to filter which gaps are prerequisites for the topic
+    3. Return filtered list as student_gaps
     """
+    from app.rag.utils.llm_client import get_llm_client
+
     gaps = state.get("aggregated_gaps", {})
     topic = state.get("topic_definition", "")
+    subject = state.get("subject", "")
 
-    missed_prereqs = filter_missed_prerequisites(gaps, topic)
+    # Get all gaps
+    all_gaps = get_all_gaps(gaps)
 
-    logger.info(f"Filtered to {len(missed_prereqs)} missed prerequisites: {missed_prereqs}")
+    if not all_gaps:
+        logger.info("No student gaps found")
+        return {"student_gaps": [], "llm_calls_count": state.get("llm_calls_count", 0)}
 
-    return {"missed_prereqs": missed_prereqs}
+    logger.info(f"Found {len(all_gaps)} student gaps: {all_gaps}")
 
+    # Use LLM to filter prerequisites
+    client = get_llm_client()
 
-# Create configurable RAG node for main topic
-_topic_rag_node = create_rag_node(
-    config=RAGConfig(
-        max_chars=6000,
-        top_k=5,
-        parallel_queries=False,
-        include_references=True,
-    ),
-    query_key="topic_definition",
-)
+    gaps_list = "\n".join(f"- {gap}" for gap in all_gaps)
+    prompt = PREREQ_FILTER_PROMPT.format(
+        topic=topic,
+        subject=subject,
+        gaps_list=gaps_list,
+    )
 
-# Create configurable RAG node for prerequisites
-_prereq_rag_node = create_rag_node(
-    config=RAGConfig(
-        max_chars=3000,
-        top_k=3,
-        parallel_queries=False,
-        include_references=True,
-    ),
-    query_key="prereq_query",
-)
+    try:
+        response = await client.generate(
+            prompt=prompt,
+            temperature=0.0,
+            max_tokens=500,
+        )
+
+        parsed = parse_json_response(
+            response,
+            fallback={"prerequisites": []},
+            context="prereq_filter",
+        )
+
+        prerequisites = parsed.get("prerequisites", [])
+
+        # Trust LLM output - it was given the exact list and asked to select from it
+        # Just clean up and deduplicate
+        valid_prereqs = [p.strip() for p in prerequisites if p.strip()]
+
+        logger.info(f"LLM filtered to {len(valid_prereqs)} prerequisites: {valid_prereqs}")
+
+        return {
+            "student_gaps": valid_prereqs,
+            "llm_calls_count": state.get("llm_calls_count", 0) + 1,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to filter prerequisites: {e}")
+        # On error, return all gaps as fallback
+        return {
+            "student_gaps": all_gaps,
+            "llm_calls_count": state.get("llm_calls_count", 0),
+        }
 
 
 async def retrieve_rag_node(state: NotesState) -> Dict[str, Any]:
-    """
-    Retrieve RAG context for topic and missed prerequisites.
-
-    1. Always retrieves main topic content
-    2. If there are missed prereqs, retrieves their content too
-    3. Combines all references (topic + prereqs)
-    """
+    """Retrieve RAG context for topic and student gaps."""
     from app.rag.utils.hybrid_retriever import get_retriever, format_context
 
     subject = state.get("subject", "")
     grade = state.get("grade", 9)
     topic = state.get("topic_definition", "")
-    missed_prereqs = state.get("missed_prereqs", [])
+    student_gaps = state.get("student_gaps", [])
 
     retriever = get_retriever()
 
-    # 1. Retrieve main topic content
-    topic_docs = await retriever.retrieve(
-        query=topic,
-        subject=subject,
-        grade=grade,
-        top_k=5
-    )
+    # Retrieve main topic content
+    topic_docs = await retriever.retrieve(query=topic, subject=subject, grade=grade, top_k=5)
     topic_context, topic_refs = format_context(topic_docs, max_chars=6000, subject=subject)
 
     logger.info(f"Retrieved {len(topic_docs)} docs for main topic")
 
-    # 2. Retrieve prerequisite content if there are missed prereqs
-    prereq_context = ""
-    prereq_refs = []
+    # Retrieve gap content if there are student gaps
+    gaps_context = ""
+    gaps_refs = []
 
-    if missed_prereqs:
-        # Combine missed prereqs into a single query
-        prereq_query = " ".join(missed_prereqs[:3])  # Top 3 missed prereqs
-        prereq_docs = await retriever.retrieve(
-            query=prereq_query,
-            subject=subject,
-            grade=grade,
-            top_k=3
-        )
-        prereq_context, prereq_refs = format_context(prereq_docs, max_chars=3000, subject=subject)
-
-        logger.info(f"Retrieved {len(prereq_docs)} docs for prerequisites: {missed_prereqs}")
-
-    # 3. Combine references (topic + prereqs)
-    all_refs = topic_refs + prereq_refs
+    if student_gaps:
+        gaps_query = " ".join(student_gaps[:3])  # Top 3 gaps
+        gaps_docs = await retriever.retrieve(query=gaps_query, subject=subject, grade=grade, top_k=3)
+        gaps_context, gaps_refs = format_context(gaps_docs, max_chars=3000, subject=subject)
+        logger.info(f"Retrieved {len(gaps_docs)} docs for student gaps: {student_gaps[:3]}")
 
     return {
         "rag_context": topic_context,
-        "prereq_context": prereq_context,
-        "topic_references": topic_refs,
-        "prereq_references": prereq_refs,
-        "rag_references": all_refs,
+        "gaps_context": gaps_context,
+        "rag_references": topic_refs + gaps_refs,
     }
 
 
 @trace_chain(name="generate_notes")
 async def generate_notes_node(state: NotesState) -> Dict[str, Any]:
-    """
-    Generate notes using LLM with RAG context.
-
-    Structure:
-    - If missed prereqs exist: ## Повторення (Recap) + ## Урок (Lesson)
-    - If no missed prereqs: ## Урок (Lesson) only
-
-    Teacher notes will mention to do recap first if applicable.
-    """
+    """Generate notes using LLM with RAG context."""
     client = get_llm_client()
 
     subject = state.get("subject", "")
@@ -321,14 +332,15 @@ async def generate_notes_node(state: NotesState) -> Dict[str, Any]:
     level = state.get("level", "medium")
     topic_definition = state.get("topic_definition", "")
     rag_context = state.get("rag_context", "")
-    prereq_context = state.get("prereq_context", "")
-    missed_prereqs = state.get("missed_prereqs", [])
+    gaps_context = state.get("gaps_context", "")
+    student_gaps = state.get("student_gaps", [])
     aggregated_gaps = state.get("aggregated_gaps")
+    student_ids = state.get("student_ids", [])
 
     # Build context with clear separation
-    if prereq_context and missed_prereqs:
-        combined_context = f"""## МАТЕРІАЛ ДЛЯ ПОВТОРЕННЯ (пререквізити: {', '.join(missed_prereqs)}):
-{prereq_context}
+    if gaps_context and student_gaps:
+        combined_context = f"""## МАТЕРІАЛ ДЛЯ ПОВТОРЕННЯ (теми з прогалинами: {', '.join(student_gaps[:5])}):
+{gaps_context}
 
 ---
 
@@ -337,8 +349,8 @@ async def generate_notes_node(state: NotesState) -> Dict[str, Any]:
     else:
         combined_context = rag_context
 
-    # Build prompt based on whether we have student-specific info
-    if state.get("student_ids"):
+    # Build prompt
+    if len(student_ids) <= 5:
         prompt = build_individual_notes_prompt(
             subject=subject,
             grade=grade,
@@ -346,7 +358,7 @@ async def generate_notes_node(state: NotesState) -> Dict[str, Any]:
             context=combined_context,
             aggregated_gaps=aggregated_gaps,
             level=level,
-            missed_prereqs=missed_prereqs,
+            missed_prereqs=student_gaps,  # Pass gaps as potential prereqs
         )
     else:
         prompt = build_level_notes_prompt(
@@ -356,7 +368,7 @@ async def generate_notes_node(state: NotesState) -> Dict[str, Any]:
             topic_definition=topic_definition,
             context=combined_context,
             aggregated_gaps=aggregated_gaps,
-            missed_prereqs=missed_prereqs,
+            missed_prereqs=student_gaps,  # Pass gaps as potential prereqs
         )
 
     # Generate notes
@@ -390,23 +402,20 @@ def build_notes_graph():
     Build the LangGraph workflow for notes generation.
 
     Flow:
-        aggregate_gaps → filter_prereqs → retrieve_rag → generate_notes → END
+        analyze_students → collect_gaps → retrieve_rag → generate_notes → END
     """
-    # Lazy import to avoid grpcio initialization at module load (macOS mutex.cc issue)
     from langgraph.graph import StateGraph, END
 
     workflow = StateGraph(NotesState)
 
-    # Add nodes
-    workflow.add_node("aggregate_gaps", aggregate_gaps_node)
-    workflow.add_node("filter_prereqs", filter_prereqs_node)
+    workflow.add_node("analyze_students", analyze_students_node)
+    workflow.add_node("collect_gaps", collect_gaps_node)
     workflow.add_node("retrieve_rag", retrieve_rag_node)
     workflow.add_node("generate_notes", generate_notes_node)
 
-    # Add edges
-    workflow.set_entry_point("aggregate_gaps")
-    workflow.add_edge("aggregate_gaps", "filter_prereqs")
-    workflow.add_edge("filter_prereqs", "retrieve_rag")
+    workflow.set_entry_point("analyze_students")
+    workflow.add_edge("analyze_students", "collect_gaps")
+    workflow.add_edge("collect_gaps", "retrieve_rag")
     workflow.add_edge("retrieve_rag", "generate_notes")
     workflow.add_edge("generate_notes", END)
 
@@ -426,7 +435,7 @@ def get_notes_graph():
 
 
 # For backwards compatibility
-notes_graph = None  # Will be set on first use
+notes_graph = None
 
 
 # =============================================================================
@@ -435,23 +444,19 @@ notes_graph = None  # Will be set on first use
 
 
 async def generate_notes(
+    student_ids: List[int],
     subject: str,
     grade: int,
     topic_definition: str,
-    level: str = "medium",
-    student_ids: Optional[List[str]] = None,
-    aggregated_gaps: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Generate notes using the LangGraph workflow.
 
     Args:
-        subject: Subject name (Алгебра, Українська мова, etc.)
+        student_ids: List of student IDs to generate notes for
+        subject: Subject name (Алгебра, Українська мова, Історія України)
         grade: Grade level (8 or 9)
         topic_definition: Topic description
-        level: Student level (weak/medium/strong)
-        student_ids: Optional list of student IDs for personalization
-        aggregated_gaps: Optional pre-aggregated gaps data
 
     Returns:
         Dict with:
@@ -459,28 +464,28 @@ async def generate_notes(
         - contents: Markdown content with Recap (if prereqs missed) + Lesson
         - teacher_notes: Tips including recap recommendation
         - references: Combined sources (topic + prereqs)
+        - level: Computed student level
         - missed_prereqs: List of prerequisite topics that need recap
         - llm_calls: Number of LLM calls made
     """
     initial_state: NotesState = {
+        "student_ids": student_ids,
         "subject": subject,
         "grade": grade,
         "topic_definition": topic_definition,
-        "level": level,
-        "student_ids": student_ids,
-        "aggregated_gaps": aggregated_gaps,
-        "missed_prereqs": [],
+        "level": "",
+        "aggregated_gaps": {},
+        "class_id": 0,
+        "teacher_id": 0,
+        "student_gaps": [],
         "rag_context": "",
-        "prereq_context": "",
+        "gaps_context": "",
         "rag_references": [],
-        "topic_references": [],
-        "prereq_references": [],
         "title": "",
         "contents": "",
         "teacher_notes": "",
         "llm_calls_count": 0,
         "error_message": None,
-        "trace_id": "",
     }
 
     try:
@@ -491,7 +496,8 @@ async def generate_notes(
             "contents": final_state.get("contents", ""),
             "teacher_notes": final_state.get("teacher_notes", ""),
             "references": final_state.get("rag_references", []),
-            "missed_prereqs": final_state.get("missed_prereqs", []),
+            "level": final_state.get("level", "medium"),
+            "student_gaps": final_state.get("student_gaps", []),
             "llm_calls": final_state.get("llm_calls_count", 0),
         }
     except Exception as e:
