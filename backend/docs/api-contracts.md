@@ -364,7 +364,7 @@ Retrieves detailed performance data for a specific student.
 
 ### EP6: Get Student Recommendation
 
-Generates AI-powered recommendation for a student.
+Generates AI-powered recommendation for a student. Uses LangGraph flow with concise, factual output style (no greetings, no addressing teacher directly).
 
 **Endpoint:** `POST /teacher/student/recommendation`
 
@@ -386,9 +386,15 @@ Generates AI-powered recommendation for a student.
 
 ```json
 {
-  "feedback": "Учень демонструє хороші результати в темах 'Лінійні рівняння' та 'Графіки функцій'. Рекомендую:\n\n1. Приділити увагу темі 'Квадратні нерівності' — поточний бал 4.5\n2. Повторити матеріал з пропущених уроків: 'Дискримінант', 'Теорема Вієта'\n3. Використовувати сильні сторони учня (візуальне мислення) для пояснення складних тем через графіки"
+  "feedback": "Середній бал 7.5 (рівень: середній).\n\nСильні теми: Лінійні рівняння, Графіки функцій.\n\nПроблемні теми: Квадратні нерівності (4.5), Системи рівнянь (5.0).\n\nРекомендації:\n1. Індивідуальна робота над квадратними нерівностями\n2. Повторення пропущеного матеріалу: Дискримінант, Теорема Вієта\n3. Додаткові завдання на системи рівнянь"
 }
 ```
+
+**Output Style:**
+- Concise and factual (Ukrainian language)
+- No greetings, no addressing teacher ("Шановний вчителю"), no goodbyes
+- Maximum 2-3 short paragraphs
+- Concrete recommendations based on student data
 
 **Error Responses:**
 - `404`: Student not found or does not have this subject
@@ -399,7 +405,7 @@ Generates AI-powered recommendation for a student.
 
 ### EP8: Get Student Info
 
-Retrieves student's class and subjects.
+Retrieves student's class and subjects with performance levels.
 
 **Endpoint:** `GET /student/{student_id}`
 
@@ -414,9 +420,28 @@ Retrieves student's class and subjects.
 {
   "class_id": 101,
   "class_number": 9,
-  "subjects": ["Алгебра", "Українська мова", "Історія України"]
+  "subjects": [
+    {
+      "subject": "Алгебра",
+      "level": "medium"
+    },
+    {
+      "subject": "Українська мова",
+      "level": "strong"
+    },
+    {
+      "subject": "Історія України",
+      "level": "weak"
+    }
+  ]
 }
 ```
+
+**SubjectLevelResponse Schema:**
+| Field | Type | Description |
+|-------|------|-------------|
+| subject | string | Subject name in Ukrainian |
+| level | string | Performance level: "weak", "medium", or "strong" |
 
 **Error Responses:**
 - `404`: Student not found
@@ -425,7 +450,7 @@ Retrieves student's class and subjects.
 
 ### EP9: Check Open Answer
 
-Evaluates a student's open-ended answer.
+Evaluates a student's open-ended answer using LangGraph flow with RAG-grounded evaluation.
 
 **Endpoint:** `POST /student/check-open`
 
@@ -460,11 +485,17 @@ Evaluates a student's open-ended answer.
 }
 ```
 
+**Internal Flow:**
+1. Builds RAG query from topic + question
+2. Retrieves reference content from textbooks (top_k=4)
+3. LLM evaluates answer against retrieved context
+4. Returns correctness and constructive feedback
+
 ---
 
 ### EP10: Get Test Feedback
 
-Generates feedback after completing a test.
+Generates feedback after completing a test using LangGraph flow. Output is concise and factual, written FOR the student but without excessive emotion or greetings.
 
 **Endpoint:** `POST /student/test-feedback`
 
@@ -473,26 +504,22 @@ Generates feedback after completing a test.
 ```json
 {
   "student_id": 1001,
-  "teacher_id": 1,
   "subject": "Алгебра",
   "questions": [
     {
       "question": "Чому дорівнює D для x² - 4x + 4 = 0?",
-      "answer": "0",
       "correct": true,
       "topic": "Дискримінант",
       "subtopics": []
     },
     {
       "question": "Розв'яжіть: x² - 5x + 6 = 0",
-      "answer": "x = 2, x = 4",
       "correct": false,
       "topic": "Квадратні рівняння",
       "subtopics": ["Формули коренів"]
     },
     {
       "question": "Скільки коренів має рівняння якщо D < 0?",
-      "answer": "Жодного",
       "correct": true,
       "topic": "Дискримінант",
       "subtopics": []
@@ -504,7 +531,6 @@ Generates feedback after completing a test.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | student_id | integer | Yes | Student identifier |
-| teacher_id | integer | Yes | Teacher identifier |
 | subject | string | Yes | Subject name in Ukrainian |
 | questions | array[QuestionResult] | Yes | List of answered questions |
 
@@ -512,7 +538,6 @@ Generates feedback after completing a test.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | question | string | Yes | Question text |
-| answer | string | Yes | Student's answer |
 | correct | boolean | Yes | Whether answer was correct |
 | topic | string | Yes | Question topic |
 | subtopics | array[string] | No | Question subtopics |
@@ -521,9 +546,21 @@ Generates feedback after completing a test.
 
 ```json
 {
-  "feedback": "Чудова робота! Ти правильно відповів на 2 з 3 питань (67%).\n\n**Що вийшло добре:**\n- Тема 'Дискримінант' — всі відповіді правильні!\n\n**Над чим варто попрацювати:**\n- Тема 'Квадратні рівняння > Формули коренів' — зверни увагу на обчислення коренів. Правильна відповідь для x² - 5x + 6 = 0 це x = 2 та x = 3.\n\n**Порада:** Спробуй перевіряти відповіді підстановкою в початкове рівняння!"
+  "feedback": "Результат: 2/3 (67%) — добрий результат.\n\nУспішні теми: Дискримінант (2 правильних).\n\nПроблемні теми: Квадратні рівняння > Формули коренів (1 помилка).\n\nРекомендації:\n1. Повторити формули коренів квадратного рівняння\n2. Перевіряти відповіді підстановкою в початкове рівняння"
 }
 ```
+
+**Output Style:**
+- Concise and factual (Ukrainian language)
+- Written FOR the student (they will read it), but without excessive emotion
+- No greetings ("Привіт"), no motivational phrases ("Вірю в тебе", "Успіхів")
+- Maximum 2-3 short paragraphs
+- Concrete recommendations based on test results
+
+**Internal Flow:**
+1. Aggregates questions by topic (correct/incorrect)
+2. Calculates score percentage and performance level
+3. LLM generates concise feedback with specific recommendations
 
 ---
 
