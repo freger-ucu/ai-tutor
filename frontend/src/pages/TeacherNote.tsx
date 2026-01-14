@@ -1,10 +1,29 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
-import { teachers } from "../data/teachers";
+import BackButton from "../components/BackButton";
+import Breadcrumbs from "../components/Breadcrumbs";
 import TeacherSidebar from "../components/TeacherSidebar";
 import SelectStudentsModal from "../components/SelectStudentsModal";
-import { getMaterials } from "../data/materialsStorage";
+import { getMaterials, updateMaterial } from "../data/materialsStorage";
 import { classIdToLabel } from "../data/classUtils";
+import { toNumericId } from "../api/idUtils";
+import { getTeacherStudents } from "../api/teacher";
+
+const PencilIcon = () => (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
 
 const escapeHtml = (value: string) =>
   value
@@ -102,27 +121,37 @@ const renderMarkdown = (markdown: string) => {
 
 const TeacherNote = () => {
   const { teacherId, courseId, classId, topicId, noteId } = useParams();
-  
-  const teacher = useMemo(
-    () => teachers.find((item) => item.id === teacherId),
-    [teacherId]
-  );
 
   const [isAudienceModalOpen, setIsAudienceModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [editTeacherNotes, setEditTeacherNotes] = useState("");
+  const [materialVersion, setMaterialVersion] = useState(0);
 
   const decodedClassId = classId ? Number(decodeURIComponent(classId)) : null;
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
   const decodedNote = noteId ? decodeURIComponent(noteId) : "Іменник"; 
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
+  const subjectSlug = decodedCourse.split("-").slice(0, -1).join("-");
+  const subjectLabelMap: Record<string, string> = {
+    algebra: "Алгебра",
+    geometry: "Геометрія",
+    "ukr-lang": "Українська мова",
+    history: "Історія України",
+  };
+  const subjectName = subjectLabelMap[subjectSlug] ?? decodedCourse;
   const classNumberMatch = decodedCourse.match(/(\d+)$/);
   const classNumber = classNumberMatch ? Number(classNumberMatch[1]) : null;
   const classLabel =
     decodedClassId && classNumber
       ? classIdToLabel(classNumber, decodedClassId)
       : "";
+  const apiTeacherId = toNumericId(teacherId) ?? 0;
+  const apiClassId = decodedClassId ?? 0;
+  const [classStudents, setClassStudents] = useState<number[]>([]);
   const noteMaterial = useMemo(
     () => getMaterials({ type: "note" }).find((item) => item.id === noteId),
-    [noteId]
+    [noteId, materialVersion]
   );
   const noteTitle = noteMaterial?.title ?? decodedNote;
   const teacherNotes = noteMaterial?.teacherNotes?.trim();
@@ -147,6 +176,8 @@ const TeacherNote = () => {
     const filters: {
       teacherId?: string;
       courseId?: string;
+      subject?: string;
+      classId?: number;
       className?: string;
       topicName?: string;
     } = {
@@ -157,37 +188,74 @@ const TeacherNote = () => {
     if (sidebarCourseId) {
       filters.courseId = sidebarCourseId;
     }
+    if (subjectName) {
+      filters.subject = subjectName;
+    }
+    if (apiClassId) {
+      filters.classId = apiClassId;
+    }
     return getMaterials(filters);
-  }, [teacherId, classLabel, noteMaterial?.className, noteMaterial?.topicName, sidebarCourseId, sidebarTopicName]);
+  }, [
+    teacherId,
+    classLabel,
+    noteMaterial?.className,
+    noteMaterial?.topicName,
+    sidebarCourseId,
+    sidebarTopicName,
+    subjectName,
+    apiClassId,
+  ]);
   const sidebarNotes = sidebarMaterials.filter((item) => item.type === "note");
   const sidebarTests = sidebarMaterials.filter((item) => item.type === "test");
+  useEffect(() => {
+    if (!apiTeacherId || !apiClassId || !subjectName) {
+      setClassStudents([]);
+      return;
+    }
+    getTeacherStudents({
+      class_id: apiClassId,
+      teacher_id: apiTeacherId,
+      subject: subjectName,
+    })
+      .then((response) => {
+        setClassStudents(response.students.map((student) => student.student_id));
+      })
+      .catch((error) => {
+        console.error(error);
+        setClassStudents([]);
+      });
+  }, [apiTeacherId, apiClassId, subjectName]);
+
+  const handleStartEdit = useCallback(() => {
+    setEditContent(noteMaterial?.content ?? "");
+    setEditTeacherNotes(noteMaterial?.teacherNotes ?? "");
+    setIsEditMode(true);
+  }, [noteMaterial?.content, noteMaterial?.teacherNotes]);
+
+  const handleCancelEdit = useCallback(() => {
+    setIsEditMode(false);
+    setEditContent("");
+    setEditTeacherNotes("");
+  }, []);
+
+  const handleSaveEdit = useCallback(() => {
+    if (!noteId) return;
+    updateMaterial(noteId, {
+      content: editContent,
+      teacherNotes: editTeacherNotes,
+    });
+    setMaterialVersion((v) => v + 1);
+    setIsEditMode(false);
+  }, [noteId, editContent, editTeacherNotes]);
 
   return (
     <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden">
       <div className="flex h-full">
         <TeacherSidebar
           teacherName={
-            teacher ? `${teacher.firstName} ${teacher.lastName}` : "Вчитель"
+            teacherId ? `Вчитель ${teacherId}` : "Вчитель"
           }
           activeItem="materials"
-          afterPrimaryNav={
-            <div className="space-y-2">
-              <Link
-                to={backToClassHref}
-                className="flex w-full items-start justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 hover:bg-slate-100"
-              >
-                <span className="mt-0.5 inline-block h-5 w-5 rounded-md bg-slate-200" />
-                <span>Назад до класу</span>
-              </Link>
-              <Link
-                to={backToTopicHref}
-                className="flex w-full items-start justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 hover:bg-slate-100"
-              >
-                <span className="mt-0.5 inline-block h-5 w-5 rounded-md bg-slate-200" />
-                <span>Назад до теми</span>
-              </Link>
-            </div>
-          }
         >
           <div className="space-y-4">
             {sidebarNotes.map((item) => (
@@ -222,24 +290,47 @@ const TeacherNote = () => {
         </TeacherSidebar>
 
         <main className="flex-1 px-10 py-8 flex flex-col h-full">
-          <h1 className="mt-2 text-2xl font-bold text-white shrink-0">
+          <div className="flex items-center gap-4 mb-4 shrink-0">
+            <BackButton fallbackPath={backToTopicHref} />
+            <Breadcrumbs
+              items={[
+                { label: "Матеріали", href: backToClassHref },
+                { label: classLabel || "Клас", href: backToTopicHref },
+                { label: sidebarTopicName || "Тема", href: backToTopicHref },
+                { label: noteTitle },
+              ]}
+            />
+          </div>
+          <h1 className="text-2xl font-bold text-white shrink-0">
             Конспект. {noteTitle}
           </h1>
 
           {/* Main Card */}
           <div className="mt-4 flex-1 rounded-[32px] bg-white p-2 shadow-xl flex flex-col md:flex-row overflow-hidden min-h-0">
-             
+
              {/* Note Content Area */}
-             <div className="flex-1 p-8 md:p-10 overflow-y-auto">
+             <div className="flex-1 p-8 md:p-10 overflow-y-auto flex flex-col">
                 <h2 className="text-xl font-bold text-slate-900 mb-6">{noteTitle}</h2>
-                
-                {noteContentHtml ? (
+
+                {isEditMode ? (
+                  <div className="flex-1 flex flex-col">
+                    <label className="text-sm font-medium text-slate-700 mb-2">
+                      Зміст конспекту 
+                    </label>
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className="flex-1 min-h-[300px] w-full rounded-xl border border-slate-200 p-4 text-sm text-slate-800 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
+                      placeholder="Введіть зміст конспекту..."
+                    />
+                  </div>
+                ) : noteContentHtml ? (
                   <div
-                    className="text-sm leading-relaxed text-slate-800"
+                    className="text-sm leading-relaxed text-slate-800 flex-1"
                     dangerouslySetInnerHTML={{ __html: noteContentHtml }}
                   />
                 ) : (
-                  <div className="space-y-6 text-sm leading-relaxed text-slate-800">
+                  <div className="space-y-6 text-sm leading-relaxed text-slate-800 flex-1">
                       <p>
                           <strong>Іменник</strong> — самостійна частина мови, що називає предмети, істот, явища, поняття і відповідає на питання хто? що?
                       </p>
@@ -272,12 +363,50 @@ const TeacherNote = () => {
                       </div>
                   </div>
                 )}
+
+                {/* Edit/Save buttons at bottom */}
+                <div className="mt-6 pt-4 border-t border-slate-100">
+                  {isEditMode ? (
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleSaveEdit}
+                        className="flex items-center gap-2 rounded-full bg-[#1E73F7] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1A63D6]"
+                      >
+                        Зберегти зміни
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCancelEdit}
+                        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Скасувати
+                      </button>
+                    </div>
+                  ) : noteMaterial ? (
+                    <button
+                      type="button"
+                      onClick={handleStartEdit}
+                      className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:border-[#1E73F7] hover:text-[#1E73F7]"
+                    >
+                      <PencilIcon />
+                      Редагувати конспект
+                    </button>
+                  ) : null}
+                </div>
              </div>
 
              {/* Right Sidebar - "Notes" / TOC */}
-             <div className="w-full md:w-80 bg-[#E9F1FF] rounded-[24px] m-2 p-6 overflow-y-auto">
+             <div className="w-full md:w-80 bg-[#E9F1FF] rounded-[24px] m-2 p-6 overflow-y-auto flex flex-col">
                 <h3 className="text-base font-bold text-slate-900 mb-4">Нотатки</h3>
-                {teacherNotes ? (
+                {isEditMode ? (
+                  <textarea
+                    value={editTeacherNotes}
+                    onChange={(e) => setEditTeacherNotes(e.target.value)}
+                    className="flex-1 min-h-[200px] w-full rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
+                    placeholder="Нотатки для вчителя..."
+                  />
+                ) : teacherNotes ? (
                   <div className="text-xs leading-relaxed text-slate-700 whitespace-pre-wrap">
                     {teacherNotes}
                   </div>
@@ -290,35 +419,13 @@ const TeacherNote = () => {
 
           </div>
 
-          {/* Footer Actions */}
-          <div className="mt-6 flex items-center justify-between shrink-0">
-             <button className="flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-[#1E73F7] shadow transition hover:-translate-y-0.5 hover:shadow-lg cursor-pointer">
-                <svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor">
-                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
-                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
-                </svg>
-                Завантажити в PDF
-             </button>
-
-             <button 
-                onClick={() => setIsAudienceModalOpen(true)}
-                className="flex items-center gap-2 rounded-full border-2 border-white bg-transparent px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10 cursor-pointer"
-             >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M21 12C21 16.9706 16.9706 21 12 21C9.69637 21 7.59565 20.1344 6.00003 18.7077M3 12C3 7.02944 7.02944 3 12 3C14.3036 3 16.4044 3.86558 18 5.29231" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M21 3V8H16" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M3 21V16H8" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                 </svg>
-                 <span>Змінити цільову аудиторію</span>
-             </button>
-          </div>
         </main>
       </div>
 
       <SelectStudentsModal
         isOpen={isAudienceModalOpen}
         onClose={() => setIsAudienceModalOpen(false)}
-        classNameFilter={classLabel}
+        students={classStudents.map((studentId) => ({ id: studentId }))}
         onSave={(selection) => {
             console.log("Saved selection", selection);
             setIsAudienceModalOpen(false);

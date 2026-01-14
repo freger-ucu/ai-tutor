@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { teachers } from "../data/teachers";
+import BackButton from "../components/BackButton";
+import Breadcrumbs from "../components/Breadcrumbs";
 import { getTestById, getTestStatistics, mockTestData } from "../data/mockTests";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { TestContainer } from "../components/test";
@@ -8,41 +9,39 @@ import SelectStudentsModal from "../components/SelectStudentsModal";
 import { getMaterials } from "../data/materialsStorage";
 import { withGeneratedQuestions } from "../data/testMapper";
 import { classLabelToId } from "../data/classUtils";
+import { getTeacherStudents } from "../api/teacher";
+import { toNumericId } from "../api/idUtils";
 
 const TeacherTest = () => {
   const { id, testId } = useParams();
-
-  const teacher = useMemo(
-    () => teachers.find((item) => item.id === id),
-    [id]
-  );
 
   const storedTest = useMemo(
     () => getMaterials({ type: "test" }).find((item) => item.id === testId),
     [testId]
   );
   const testData = useMemo(() => {
-    const base = getTestById(testId ?? "");
+    const fallbackBase = getTestById(testId ?? "") ?? mockTestData;
     if (!storedTest) {
-      return base;
+      return fallbackBase;
     }
-    const fallback = base ?? mockTestData;
-    if (!storedTest.questions || !Array.isArray(storedTest.questions)) {
-      return {
-        ...fallback,
-        id: storedTest.id,
-        title: storedTest.title,
-        topicName: storedTest.topicName ?? fallback.topicName,
-        className: storedTest.className ?? fallback.className,
-      };
-    }
-    const withGenerated = withGeneratedQuestions(fallback, storedTest.questions);
+    const base = {
+      ...fallbackBase,
+      id: storedTest.id,
+      title: storedTest.title,
+      subject: storedTest.subject ?? fallbackBase.subject,
+      topicName: storedTest.topicName ?? fallbackBase.topicName,
+      className: storedTest.className ?? fallbackBase.className,
+    };
+    const withGenerated = Array.isArray(storedTest.questions)
+      ? withGeneratedQuestions(base, storedTest.questions)
+      : base;
     return {
       ...withGenerated,
       id: storedTest.id,
       title: storedTest.title,
-      topicName: storedTest.topicName ?? fallback.topicName,
-      className: storedTest.className ?? fallback.className,
+      subject: storedTest.subject ?? withGenerated.subject,
+      topicName: storedTest.topicName ?? withGenerated.topicName,
+      className: storedTest.className ?? withGenerated.className,
     };
   }, [testId, storedTest]);
   const statistics = useMemo(() => getTestStatistics(testId ?? ""), [testId]);
@@ -59,11 +58,21 @@ const TeacherTest = () => {
     "Українська мова": "ukr-lang",
     "Історія України": "history",
   };
+  const subjectLabelMap: Record<string, string> = {
+    algebra: "Алгебра",
+    geometry: "Геометрія",
+    "ukr-lang": "Українська мова",
+    history: "Історія України",
+  };
   const courseId =
     storedTest?.courseId ??
     (testData?.subject && classNumber
       ? `${subjectSlugMap[testData.subject] ?? testData.subject.toLowerCase().replace(/\s+/g, "-")}-${classNumber}`
       : "");
+  const subjectSlug =
+    courseId.split("-").slice(0, -1).join("-") || courseId;
+  const subjectName =
+    testData?.subject ?? subjectLabelMap[subjectSlug] ?? "";
   const encodedTopic = testData?.topicName
     ? encodeURIComponent(testData.topicName)
     : "";
@@ -81,6 +90,8 @@ const TeacherTest = () => {
     const filters: {
       teacherId?: string;
       courseId?: string;
+      subject?: string;
+      classId?: number;
       className?: string;
       topicName?: string;
     } = {
@@ -91,10 +102,36 @@ const TeacherTest = () => {
     if (courseId) {
       filters.courseId = courseId;
     }
+    if (subjectName) {
+      filters.subject = subjectName;
+    }
+    if (classId) {
+      filters.classId = classId;
+    }
     return getMaterials(filters);
-  }, [id, courseId, testData?.className, testData?.topicName]);
+  }, [id, courseId, testData?.className, testData?.topicName, subjectName, classId]);
   const sidebarNotes = sidebarMaterials.filter((item) => item.type === "note");
   const sidebarTests = sidebarMaterials.filter((item) => item.type === "test");
+  const [classStudents, setClassStudents] = useState<number[]>([]);
+  useEffect(() => {
+    const apiTeacherId = toNumericId(id) ?? 0;
+    if (!apiTeacherId || !classId || !subjectName) {
+      setClassStudents([]);
+      return;
+    }
+    getTeacherStudents({
+      class_id: classId,
+      teacher_id: apiTeacherId,
+      subject: subjectName,
+    })
+      .then((response) => {
+        setClassStudents(response.students.map((student) => student.student_id));
+      })
+      .catch((error) => {
+        console.error(error);
+        setClassStudents([]);
+      });
+  }, [id, classId, subjectName]);
 
   if (!testData) {
     return (
@@ -108,27 +145,9 @@ const TeacherTest = () => {
     <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
       <TeacherSidebar
         teacherName={
-          teacher ? `${teacher.firstName} ${teacher.lastName}` : "Вчитель"
+          id ? `Вчитель ${id}` : "Вчитель"
         }
         activeItem="materials"
-        afterPrimaryNav={
-          <div className="space-y-2">
-            <Link
-              to={backToClassHref}
-              className="flex w-full items-start justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 hover:bg-slate-100"
-            >
-              <span className="mt-0.5 inline-block h-5 w-5 rounded-md bg-slate-200" />
-              <span>Назад до класу</span>
-            </Link>
-            <Link
-              to={backToTopicHref}
-              className="flex w-full items-start justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 hover:bg-slate-100"
-            >
-              <span className="mt-0.5 inline-block h-5 w-5 rounded-md bg-slate-200" />
-              <span>Назад до теми</span>
-            </Link>
-          </div>
-        }
       >
         <div className="space-y-4">
           {sidebarNotes.map((item) => (
@@ -163,7 +182,18 @@ const TeacherTest = () => {
       </TeacherSidebar>
 
       <main className="flex-1 px-10 py-8 flex flex-col h-full">
-          <h1 className="mt-2 text-2xl font-bold text-white shrink-0">
+          <div className="flex items-center gap-4 mb-4 shrink-0">
+            <BackButton fallbackPath={backToTopicHref} />
+            <Breadcrumbs
+              items={[
+                { label: "Матеріали", href: backToClassHref },
+                { label: testData.className || "Клас", href: backToTopicHref },
+                { label: testData.topicName || "Тема", href: backToTopicHref },
+                { label: testData.title },
+              ]}
+            />
+          </div>
+          <h1 className="text-2xl font-bold text-white shrink-0">
              {testData.title}
           </h1>
 
@@ -177,34 +207,12 @@ const TeacherTest = () => {
              />
           </div>
 
-          {/* Footer Actions */}
-          <div className="mt-6 flex items-center justify-between shrink-0">
-             <button className="flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-[#1E73F7] shadow transition hover:-translate-y-0.5 hover:shadow-lg cursor-pointer">
-                <svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor">
-                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
-                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
-                </svg>
-                Завантажити в PDF
-             </button>
-
-             <button 
-                onClick={() => setIsAudienceModalOpen(true)}
-                className="flex items-center gap-2 rounded-full border-2 border-white bg-transparent px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10 cursor-pointer"
-             >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M21 12C21 16.9706 16.9706 21 12 21C9.69637 21 7.59565 20.1344 6.00003 18.7077M3 12C3 7.02944 7.02944 3 12 3C14.3036 3 16.4044 3.86558 18 5.29231" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M21 3V8H16" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M3 21V16H8" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                 </svg>
-                 <span>Змінити цільову аудиторію</span>
-             </button>
-          </div>
       </main>
 
       <SelectStudentsModal
         isOpen={isAudienceModalOpen}
         onClose={() => setIsAudienceModalOpen(false)}
-        classNameFilter={testData.className}
+        students={classStudents.map((studentId) => ({ id: studentId }))}
         onSave={(selection) => {
             console.log("Saved selection", selection);
             setIsAudienceModalOpen(false);

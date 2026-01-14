@@ -1,7 +1,11 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { students } from "../data/students";
+import BackButton from "../components/BackButton";
+import Breadcrumbs from "../components/Breadcrumbs";
 import { getMaterials } from "../data/materialsStorage";
+import { getStudentData } from "../api/student";
+import { toNumericId } from "../api/idUtils";
+import { classIdToLabel } from "../data/classUtils";
 
 const subjects = [
   { id: "algebra", label: "Алгебра", icon: <span className="text-xl">√x</span> },
@@ -24,6 +28,11 @@ const subjects = [
     ),
   },
 ];
+const subjectLabelMap: Record<string, string> = {
+  algebra: "Алгебра",
+  history: "Історія України",
+  "ukr-lang": "Українська мова",
+};
 
 const noteOutline = [
   "Самостійна частина мови",
@@ -46,40 +55,69 @@ const noteOutline = [
 const StudentNote = () => {
   const { studentId, courseId, topicId, noteId } = useParams();
   const navigate = useNavigate();
-
-  const student = useMemo(
-    () => students.find((s) => s.id === studentId),
-    [studentId]
-  );
+  const [apiSubjects, setApiSubjects] = useState<string[]>([]);
+  const [studentGrade, setStudentGrade] = useState<number | null>(null);
+  const [studentClassId, setStudentClassId] = useState<number | null>(null);
+  const [studentError, setStudentError] = useState<string | null>(null);
 
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
   const subjectSlug = decodedCourse.split("-").slice(0, -1).join("-") || decodedCourse;
+  const subjectName = subjectLabelMap[subjectSlug] ?? decodedCourse;
   const encodedTopic = decodedTopic ? encodeURIComponent(decodedTopic) : "";
   const backToTopicHref =
     courseId && encodedTopic
       ? `/student/${studentId}/topic/${courseId}/${encodedTopic}`
       : `/student/${studentId}`;
+  const classLabel =
+    studentGrade && studentClassId
+      ? classIdToLabel(studentGrade, studentClassId)
+      : studentGrade
+      ? String(studentGrade)
+      : "";
 
   const noteMaterial = useMemo(
     () => getMaterials({ type: "note" }).find((item) => item.id === noteId),
     [noteId]
   );
   const noteTitle = noteMaterial?.title ?? "Конспект";
+  const availableSubjects = apiSubjects.length
+    ? subjects.filter((subject) => apiSubjects.includes(subject.label))
+    : subjects;
+  useEffect(() => {
+    const apiId = toNumericId(studentId);
+    if (!apiId) {
+      setStudentError("Учня не знайдено");
+      return;
+    }
+    getStudentData(apiId)
+      .then((response) => {
+        setApiSubjects(response.subjects);
+        setStudentGrade(response.class_number);
+        setStudentClassId(response.class_id);
+        setStudentError(null);
+      })
+      .catch((error) => {
+        console.error(error);
+        setStudentError("Учня не знайдено");
+      });
+  }, [studentId]);
   const materials = useMemo(() => {
-    if (!student) {
+    if (studentError) {
       return [];
     }
     return getMaterials({
       courseId: decodedCourse,
-      className: student.className,
+      subject: subjectName,
+      classId: studentClassId ?? undefined,
+      className: classLabel,
       topicName: decodedTopic,
     });
-  }, [student, decodedCourse, decodedTopic]);
+  }, [studentError, classLabel, studentClassId, decodedCourse, decodedTopic, subjectName]);
   const sidebarNotes = materials.filter((item) => item.type === "note");
   const sidebarTests = materials.filter((item) => item.type === "test");
 
-  if (!student) {
+  if (studentError) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#1E73F7]">
         <div className="text-xl text-white">Учня не знайдено</div>
@@ -102,16 +140,16 @@ const StudentNote = () => {
             />
             <div>
               <div className="text-sm font-bold text-slate-900">
-                {student.firstName} {student.lastName}
+                {studentId ? `Учень ${studentId}` : "Учень"}
               </div>
               <div className="text-xs text-slate-500">
-                Клас: {student.className}
+                Клас: {classLabel || "—"}
               </div>
             </div>
           </div>
 
           <div className="mt-8 space-y-2">
-            {subjects.map((subject) => {
+            {availableSubjects.map((subject) => {
               const isActive = subjectSlug === subject.id;
               return (
                 <button
@@ -137,17 +175,7 @@ const StudentNote = () => {
             })}
           </div>
 
-          <div className="mt-6">
-            <Link
-              to={backToTopicHref}
-              className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <span className="inline-block h-5 w-5 rounded-md bg-slate-200" />
-              Назад до теми
-            </Link>
-          </div>
-
-          <div className="mt-4 border-t border-slate-200 pt-6 space-y-4 text-sm">
+          <div className="mt-6 border-t border-slate-200 pt-6 space-y-4 text-sm">
             {sidebarNotes.map((item) => (
               <Link
                 key={item.id}
@@ -181,6 +209,16 @@ const StudentNote = () => {
         </aside>
 
         <main className="ml-72 flex-1 px-10 py-6 w-full">
+          <div className="flex items-center gap-4 mb-4">
+            <BackButton fallbackPath={backToTopicHref} />
+            <Breadcrumbs
+              items={[
+                { label: subjectName, href: `/student/${studentId}` },
+                { label: decodedTopic || "Тема", href: backToTopicHref },
+                { label: noteTitle },
+              ]}
+            />
+          </div>
           <h1 className="text-2xl font-bold text-white">
             Конспект. {noteTitle}
           </h1>
@@ -271,13 +309,6 @@ const StudentNote = () => {
             </div>
           </div>
 
-          <button className="mt-5 inline-flex items-center gap-3 rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#1E73F7] shadow transition hover:-translate-y-0.5 hover:shadow-lg cursor-pointer">
-            <svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor">
-              <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
-              <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
-            </svg>
-            Завантажити в PDF
-          </button>
         </main>
       </div>
     </div>

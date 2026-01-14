@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { students } from "../data/students";
+import BackButton from "../components/BackButton";
+import Breadcrumbs from "../components/Breadcrumbs";
 import Card from "../components/Card";
 import Panel from "../components/Panel";
 import PillButton from "../components/PillButton";
 import { getMaterials } from "../data/materialsStorage";
 import { getStudentTestCompletionMap } from "../data/studentProgress";
+import { getStudentData } from "../api/student";
+import { toNumericId } from "../api/idUtils";
+import { classIdToLabel } from "../data/classUtils";
 
 const subjects = [
   { id: "algebra", label: "Алгебра", icon: <span className="text-xl">√x</span> },
@@ -39,20 +43,32 @@ const courseLabels: Record<string, string> = {
   "history-9": "Історія України",
   "ukr-lang-9": "Українська мова",
 };
+const subjectLabelMap: Record<string, string> = {
+  algebra: "Алгебра",
+  geometry: "Геометрія",
+  "ukr-lang": "Українська мова",
+  history: "Історія України",
+};
 
 const StudentTopic = () => {
   const { studentId, courseId, topicId } = useParams();
   const navigate = useNavigate();
-  
-  const student = useMemo(
-    () => students.find((s) => s.id === studentId),
-    [studentId]
-  );
+  const [apiSubjects, setApiSubjects] = useState<string[]>([]);
+  const [studentGrade, setStudentGrade] = useState<number | null>(null);
+  const [studentClassId, setStudentClassId] = useState<number | null>(null);
+  const [studentError, setStudentError] = useState<string | null>(null);
 
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
   const courseLabel = decodedCourse ? courseLabels[decodedCourse] ?? decodedCourse : "";
   const subjectSlug = decodedCourse.split("-").slice(0, -1).join("-") || decodedCourse;
+  const subjectName = subjectLabelMap[subjectSlug] ?? courseLabel ?? "";
+  const classLabel =
+    studentGrade && studentClassId
+      ? classIdToLabel(studentGrade, studentClassId)
+      : studentGrade
+      ? String(studentGrade)
+      : "";
   
   const [notes, setNotes] = useState<{ id: string; title: string }[]>([]);
   const [tests, setTests] = useState<
@@ -65,11 +81,36 @@ const StudentTopic = () => {
   >([]);
 
   useEffect(() => {
-    if (!student) return;
+    const apiId = toNumericId(studentId);
+    if (!apiId) {
+      setStudentError("Учня не знайдено");
+      return;
+    }
+    getStudentData(apiId)
+      .then((response) => {
+        setApiSubjects(response.subjects);
+        setStudentGrade(response.class_number);
+        setStudentClassId(response.class_id);
+        setStudentError(null);
+      })
+      .catch((error) => {
+        console.error(error);
+        setStudentError("Учня не знайдено");
+      });
+  }, [studentId]);
+
+  const availableSubjects = apiSubjects.length
+    ? subjects.filter((subject) => apiSubjects.includes(subject.label))
+    : subjects;
+
+  useEffect(() => {
+    if (studentError) return;
 
     const materials = getMaterials({
         courseId: decodedCourse,
-        className: student.className,
+        subject: subjectName,
+        classId: studentClassId ?? undefined,
+        className: classLabel,
         topicName: decodedTopic,
     });
 
@@ -98,9 +139,17 @@ const StudentTopic = () => {
 
     setNotes(storedNotes);
     setTests(storedTests);
-  }, [student, decodedCourse, decodedTopic]);
+  }, [
+    studentError,
+    classLabel,
+    studentClassId,
+    decodedCourse,
+    decodedTopic,
+    studentId,
+    subjectName,
+  ]);
 
-  if (!student) {
+  if (studentError) {
     return (
         <div className="flex min-h-screen items-center justify-center bg-[#1E73F7]">
           <div className="text-xl text-white">Учня не знайдено</div>
@@ -120,17 +169,19 @@ const StudentTopic = () => {
                   backgroundImage: "url('https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80')",
                   backgroundSize: "cover",
                 }}
-             />
+              />
             <div>
               <div className="text-base font-semibold text-slate-900">
-                {student.firstName} {student.lastName}
+                {studentId ? `Учень ${studentId}` : "Учень"}
               </div>
-              <div className="text-xs text-slate-500">Клас: {student.className}</div>
+              <div className="text-xs text-slate-500">
+                Клас: {classLabel || "—"}
+              </div>
             </div>
           </div>
 
           <div className="mt-8 space-y-2">
-            {subjects.map((subject) => {
+            {availableSubjects.map((subject) => {
               const isActive = subjectSlug === subject.id;
               return (
                 <button
@@ -186,8 +237,17 @@ const StudentTopic = () => {
         </aside>
 
         <main className="ml-72 flex-1 px-10 py-10 w-full">
+          <div className="flex items-center gap-4 mb-6">
+            <BackButton fallbackPath={`/student/${studentId}`} />
+            <Breadcrumbs
+              items={[
+                { label: courseLabel || subjectName, href: `/student/${studentId}` },
+                { label: decodedTopic || "Тема" },
+              ]}
+            />
+          </div>
 
-          <Panel className="mt-6">
+          <Panel>
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">{decodedTopic}</h1>

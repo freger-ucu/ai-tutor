@@ -1,11 +1,15 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
+import BackButton from "../components/BackButton";
+import Breadcrumbs from "../components/Breadcrumbs";
 import { getMaterials } from "../data/materialsStorage";
 import { getTestById, mockTestData } from "../data/mockTests";
-import { students } from "../data/students";
 import { TestContainer } from "../components/test";
 import { withGeneratedQuestions } from "../data/testMapper";
 import { markStudentTestCompleted } from "../data/studentProgress";
+import { checkOpenQuestion, getStudentData, getTestFeedback } from "../api/student";
+import { toNumericId } from "../api/idUtils";
+import { classIdToLabel } from "../data/classUtils";
 
 const subjects = [
   { id: "algebra", label: "Алгебра", icon: <span className="text-xl">√x</span> },
@@ -28,45 +32,174 @@ const subjects = [
     ),
   },
 ];
+const subjectLabelMap: Record<string, string> = {
+  algebra: "Алгебра",
+  history: "Історія України",
+  "ukr-lang": "Українська мова",
+};
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+const formatInline = (value: string) => {
+  const withCode = value.replace(
+    /`([^`]+)`/g,
+    "<code class=\"rounded bg-slate-100 px-1 py-0.5 text-xs font-semibold text-slate-900\">$1</code>"
+  );
+  const withBold = withCode.replace(
+    /\*\*([^*]+)\*\*/g,
+    "<strong class=\"font-semibold text-slate-900\">$1</strong>"
+  );
+  return withBold.replace(
+    /\*([^*]+)\*/g,
+    "<em class=\"italic text-slate-800\">$1</em>"
+  );
+};
+
+const renderMarkdown = (markdown: string) => {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  let html = "";
+  let inUl = false;
+  let inOl = false;
+
+  const closeLists = () => {
+    if (inUl) {
+      html += "</ul>";
+      inUl = false;
+    }
+    if (inOl) {
+      html += "</ol>";
+      inOl = false;
+    }
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      closeLists();
+      html += "<br />";
+      continue;
+    }
+
+    const safe = formatInline(escapeHtml(trimmed));
+
+    if (trimmed.startsWith("### ")) {
+      closeLists();
+      html += `<h3 class="mt-6 text-base font-semibold text-slate-900">${safe.slice(4)}</h3>`;
+      continue;
+    }
+    if (trimmed.startsWith("## ")) {
+      closeLists();
+      html += `<h2 class="mt-6 text-lg font-semibold text-slate-900">${safe.slice(3)}</h2>`;
+      continue;
+    }
+    if (trimmed.startsWith("# ")) {
+      closeLists();
+      html += `<h1 class="mt-6 text-xl font-bold text-slate-900">${safe.slice(2)}</h1>`;
+      continue;
+    }
+
+    if (trimmed.startsWith("- ")) {
+      if (!inUl) {
+        closeLists();
+        html += "<ul class=\"mt-3 list-disc space-y-1 pl-5\">";
+        inUl = true;
+      }
+      html += `<li>${safe.slice(2)}</li>`;
+      continue;
+    }
+
+    const orderedMatch = trimmed.match(/^(\d+)\.\s+/);
+    if (orderedMatch) {
+      if (!inOl) {
+        closeLists();
+        html += "<ol class=\"mt-3 list-decimal space-y-1 pl-5\">";
+        inOl = true;
+      }
+      html += `<li>${safe.slice(orderedMatch[0].length)}</li>`;
+      continue;
+    }
+
+    closeLists();
+    html += `<p class="mt-3">${safe}</p>`;
+  }
+
+  closeLists();
+  return html;
+};
 
 const StudentTest = () => {
   const { studentId, testId } = useParams();
   const navigate = useNavigate();
-
-  const student = useMemo(
-    () => students.find((s) => s.id === studentId),
-    [studentId]
-  );
+  const [apiSubjects, setApiSubjects] = useState<string[]>([]);
+  const [studentGrade, setStudentGrade] = useState<number | null>(null);
+  const [studentClassId, setStudentClassId] = useState<number | null>(null);
+  const [studentError, setStudentError] = useState<string | null>(null);
+  const [testFeedback, setTestFeedback] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
 
   const storedTest = useMemo(
     () => getMaterials({ type: "test" }).find((item) => item.id === testId),
     [testId]
   );
+  useEffect(() => {
+    const apiId = toNumericId(studentId);
+    if (!apiId) {
+      setStudentError("Учня не знайдено");
+      return;
+    }
+    getStudentData(apiId)
+      .then((response) => {
+        setApiSubjects(response.subjects);
+        setStudentGrade(response.class_number);
+        setStudentClassId(response.class_id);
+        setStudentError(null);
+      })
+      .catch((error) => {
+        console.error(error);
+        setStudentError("Учня не знайдено");
+      });
+  }, [studentId]);
+
+  useEffect(() => {
+    setTestFeedback(null);
+    setFeedbackError(null);
+    setIsFeedbackLoading(false);
+  }, [testId]);
 
   const testData = useMemo(() => {
     if (!testId) return undefined;
-    
-    // 1. Try to find in dynamic materials first (created by teacher)
-    // We fetch all tests to find the matching ID
-    const foundMaterial = storedTest;
 
-    if (foundMaterial) {
-        const hasQuestions = Array.isArray(foundMaterial.questions);
-        const withGenerated = hasQuestions
-          ? withGeneratedQuestions(mockTestData, foundMaterial.questions)
-          : mockTestData;
-        return {
-            ...withGenerated,
-            id: foundMaterial.id,
-            title: foundMaterial.title,
-            topicName: foundMaterial.topicName ?? mockTestData.topicName,
-            className: foundMaterial.className ?? mockTestData.className,
-            subject: "Тест",
-        };
+    const fallbackBase = getTestById(testId) ?? mockTestData;
+
+    if (storedTest) {
+      const base = {
+        ...fallbackBase,
+        id: storedTest.id,
+        title: storedTest.title,
+        subject: storedTest.subject ?? fallbackBase.subject,
+        className: storedTest.className ?? fallbackBase.className,
+        topicName: storedTest.topicName ?? fallbackBase.topicName,
+      };
+      const withGenerated = Array.isArray(storedTest.questions)
+        ? withGeneratedQuestions(base, storedTest.questions)
+        : base;
+      return {
+        ...withGenerated,
+        id: storedTest.id,
+        title: storedTest.title,
+        subject: storedTest.subject ?? withGenerated.subject,
+        className: storedTest.className ?? withGenerated.className,
+        topicName: storedTest.topicName ?? withGenerated.topicName,
+      };
     }
 
-    // 2. Fallback to hardcoded/legacy mock lookup
-    return getTestById(testId);
+    return fallbackBase;
   }, [testId, storedTest]);
 
   const classNumberMatch = testData?.className?.match(/(\d+)/);
@@ -91,14 +224,27 @@ const StudentTest = () => {
       : `/student/${studentId}`;
   const subjectSlug =
     courseId.split("-").slice(0, -1).join("-") || courseId;
-  const sidebarClassName = student?.className ?? testData?.className ?? "";
+  const subjectName =
+    testData?.subject ?? subjectLabelMap[subjectSlug] ?? "";
+  const classLabel =
+    studentGrade && studentClassId
+      ? classIdToLabel(studentGrade, studentClassId)
+      : studentGrade
+      ? String(studentGrade)
+      : "";
+  const sidebarClassName = classLabel || testData?.className || "";
   const sidebarTopicName = testData?.topicName ?? "";
+  const availableSubjects = apiSubjects.length
+    ? subjects.filter((subject) => apiSubjects.includes(subject.label))
+    : subjects;
   const sidebarMaterials = useMemo(() => {
     if (!sidebarClassName || !sidebarTopicName) {
       return [];
     }
     const filters: {
       courseId?: string;
+      subject?: string;
+      classId?: number;
       className?: string;
       topicName?: string;
     } = {
@@ -108,10 +254,24 @@ const StudentTest = () => {
     if (courseId) {
       filters.courseId = courseId;
     }
+    if (subjectName) {
+      filters.subject = subjectName;
+    }
+    if (studentClassId) {
+      filters.classId = studentClassId;
+    }
     return getMaterials(filters);
-  }, [courseId, sidebarClassName, sidebarTopicName]);
+  }, [courseId, sidebarClassName, sidebarTopicName, subjectName, studentClassId]);
   const sidebarNotes = sidebarMaterials.filter((item) => item.type === "note");
   const sidebarTests = sidebarMaterials.filter((item) => item.type === "test");
+
+  if (studentError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#1E73F7]">
+        <div className="text-xl text-white">Учня не знайдено</div>
+      </div>
+    );
+  }
 
   if (!testData) {
     return (
@@ -136,15 +296,15 @@ const StudentTest = () => {
              />
             <div>
               <div className="text-base font-semibold text-slate-900">
-                {student ? `${student.firstName} ${student.lastName}` : "Учень"}
+                {studentId ? `Учень ${studentId}` : "Учень"}
               </div>
-              {student && (
-                <div className="text-xs text-slate-500">Клас: {student.className}</div>
-              )}
+              <div className="text-xs text-slate-500">
+                Клас: {classLabel || testData?.className || "—"}
+              </div>
             </div>
           </div>
           <div className="mt-8 space-y-2">
-            {subjects.map((subject) => {
+            {availableSubjects.map((subject) => {
               const isActive = subjectSlug === subject.id;
               return (
                 <button
@@ -170,17 +330,7 @@ const StudentTest = () => {
             })}
           </div>
 
-          <div className="mt-6">
-            <Link
-              to={backToTopicHref}
-              className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <span className="inline-block h-5 w-5 rounded-md bg-slate-200" />
-              Назад до теми
-            </Link>
-          </div>
-
-          <div className="mt-4 border-t border-slate-200 pt-6 space-y-4 text-sm">
+          <div className="mt-6 border-t border-slate-200 pt-6 space-y-4 text-sm">
             {sidebarNotes.map((item) => (
               <Link
                 key={item.id}
@@ -209,12 +359,38 @@ const StudentTest = () => {
           </div>
         </aside>
         <main className="ml-72 flex-1 px-10 py-10 w-full">
-          <div className="mt-6">
+          <div className="flex items-center gap-4 mb-6">
+            <BackButton fallbackPath={backToTopicHref} />
+            <Breadcrumbs
+              items={[
+                { label: subjectName || "Предмет", href: `/student/${studentId}` },
+                { label: testData.topicName || "Тема", href: backToTopicHref },
+                { label: testData.title },
+              ]}
+            />
+          </div>
+          <div>
             <TestContainer
               testData={testData}
               showStatistics={false}
               viewMode="student"
-              onFinish={(result) => {
+              onEvaluateOpen={async ({ question, answer }) => {
+                const apiStudentId = toNumericId(studentId);
+                if (!apiStudentId || !subjectName) {
+                  return { correct: false, feedback: "Неможливо перевірити відповідь." };
+                }
+                const topic =
+                  question.topic ?? testData.topicName ?? testData.title;
+                return checkOpenQuestion({
+                  student_id: apiStudentId,
+                  subject: subjectName,
+                  topic,
+                  subtopics: question.subtopics ?? [],
+                  question: question.text,
+                  answer,
+                });
+              }}
+              onFinish={async (result) => {
                 if (studentId && testId) {
                   markStudentTestCompleted({
                     studentId,
@@ -223,8 +399,83 @@ const StudentTest = () => {
                     totalQuestions: result.totalQuestions,
                   });
                 }
+
+                const apiStudentId = toNumericId(studentId);
+                const apiTeacherId = toNumericId(storedTest?.teacherId);
+                if (!apiStudentId || !apiTeacherId || !subjectName) {
+                  return;
+                }
+                setIsFeedbackLoading(true);
+                setFeedbackError(null);
+                setTestFeedback(null);
+
+                const questions = result.answers
+                  .map((answer) => {
+                    const question = testData.questions.find(
+                      (item) => item.id === answer.questionId
+                    );
+                    if (!question) {
+                      return null;
+                    }
+                    const selectedText = answer.selectedOptionIds
+                      .map(
+                        (optionId) =>
+                          question.options.find((option) => option.id === optionId)
+                            ?.text
+                      )
+                      .filter((value): value is string => Boolean(value))
+                      .join(", ");
+                    const responseText =
+                      question.type === "open"
+                        ? answer.openAnswer?.trim() ?? ""
+                        : selectedText;
+                    return {
+                      question: question.text,
+                      answer: responseText,
+                      correct: answer.isCorrect,
+                      topic: question.topic ?? testData.topicName ?? testData.title,
+                      subtopics: question.subtopics ?? [],
+                    };
+                  })
+                  .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+                try {
+                  const feedback = await getTestFeedback({
+                    student_id: apiStudentId,
+                    teacher_id: apiTeacherId,
+                    subject: subjectName,
+                    questions,
+                  });
+                  setTestFeedback(feedback.feedback);
+                } catch (error) {
+                  console.error(error);
+                  setFeedbackError("Не вдалося отримати фідбек по тесту.");
+                } finally {
+                  setIsFeedbackLoading(false);
+                }
               }}
             />
+            {(isFeedbackLoading || testFeedback || feedbackError) && (
+              <div className="mt-6 rounded-2xl bg-white p-6 text-sm text-slate-700 shadow-sm">
+                <div className="text-base font-semibold text-slate-900">
+                  Підсумковий фідбек
+                </div>
+                {isFeedbackLoading && (
+                  <div className="mt-3 text-slate-500">Формуємо фідбек...</div>
+                )}
+                {feedbackError && (
+                  <div className="mt-3 text-rose-500">{feedbackError}</div>
+                )}
+                {testFeedback && (
+                  <div
+                    className="mt-3"
+                    dangerouslySetInnerHTML={{
+                      __html: renderMarkdown(testFeedback),
+                    }}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </main>
       </div>

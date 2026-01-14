@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { students } from "../data/students";
 import { getMaterials, getTopics } from "../data/materialsStorage";
 import PillButton from "../components/PillButton";
 import { getStudentData } from "../api/student";
 import { toNumericId } from "../api/idUtils";
 import { getStudentCompletedTestIds } from "../data/studentProgress";
+import { classIdToLabel } from "../data/classUtils";
 
 const Subjects = [
   { id: "algebra", label: "Алгебра", icon: <span className="text-xl">√x</span> },
@@ -35,11 +35,8 @@ const Student = () => {
   const [activeSubjectId, setActiveSubjectId] = useState("ukr-lang");
   const [apiSubjects, setApiSubjects] = useState<string[]>([]);
   const [studentGrade, setStudentGrade] = useState<number | null>(null);
-
-  const student = useMemo(
-    () => students.find((s) => s.id === studentId),
-    [studentId]
-  );
+  const [studentClassId, setStudentClassId] = useState<number | null>(null);
+  const [studentError, setStudentError] = useState<string | null>(null);
 
   useEffect(() => {
     const apiId = toNumericId(studentId);
@@ -50,9 +47,12 @@ const Student = () => {
       .then((response) => {
         setApiSubjects(response.subjects);
         setStudentGrade(response.class_number);
+        setStudentClassId(response.class_id);
+        setStudentError(null);
       })
       .catch((error) => {
         console.error(error);
+        setStudentError("Учня не знайдено");
       });
   }, [studentId]);
 
@@ -69,14 +69,20 @@ const Student = () => {
     }
   }, [availableSubjects, activeSubjectId]);
 
-  const localGradeMatch = student?.className.match(/(\d+)/);
-  const localGrade = localGradeMatch ? Number(localGradeMatch[1]) : null;
-  const gradeSuffix = localGrade ?? studentGrade ?? 8;
+  const gradeSuffix = studentGrade ?? 8;
   const courseIdMap: Record<string, string> = {
     "ukr-lang": `ukr-lang-${gradeSuffix}`,
     algebra: `algebra-${gradeSuffix}`,
     history: `history-${gradeSuffix}`,
   };
+  const activeSubjectLabel =
+    Subjects.find((subject) => subject.id === activeSubjectId)?.label ?? "";
+  const classLabel =
+    studentGrade && studentClassId
+      ? classIdToLabel(studentGrade, studentClassId)
+      : studentGrade
+      ? String(studentGrade)
+      : "";
 
   const formatDate = (value?: string) => {
     if (!value) {
@@ -95,17 +101,21 @@ const Student = () => {
 
   const topics = useMemo(() => {
     const targetCourseId = courseIdMap[activeSubjectId] || activeSubjectId;
-    const className = student?.className;
+    const className = classLabel;
     if (!className) {
       return [];
     }
 
     const fetchedTopics = getTopics({
       courseId: targetCourseId,
+      subject: activeSubjectLabel,
+      classId: studentClassId ?? undefined,
       className,
     });
     const tests = getMaterials({
       courseId: targetCourseId,
+      subject: activeSubjectLabel,
+      classId: studentClassId ?? undefined,
       className,
       type: "test",
     });
@@ -136,14 +146,14 @@ const Student = () => {
         percent,
       };
     });
-  }, [activeSubjectId, student, studentId]);
+  }, [activeSubjectId, classLabel, studentClassId, studentId, activeSubjectLabel]);
   
   const handleTopicClick = (topicTitle: string) => {
     const targetCourseId = courseIdMap[activeSubjectId] || activeSubjectId;
     navigate(`/student/${studentId}/topic/${targetCourseId}/${encodeURIComponent(topicTitle)}`);
   };
 
-  if (!student) {
+  if (studentError) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#1E73F7]">
         <div className="text-xl text-white">Учня не знайдено</div>
@@ -167,7 +177,7 @@ const Student = () => {
                 }}
               />
               <div className="text-sm font-bold text-slate-900">
-                {student.firstName} {student.lastName}
+                {studentId ? `Учень ${studentId}` : "Учень"}
               </div>
             </div>
           </div>
