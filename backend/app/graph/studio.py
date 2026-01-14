@@ -55,24 +55,69 @@ def solver_graph():
 
 
 def test_gen_graph():
-    """Build test generation graph."""
+    """Build test generation graph (parallel architecture with planning).
+
+    Flow:
+        retrieve_context → plan_test → retrieve_concepts → batch_generate
+                                                                ↓
+                                                          batch_validate
+                                                                ↓
+                                                          prepare_retry ──┐
+                                                                ↓         │
+                                                            finalize ◄────┘
+
+    Key features:
+    - Planning phase: 1 LLM call to design entire test structure
+    - Per-concept RAG: Parallel retrieval for each identified concept
+    - Batch generation: All questions generated in parallel
+    - Hybrid validation: MC reuses concept context, Open gets fresh RAG
+    - Smart retry: Up to 2 retry iterations for failed questions
+
+    Note: For Studio testing, recursion_limit=20 is sufficient.
+    """
     from langgraph.graph import StateGraph, END
     from app.graph.flows.test_gen import (
         TestGenState,
-        retrieve_rag_node,
-        generate_batch_node,
-        validate_batch_node,
-        should_continue,
+        retrieve_context_node,
+        plan_test_node,
+        retrieve_concepts_node,
+        batch_generate_node,
+        batch_validate_node,
+        prepare_retry_node,
+        should_retry,
+        finalize_node,
     )
 
     workflow = StateGraph(TestGenState)
-    workflow.add_node("retrieve_rag", retrieve_rag_node)
-    workflow.add_node("generate_batch", generate_batch_node)
-    workflow.add_node("validate_batch", validate_batch_node)
-    workflow.set_entry_point("retrieve_rag")
-    workflow.add_edge("retrieve_rag", "generate_batch")
-    workflow.add_edge("generate_batch", "validate_batch")
-    workflow.add_conditional_edges("validate_batch", should_continue, {"continue": "generate_batch", "end": END})
+
+    # Add nodes
+    workflow.add_node("retrieve_context", retrieve_context_node)
+    workflow.add_node("plan_test", plan_test_node)
+    workflow.add_node("retrieve_concepts", retrieve_concepts_node)
+    workflow.add_node("batch_generate", batch_generate_node)
+    workflow.add_node("batch_validate", batch_validate_node)
+    workflow.add_node("prepare_retry", prepare_retry_node)
+    workflow.add_node("finalize", finalize_node)
+
+    # Setup edges
+    workflow.set_entry_point("retrieve_context")
+    workflow.add_edge("retrieve_context", "plan_test")
+    workflow.add_edge("plan_test", "retrieve_concepts")
+    workflow.add_edge("retrieve_concepts", "batch_generate")
+    workflow.add_edge("batch_generate", "batch_validate")
+    workflow.add_edge("batch_validate", "prepare_retry")
+
+    # Conditional retry loop
+    workflow.add_conditional_edges(
+        "prepare_retry",
+        should_retry,
+        {
+            "batch_generate": "batch_generate",
+            "finalize": "finalize",
+        },
+    )
+
+    workflow.add_edge("finalize", END)
     return workflow
 
 

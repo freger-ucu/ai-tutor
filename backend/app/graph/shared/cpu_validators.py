@@ -87,7 +87,7 @@ def validate_question_format(
         )
 
     # Validate question type
-    valid_types = {"multiple_choice", "open"}
+    valid_types = {"multiple_choice", "single_choice", "open"}
     if question_type not in valid_types:
         errors.append(
             ValidationError(
@@ -96,7 +96,7 @@ def validate_question_format(
         )
 
     # Type-specific validation
-    if question_type == "multiple_choice":
+    if question_type in {"multiple_choice", "single_choice"}:
         mc_result = _validate_mc_question(question)
         errors.extend(mc_result.errors)
         warnings.extend(mc_result.warnings)
@@ -136,7 +136,9 @@ def _validate_mc_question(question: Dict[str, Any]) -> ValidationResult:
     warnings = []
 
     options = question.get("options", [])
+    question_type = question.get("type", "single_choice")
     correct_index = question.get("correct_answer_index")
+    correct_indices = question.get("correct_answer_indices")  # For multiple_choice with multiple correct
 
     # Must have options
     if not options:
@@ -149,19 +151,56 @@ def _validate_mc_question(question: Dict[str, Any]) -> ValidationResult:
             ValidationError("options", f"MC question must have exactly 4 options, got {len(options)}")
         )
 
-    # Must have correct_answer_index
-    if correct_index is None:
-        errors.append(
-            ValidationError("correct_answer_index", "Missing correct_answer_index")
-        )
-    elif not isinstance(correct_index, int):
-        errors.append(
-            ValidationError("correct_answer_index", f"correct_answer_index must be int, got {type(correct_index)}")
-        )
-    elif correct_index < 0 or correct_index >= len(options):
-        errors.append(
-            ValidationError("correct_answer_index", f"correct_answer_index {correct_index} out of range [0, {len(options)-1}]")
-        )
+    # Validate correct answer(s) based on question type
+    if question_type == "single_choice":
+        # single_choice: exactly 1 correct answer via correct_answer_index
+        if correct_index is None:
+            errors.append(
+                ValidationError("correct_answer_index", "Missing correct_answer_index for single_choice")
+            )
+        elif not isinstance(correct_index, int):
+            errors.append(
+                ValidationError("correct_answer_index", f"correct_answer_index must be int, got {type(correct_index)}")
+            )
+        elif correct_index < 0 or correct_index >= len(options):
+            errors.append(
+                ValidationError("correct_answer_index", f"correct_answer_index {correct_index} out of range [0, {len(options)-1}]")
+            )
+    elif question_type == "multiple_choice":
+        # multiple_choice: at least 1 correct answer
+        # Can use either correct_answer_indices (list) or correct_answer_index (single)
+        if correct_indices is not None:
+            # Using list format
+            if not isinstance(correct_indices, list):
+                errors.append(
+                    ValidationError("correct_answer_indices", f"correct_answer_indices must be list, got {type(correct_indices)}")
+                )
+            elif len(correct_indices) < 1:
+                errors.append(
+                    ValidationError("correct_answer_indices", "multiple_choice must have at least 1 correct answer")
+                )
+            else:
+                # Validate each index
+                for idx in correct_indices:
+                    if not isinstance(idx, int) or idx < 0 or idx >= len(options):
+                        errors.append(
+                            ValidationError("correct_answer_indices", f"Invalid index {idx} in correct_answer_indices")
+                        )
+                        break
+        elif correct_index is not None:
+            # Fallback to single index format (at least 1 satisfied)
+            if not isinstance(correct_index, int):
+                errors.append(
+                    ValidationError("correct_answer_index", f"correct_answer_index must be int, got {type(correct_index)}")
+                )
+            elif correct_index < 0 or correct_index >= len(options):
+                errors.append(
+                    ValidationError("correct_answer_index", f"correct_answer_index {correct_index} out of range [0, {len(options)-1}]")
+                )
+        else:
+            errors.append(
+                ValidationError("correct_answer", "multiple_choice must have correct_answer_index or correct_answer_indices")
+            )
 
     # Check option quality
     for i, opt in enumerate(options):
@@ -193,23 +232,17 @@ def _validate_open_question(question: Dict[str, Any]) -> ValidationResult:
     errors = []
     warnings = []
 
-    expected_answer = question.get("expected_answer")
-    explanation = question.get("explanation")
+    # Accept either expected_answer or explanation as the answer field
+    expected_answer = question.get("expected_answer") or question.get("explanation")
 
-    # Should have expected_answer
+    # Should have some form of answer
     if not expected_answer:
         warnings.append(
-            ValidationError("expected_answer", "Missing expected_answer for open question", "warning")
+            ValidationError("expected_answer", "Missing expected_answer/explanation for open question", "warning")
         )
     elif len(str(expected_answer).strip()) < 2:
-        errors.append(
-            ValidationError("expected_answer", "expected_answer too short")
-        )
-
-    # Should have explanation
-    if not explanation:
         warnings.append(
-            ValidationError("explanation", "Missing explanation for open question", "warning")
+            ValidationError("expected_answer", "expected_answer too short", "warning")
         )
 
     return ValidationResult(
@@ -393,3 +426,30 @@ def validate_batch_questions(
             failures.append((i, result))
 
     return valid, failures
+
+
+def validate_single_question(
+    question: Dict[str, Any],
+    existing_texts: Optional[Set[str]] = None,
+) -> Tuple[bool, str]:
+    """
+    Validate a single question, returning (is_valid, reason).
+
+    Args:
+        question: Question dict to validate
+        existing_texts: Set of existing question texts for dedup
+
+    Returns:
+        Tuple of (is_valid, failure_reason or empty string)
+    """
+    if not question:
+        return False, "Empty question"
+
+    result = validate_question_format(question, existing_texts)
+
+    if result.is_valid:
+        return True, ""
+    else:
+        # Combine all error messages
+        reasons = [e.message for e in result.errors]
+        return False, "; ".join(reasons)

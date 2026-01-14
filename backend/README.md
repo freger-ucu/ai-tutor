@@ -191,10 +191,27 @@ langgraph dev
 |-------|-------------|
 | notes | Generate lesson notes with prerequisite-aware recap |
 | solver | Solve questions using RAG |
-| test_gen | Generate test questions |
+| test_gen | Generate validated test questions with planning-based parallel architecture |
 | check_answer | Evaluate student answers |
 | feedback | Generate test feedback |
 | recommendation | Generate teaching recommendations |
+
+### Test Gen Graph Input
+
+The test_gen graph uses a planning-based architecture with 7 nodes:
+1. **retrieve_context** - Get base topic context from RAG
+2. **plan_test** - LLM plans test structure (concepts, question specs)
+3. **retrieve_concepts** - Parallel RAG retrieval for each concept
+4. **batch_generate** - Parallel question generation (10 concurrent)
+5. **batch_validate** - CPU + LLM validation (format checks, then content validation)
+6. **prepare_retry** - Queue failed specs for retry (max 2 iterations)
+7. **finalize** - Log stats and return validated questions
+
+Input fields:
+- `subject`: Subject name (`Алгебра`, `Українська мова`, `Історія України`)
+- `grade`: Grade level (`8` or `9`)
+- `topic_definition`: Topic for the test
+- `easy_count`, `medium_count`, `hard_count`: Number of questions per difficulty
 
 ### Notes Graph Input
 

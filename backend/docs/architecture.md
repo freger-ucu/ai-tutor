@@ -69,23 +69,26 @@ graph TB
 
 ### Test Generation Flow (EP4)
 
-Generates 30 validated test questions using batch generation with quality validation.
+Generates validated test questions using a planning-based parallel architecture. An LLM first plans the test structure (concepts to cover, question specs), then questions are generated and validated in parallel with automatic retry for failures.
 
 ```mermaid
 graph LR
-    A[retrieve_context] --> B[init_batches]
-    B --> C[generate_batches]
-    C --> D[validate_samples]
-    D --> E{Check Retry}
-    E -->|"retry needed"| F[prepare_retry]
-    F --> C
-    E -->|"all valid"| G[finalize]
-    G --> H((END))
+    A[retrieve_context] --> B[plan_test]
+    B --> C[retrieve_concepts]
+    C --> D[batch_generate]
+    D --> E[batch_validate]
+    E --> F[prepare_retry]
+    F --> G{has pending?}
+    G -->|yes| D
+    G -->|no| H[finalize]
+    H --> I((END))
 
     style A fill:#e1f5fe
-    style C fill:#fff3e0
-    style D fill:#f3e5f5
-    style G fill:#e8f5e9
+    style B fill:#fff9c4
+    style C fill:#e1f5fe
+    style D fill:#fff3e0
+    style E fill:#f3e5f5
+    style H fill:#e8f5e9
 ```
 
 **State:** `TestGenState`
@@ -95,24 +98,49 @@ graph LR
 | subject | string | Subject name |
 | grade | int | Grade level (8-9) |
 | topic_definition | string | Topic to generate questions for |
-| easy_batch | BatchState | Easy difficulty questions |
-| medium_batch | BatchState | Medium difficulty questions |
-| hard_batch | BatchState | Hard difficulty questions |
-| questions | list | Final validated questions |
+| easy_count, medium_count, hard_count | int | Requested question counts |
+| rag_context | string | Base topic context from RAG |
+| test_plan | TestPlan | LLM-generated test structure |
+| concepts | list[str] | Key concepts identified by planner |
+| concept_contexts | dict | Per-concept RAG contexts |
+| pending_specs | list[QuestionSpec] | Queue of specs to generate |
+| validated_questions | list | Final validated questions |
+| failed_specs | list | Specs that failed validation |
+| retry_count | int | Current retry iteration (max 2) |
 
 **Flow Details:**
 
-1. **retrieve_context**: RAG retrieval for topic content (top_k=4, max_chars=6000)
-2. **init_batches**: Initialize 3 batch states (easy/medium/hard)
-3. **generate_batches**: Parallel LLM generation for all 3 batches (10 questions each)
-4. **validate_samples**:
-   - CPU validation: format, structure, duplicates
-   - LLM validation: 3 random MC questions per batch via solver
-   - Pass threshold: ≥2 of 3 must pass
-5. **check_retry**: If any batch invalid and attempts < 2, retry
-6. **finalize**: Collect all valid questions
+1. **retrieve_context**: RAG retrieval for base topic content (top_k=4, max_chars=6000)
 
-**LLM Calls:** ~12 (3 generation + 9 validation)
+2. **plan_test**: Single LLM call to design entire test structure
+   - Identifies 3-5 key concepts to cover
+   - Creates question specs with difficulty, type, concept, and focus
+   - Smart distribution of question types based on difficulty
+
+3. **retrieve_concepts**: Parallel RAG retrieval for each concept (5 concurrent)
+   - Gets targeted context for each concept
+   - More efficient than per-question retrieval
+
+4. **batch_generate**: Parallel question generation (10 concurrent LLM calls)
+   - Each spec gets concept-specific context
+   - Normalizes output format (handles old/new answer formats)
+   - Temperature 0.7 for creative diversity
+
+5. **batch_validate**: Two-phase validation
+   - **CPU Phase** (instant): Format checks, deduplication, field validation
+   - **LLM Phase** (parallel):
+     - MC questions: Support Scoring V3 (checks each option against context)
+     - Open questions: Fresh RAG retrieval + answerability check
+
+6. **prepare_retry**: Queue failed specs for retry (max 2 iterations)
+
+7. **finalize**: Log statistics and return validated questions
+
+**Concurrency Limits:**
+- RAG retrieval: 5 concurrent
+- LLM calls: 10 concurrent
+
+**LLM Calls:** ~1 + 2N (1 planning + N generation + N validation, where N = total questions)
 
 ---
 

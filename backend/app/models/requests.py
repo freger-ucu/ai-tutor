@@ -49,6 +49,9 @@ class GenerateTestRequest(BaseModel):
     teacher_id: int
     subject: str
     topic_definition: str = Field(..., description="Topic description text")
+    easy_count: int = Field(default=1, ge=0, le=20, description="Number of easy questions")
+    medium_count: int = Field(default=1, ge=0, le=20, description="Number of medium questions")
+    hard_count: int = Field(default=1, ge=0, le=20, description="Number of hard questions")
 
 
 class StudentDetailsRequest(BaseModel):

@@ -561,14 +561,23 @@ async def generate_test_endpoint(
     """
     EP4: Generate a pool of test questions using agentic workflow.
 
-    Uses generate-then-validate approach:
-    1. Each question is generated individually
-    2. Each question is validated by a checker LLM
-    3. Invalid questions are retried or downgraded in difficulty
+    Uses per-question generation and validation:
+    1. Prepares queue of questions to generate (with random MC/open type)
+    2. Each question is generated individually
+    3. Each MC question is validated by solver
+    4. Open questions validated by answerability check
 
-    Generates diverse questions (multiple choice and open) at various difficulty levels.
+    Configurable question counts: easy_count, medium_count, hard_count.
+    Default: 1 easy, 1 medium, 1 hard = 3 questions.
     """
     data_loader = get_data_loader()
+
+    logger.info(f"EP4 received: easy_count={request.easy_count}, medium_count={request.medium_count}, hard_count={request.hard_count}")
+
+    # Validate that at least one question is requested
+    total_count = request.easy_count + request.medium_count + request.hard_count
+    if total_count == 0:
+        raise HTTPException(status_code=400, detail="At least one question must be requested")
 
     # Determine grade from class
     class_info = data_loader.get_class_info(request.class_id)
@@ -585,11 +594,17 @@ async def generate_test_endpoint(
         subject=request.subject,
         grade=grade,
         topic_definition=request.topic_definition,
-        num_questions=30,
-        max_retries=2,
+        easy_count=request.easy_count,
+        medium_count=request.medium_count,
+        hard_count=request.hard_count,
     )
 
-    logger.info(f"Test generation stats: {stats}")
+    logger.info(
+        f"Test generation complete: {stats.total_questions} questions "
+        f"(easy={stats.easy_count}, medium={stats.medium_count}, hard={stats.hard_count}, "
+        f"single_choice={stats.single_choice_count}, multiple_choice={stats.multiple_choice_count}, open={stats.open_count}), "
+        f"LLM calls={stats.total_llm_calls}"
+    )
 
     # Convert raw questions to Question objects
     questions = []
@@ -598,7 +613,7 @@ async def generate_test_endpoint(
             # Map type string to QuestionType enum
             q_type_str = q.get("type", "open").lower()
             if q_type_str == "multiple_choice":
-                q_type = QuestionType.SINGLE_CHOICE  # Standard MC = single choice
+                q_type = QuestionType.MULTIPLE_CHOICE
             elif q_type_str == "single_choice":
                 q_type = QuestionType.SINGLE_CHOICE
             else:
@@ -614,11 +629,17 @@ async def generate_test_endpoint(
             # Build answer options for multiple choice
             answer_options = None
             if q_type != QuestionType.OPEN and q.get("options"):
-                correct_answer = q.get("correct_answer", "").upper()
+                # Support both new format (correct_answer_index: int) and old format (correct_answer: letter)
+                correct_index = q.get("correct_answer_index")
+                if correct_index is None:
+                    # Fallback to old letter format
+                    correct_letter = q.get("correct_answer", "").upper()
+                    letter_to_index = {"A": 0, "B": 1, "C": 2, "D": 3}
+                    correct_index = letter_to_index.get(correct_letter, -1)
+
                 answer_options = []
                 for i, opt in enumerate(q.get("options", [])):
-                    letter = chr(65 + i)  # A, B, C, D
-                    is_correct = (letter == correct_answer)
+                    is_correct = (i == correct_index)
                     answer_options.append(AnswerOption(answer=opt, correct=is_correct))
 
             question = Question(
