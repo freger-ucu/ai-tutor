@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { teachers } from "../data/teachers";
 import AddMaterialsCard from "../components/AddMaterialsCard";
 import Card from "../components/Card";
@@ -31,6 +31,7 @@ const courseLabels: Record<string, string> = {
 
 const TeacherTopic = () => {
   const { id, courseId, classId, topicId } = useParams();
+  const navigate = useNavigate();
   const teacher = useMemo(
     () => teachers.find((item) => item.id === id),
     [id]
@@ -51,6 +52,7 @@ const TeacherTopic = () => {
   const [testName, setTestName] = useState("");
   const [isGeneratingMaterial, setIsGeneratingMaterial] = useState(false);
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
+  const [materialError, setMaterialError] = useState<string | null>(null);
   const decodedClassId = classId ? Number(decodeURIComponent(classId)) : null;
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
@@ -121,16 +123,6 @@ const TeacherTopic = () => {
     } else {
       setActiveModal(null);
     }
-  };
-
-  const buildFallbackNote = (topicDefinition: string) => {
-    const fallbackTitle =
-      topicDefinition.trim() || decodedTopic || "Конспект";
-    return {
-      title: `Конспект. ${fallbackTitle}`,
-      contents: topicDefinition.trim() || `Матеріали для теми: ${fallbackTitle}`,
-      teacher_notes: "Створено локально (без відповіді сервера).",
-    };
   };
 
   const buildFallbackTest = (topicDefinition: string) => {
@@ -264,7 +256,10 @@ const TeacherTopic = () => {
                 className="mt-4"
                 title="Додайте навчальні матеріали"
                 buttonLabel="Згенерувати конспект"
-                onClick={() => setActiveModal("material")}
+                onClick={() => {
+                  setMaterialError(null);
+                  setActiveModal("material");
+                }}
               />
             </section>
             <section>
@@ -308,81 +303,88 @@ const TeacherTopic = () => {
         size="xl"
         title="Опишіть тему"
       >
-        <GenerateModalContent
-          placeholder="Детально опишіть тему"
-          value={materialName}
-          onChange={setMaterialName}
-          primaryLabel="Згенерувати"
-          onSecondaryClick={() => handleOpenAudience("material")}
-          onPrimaryClick={async () => {
-            if (!materialName.trim() || isGeneratingMaterial) {
-              return;
-            }
-            setIsGeneratingMaterial(true);
-            try {
-              const topicDefinition = materialName.trim();
-              const response =
-                audienceSelection?.students?.length
-                  ? await generateNotesIndividual({
-                      class_id: apiClassId,
-                      teacher_id: apiTeacherId,
-                      subject: subjectName,
-                      student_list: audienceSelection.students,
-                      topic_definition: topicDefinition,
-                    })
-                  : await generateNotesByLevel({
-                      class_id: apiClassId,
-                      teacher_id: apiTeacherId,
-                      subject: subjectName,
-                      level_list:
-                        audienceSelection?.levels?.length
-                          ? audienceSelection.levels
-                          : ["weak", "medium", "strong"],
-                      topic_definition: topicDefinition,
-                    });
+        <div className="space-y-4">
+          {materialError && (
+            <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
+              {materialError}
+            </div>
+          )}
+          <GenerateModalContent
+            placeholder="Детально опишіть тему"
+            value={materialName}
+            onChange={(value) => {
+              setMaterialName(value);
+              if (materialError) {
+                setMaterialError(null);
+              }
+            }}
+            primaryLabel={isGeneratingMaterial ? "Генерується..." : "Згенерувати"}
+            isLoading={isGeneratingMaterial}
+            onSecondaryClick={() => handleOpenAudience("material")}
+            onPrimaryClick={async () => {
+              if (!materialName.trim() || isGeneratingMaterial) {
+                return;
+              }
+              setMaterialError(null);
+              setIsGeneratingMaterial(true);
+              try {
+                const topicDefinition = materialName.trim();
+                const response =
+                  audienceSelection?.students?.length
+                    ? await generateNotesIndividual({
+                        class_id: apiClassId,
+                        teacher_id: apiTeacherId,
+                        subject: subjectName,
+                        student_list: audienceSelection.students,
+                        topic_definition: topicDefinition,
+                      })
+                    : await generateNotesByLevel({
+                        class_id: apiClassId,
+                        teacher_id: apiTeacherId,
+                        subject: subjectName,
+                        level_list:
+                          audienceSelection?.levels?.length
+                            ? audienceSelection.levels
+                            : ["weak", "medium", "strong"],
+                        topic_definition: topicDefinition,
+                      });
 
-              const payload = response?.title
-                ? response
-                : buildFallbackNote(topicDefinition);
+                if (!response?.title || !response?.contents) {
+                  throw new Error("Invalid notes response");
+                }
 
-              const created = addMaterial({
-                type: "note",
-                title: payload.title,
-                content: payload.contents,
-                teacherNotes: payload.teacher_notes,
-                teacherId: id,
-                courseId: decodedCourse,
-                className: classLabel,
-                topicName: decodedTopic,
-              });
-              setNotes((prev) => [
-                ...prev,
-                { id: created.id, title: created.title },
-              ]);
-            } catch (error) {
-              console.error(error);
-              const fallback = buildFallbackNote(materialName.trim());
-              const created = addMaterial({
-                type: "note",
-                title: fallback.title,
-                content: fallback.contents,
-                teacherNotes: fallback.teacher_notes,
-                teacherId: id,
-                courseId: decodedCourse,
-                className: classLabel,
-                topicName: decodedTopic,
-              });
-              setNotes((prev) => [
-                ...prev,
-                { id: created.id, title: created.title },
-              ]);
-            } finally {
-              setIsGeneratingMaterial(false);
-            }
-            setActiveModal(null);
-            setMaterialName("");
-          }}
-        />
+                const created = addMaterial({
+                  type: "note",
+                  title: response.title,
+                  content: response.contents,
+                  teacherNotes: response.teacher_notes,
+                  teacherId: id,
+                  courseId: decodedCourse,
+                  className: classLabel,
+                  topicName: decodedTopic,
+                });
+                setNotes((prev) => [
+                  ...prev,
+                  { id: created.id, title: created.title },
+                ]);
+                setActiveModal(null);
+                setMaterialName("");
+                if (id && courseId && classId && topicId) {
+                  navigate(
+                    `/teacher/${id}/note/${courseId}/${classId}/${topicId}/${created.id}`
+                  );
+                }
+              } catch (error) {
+                console.error(error);
+                setMaterialError(
+                  "Не вдалося згенерувати конспект. Спробуйте ще раз."
+                );
+              } finally {
+                setIsGeneratingMaterial(false);
+              }
+            }}
+          />
+        </div>
       </Modal>
       <Modal
         isOpen={isTestModalOpen}
@@ -394,7 +396,8 @@ const TeacherTopic = () => {
           placeholder="Детально опишіть тему"
           value={testName}
           onChange={setTestName}
-          primaryLabel="Згенерувати"
+          primaryLabel={isGeneratingTest ? "Генерується..." : "Згенерувати"}
+          isLoading={isGeneratingTest}
           onSecondaryClick={() => handleOpenAudience("test")}
           onPrimaryClick={async () => {
             if (!testName.trim() || isGeneratingTest) {
