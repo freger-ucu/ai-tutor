@@ -46,6 +46,12 @@ class ProblematicTopicResponse(BaseModel):
     average_score: float
 
 
+class SubjectLevelResponse(BaseModel):
+    """Subject with performance level."""
+    subject: str
+    level: Literal["weak", "medium", "strong"]
+
+
 # =============================================================================
 # TEACHER RESPONSES
 # =============================================================================
@@ -124,7 +130,9 @@ class StudentDataResponse(BaseModel):
     """EP8: Student's class and subjects."""
     class_id: int
     class_number: int
-    subjects: list[str] = Field(..., description="Subject names in Ukrainian")
+    subjects: list[SubjectLevelResponse] = Field(
+        ..., description="Subjects with performance levels"
+    )
 
 
 class OpenQuestionResultResponse(BaseModel):

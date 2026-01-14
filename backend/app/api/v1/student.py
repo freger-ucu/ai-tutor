@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from app.models.requests import TestFeedbackRequest, CheckOpenQuestionRequest
 from app.models.responses import (
     StudentDataResponse,
+    SubjectLevelResponse,
     TestFeedbackResponse,
     OpenQuestionResultResponse,
 )
@@ -27,7 +28,7 @@ router = APIRouter()
 @router.get("/{student_id}", response_model=StudentDataResponse)
 def get_student(student_id: int) -> StudentDataResponse:
     """
-    EP8: Get student's class and subjects.
+    EP8: Get student's class and subjects with performance levels.
 
     Returns 404 if student not found in data.
     """
@@ -41,10 +42,16 @@ def get_student(student_id: int) -> StudentDataResponse:
     if info is None:
         raise HTTPException(status_code=404, detail="Student not found")
 
+    # Get subjects with levels
+    subjects_with_levels = data_loader._get_student_subjects_with_levels(student_id)
+
     return StudentDataResponse(
         class_id=info["class_id"],
         class_number=info["class_number"],
-        subjects=info["subjects"]
+        subjects=[
+            SubjectLevelResponse(subject=s["subject"], level=s["level"])
+            for s in subjects_with_levels
+        ],
     )
 
 

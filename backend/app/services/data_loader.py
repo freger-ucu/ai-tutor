@@ -330,7 +330,7 @@ class BenchmarkDataLoader:
             "average_subject_grade": student_summary.average_subject_grade,
             "level": student_summary.subject_level,
             "skipped_lessons": skipped_lessons,
-            "problematic_topics": problematic_topics
+            "problematic_topics": problematic_topics,
         }
 
     def _get_skipped_lessons(
@@ -437,6 +437,50 @@ class BenchmarkDataLoader:
         """
         skipped = self._get_skipped_lessons(student_id, class_id, subject)
         return [lesson.topic for lesson in skipped if lesson.topic]
+
+    def _get_student_subjects_with_levels(
+        self,
+        student_id: int
+    ) -> list[dict]:
+        """
+        Get all subjects for a student with their performance levels.
+
+        Used for EP5 to show all subjects overview.
+
+        Returns:
+            List of dicts with 'subject' and 'level' keys
+        """
+        if self.scores_df is None or self.scores_df.empty:
+            return []
+
+        # Get all records for this student
+        student_data = self.scores_df[self.scores_df["student_id"] == student_id]
+        if student_data.empty:
+            return []
+
+        class_id = int(student_data["class_id"].iloc[0])
+        subjects = student_data["discipline_name"].unique()
+
+        result = []
+        for subject in sorted(subjects):
+            # Get teacher for this subject
+            subject_data = student_data[student_data["discipline_name"] == subject]
+            teacher_id = int(subject_data["teacher_id"].iloc[0])
+
+            # Get student's level from pre-computed index
+            class_students = self.get_class_students(class_id, subject, teacher_id)
+            student_summary = next(
+                (s for s in class_students if s.student_id == student_id),
+                None
+            )
+
+            if student_summary:
+                result.append({
+                    "subject": subject,
+                    "level": student_summary.subject_level.value,
+                })
+
+        return result
 
     # =========================================================================
     # EP6: Get Student Recommendation Data
