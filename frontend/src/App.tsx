@@ -7,8 +7,8 @@ import Student from "./pages/Student";
 import StudentTopic from "./pages/StudentTopic";
 import TeacherNote from "./pages/TeacherNote";
 import StudentTest from "./pages/StudentTest";
-import StudentNote from "./pages/StudentNote";
 import { Routes, Route } from "react-router-dom";
+import StudentNote from "./pages/StudentNote";
 
 
 function App() {
