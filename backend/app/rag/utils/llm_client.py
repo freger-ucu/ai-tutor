@@ -1,15 +1,20 @@
 """
 LLM Client for Agentic RAG - simplified wrapper for LapaLLM.
+
+Includes LangSmith tracing for observability.
 """
 
-import json
+import logging
 import re
-import asyncio
 from typing import Dict, Any, List, Optional
 
 from openai import AsyncOpenAI
 
 from ..config import get_settings
+from app.services.tracing import trace_llm, is_tracing_enabled
+from app.utils.json_parser import parse_json_response
+
+logger = logging.getLogger(__name__)
 
 
 class LLMClient:
@@ -28,6 +33,7 @@ class LLMClient:
         self.model = settings.model
         self.embedding_model = settings.embedding_model
 
+    @trace_llm(name="llm_generate")
     async def generate(
         self,
         prompt: str,
@@ -57,58 +63,11 @@ class LLMClient:
     ) -> Dict[str, Any]:
         """Generate JSON with robust parsing."""
         text = await self.generate(prompt, temperature, max_tokens=max_tokens, json_mode=True)
-        return self._parse_json(text)
-
-    def _parse_json(self, text: str) -> Dict[str, Any]:
-        """Parse JSON with multiple fallback strategies."""
-        # Strategy 1: Direct parse
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        # Strategy 2: Clean and parse
-        cleaned = self._clean_text(text)
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            pass
-
-        # Strategy 3: Extract from code blocks
-        if "```" in text:
-            try:
-                json_str = text.split("```")[1]
-                if json_str.startswith("json"):
-                    json_str = json_str[4:]
-                json_str = json_str.split("```")[0].strip()
-                return json.loads(json_str)
-            except (IndexError, json.JSONDecodeError):
-                pass
-
-        # Strategy 4: Regex extraction
-        patterns = [
-            r'\{[^{}]*"answer_index"\s*:\s*\d[^{}]*\}',
-            r'\{[^{}]*"decision"\s*:[^{}]*\}',
-            r'\{[^}]+\}',
-        ]
-
-        for pattern in patterns:
-            matches = re.findall(pattern, text, re.DOTALL)
-            for match in matches:
-                try:
-                    return json.loads(match)
-                except json.JSONDecodeError:
-                    continue
-
-        # Fallback
-        return {"error": "JSON parsing failed", "raw_text": text[:200]}
-
-    def _clean_text(self, text: str) -> str:
-        """Clean text for JSON parsing."""
-        # Remove problematic escapes
-        text = text.replace("\\n", " ").replace("\\t", " ").replace("\\r", " ")
-        text = re.sub(r'\\+(?=")', '', text)
-        return text
+        return parse_json_response(
+            text,
+            fallback={"error": "JSON parsing failed", "raw_text": text[:200]},
+            context="LLMClient"
+        )
 
     async def embed(self, text: str) -> List[float]:
         """Generate embedding vector."""

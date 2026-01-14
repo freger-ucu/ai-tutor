@@ -221,6 +221,7 @@ async def full_pipeline_endpoint(request: FullPipelineRequest) -> FullPipelineRe
     gap_warnings = data_loader.get_level_gap_warnings(
         class_id=request.class_id,
         subject=request.subject,
+        teacher_id=request.teacher_id,
         level="all",  # Get warnings for all levels
     )
 

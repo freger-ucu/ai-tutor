@@ -3,20 +3,32 @@ EP3: Notes Generator Prompts
 
 Generates lesson notes adapted to student levels or individual needs.
 This is a teacher-facing endpoint - notes should include teacher tips.
+
+Both EP3.1 (by level) and EP3.2 (by student list) converge to use
+aggregated statistics from aggregate_student_gaps().
 """
 
 from app.rag.prompts import ALGEBRA_RULES, UKRAINIAN_RULES, HISTORY_RULES
 
 
 NOTES_SYSTEM_PROMPT = """Ти — досвідчений український педагог-методист.
-Твоя роль — створювати якісні конспекти уроків для учнів 8-9 класів.
+Твоя роль — створювати навчальні матеріали для учнів 8-9 класів.
 
-Формат відповіді:
+ВАЖЛИВО про структуру відповіді:
+- CONTENTS: пиши БЕЗПОСЕРЕДНЬО для учнів, як підручник або конспект для самостійного читання
+- TEACHER_NOTES: окремо для вчителя - рекомендації, на що звернути увагу
+
+СТИЛЬ НАПИСАННЯ:
+- Пиши діловим, інформативним стилем — одразу до суті
+- НЕ використовуй привітання ("Привіт!", "Друзі!", "Сьогодні ми...")
+- НЕ використовуй емоційні вигуки чи розмовний стиль
+- Пиши як якісний підручник: чітко, структуровано, по факту
+
+Формат:
 - Пиши українською мовою
 - Використовуй зрозумілу для учнів мову
 - Структуруй матеріал логічно
-- Включай приклади та пояснення
-- Для вчителя: додавай нотатки про потенційні труднощі"""
+- Включай приклади та пояснення"""
 
 
 SUBJECT_RULES_MAP = {
@@ -29,20 +41,118 @@ SUBJECT_RULES_MAP = {
 LEVEL_DESCRIPTIONS = {
     "weak": {
         "name": "слабкий",
-        "style": "Спрощений матеріал з детальними поясненнями. Більше прикладів, менше теорії. Базові вправи.",
-        "focus": "Основні поняття без складних деталей. Покрокові інструкції."
+        "style": """СПРОЩЕНИЙ матеріал:
+- Прості речення, базова термінологія
+- Багато покрокових прикладів з детальними поясненнями кожного кроку
+- Тільки найважливіші формули (1-2)
+- Легкі задачі з однією дією""",
+        "focus": "Мета: учень зрозумів ОСНОВИ. Без складних випадків та винятків."
     },
     "medium": {
         "name": "середній",
-        "style": "Збалансований матеріал. Теорія + практика. Типові задачі з поясненнями.",
-        "focus": "Стандартний рівень складності. Підготовка до контрольних робіт."
+        "style": """СТАНДАРТНИЙ матеріал:
+- Повна теорія з прикладами
+- Типові задачі середньої складності
+- Основні формули та правила
+- Підготовка до контрольних робіт""",
+        "focus": "Мета: учень засвоїв тему на рівні шкільної програми."
     },
     "strong": {
         "name": "сильний",
-        "style": "Поглиблений матеріал. Складніші приклади. Олімпіадні завдання.",
-        "focus": "Розширення знань за межі програми. Творчі та нестандартні задачі."
+        "style": """ПОГЛИБЛЕНИЙ матеріал:
+- Розширена теорія, додаткові факти
+- Складні та нестандартні задачі
+- Олімпіадні завдання
+- Зв'язки з іншими темами""",
+        "focus": "Мета: учень готовий до олімпіад та поглибленого вивчення."
     },
 }
+
+
+def format_aggregated_gaps(
+    aggregated_gaps: dict,
+    total_students: int | None = None
+) -> str:
+    """
+    Format aggregated gap statistics into a readable section for the prompt.
+
+    Args:
+        aggregated_gaps: Dict from aggregate_student_gaps() with:
+            - weak_topics: Dict[topic, {count, avg_score, student_ids}]
+            - skipped_topics: Dict[topic, {count, student_ids}]
+            - total_students: int
+        total_students: Override for total (optional)
+
+    Returns:
+        Formatted string section for prompt
+    """
+    raw_weak = aggregated_gaps.get("weak_topics", {})
+    raw_skipped = aggregated_gaps.get("skipped_topics", {})
+    total = total_students or aggregated_gaps.get("total_students", 0)
+
+    # Clean topic names (strip whitespace/newlines) and filter empty
+    weak_topics = {
+        topic.strip(): info
+        for topic, info in raw_weak.items()
+        if topic.strip()
+    }
+    skipped_topics = {
+        topic.strip(): info
+        for topic, info in raw_skipped.items()
+        if topic.strip()
+    }
+
+    if not weak_topics and not skipped_topics:
+        return ""
+
+    lines = ["## ДАНІ ПРО УЧНІВ:"]
+    lines.append(f"Кількість учнів у вибірці: {total}")
+    lines.append("")
+
+    # Weak topics section
+    if weak_topics:
+        lines.append("### Теми з низькими оцінками (середній бал < 6):")
+        # Sort by count descending
+        sorted_weak = sorted(
+            weak_topics.items(),
+            key=lambda x: x[1]["count"],
+            reverse=True
+        )
+        for topic, info in sorted_weak[:10]:  # Top 10
+            count = info["count"]
+            avg = info.get("avg_score", 0)
+            pct = round(count / total * 100) if total > 0 else 0
+            lines.append(f"- **{topic}**: {count} учнів ({pct}%), середній бал: {avg}")
+        lines.append("")
+
+    # Skipped topics section
+    if skipped_topics:
+        lines.append("### Пропущені теми (уроки):")
+        # Sort by count descending
+        sorted_skipped = sorted(
+            skipped_topics.items(),
+            key=lambda x: x[1]["count"],
+            reverse=True
+        )
+        for topic, info in sorted_skipped[:10]:  # Top 10
+            count = info["count"]
+            pct = round(count / total * 100) if total > 0 else 0
+            lines.append(f"- **{topic}**: пропущено {count} учнями ({pct}%)")
+        lines.append("")
+
+    # Summary for teacher
+    lines.append("### Підсумок:")
+
+    if weak_topics:
+        top_weak = list(weak_topics.keys())[:3]
+        lines.append(f"- Низькі оцінки з: {', '.join(top_weak)}")
+
+    if skipped_topics:
+        top_skipped = list(skipped_topics.keys())[:3]
+        lines.append(f"- Пропущені уроки: {', '.join(top_skipped)}")
+
+    lines.append("")
+    return "\n".join(lines)
 
 
 def build_level_notes_prompt(
@@ -52,6 +162,7 @@ def build_level_notes_prompt(
     topic_definition: str,
     context: str,
     gap_warnings: list[str] | None = None,
+    aggregated_gaps: dict | None = None,
 ) -> str:
     """
     Build prompt for generating notes for a student level (EP3.1).
@@ -62,7 +173,8 @@ def build_level_notes_prompt(
         level: Student level (weak/medium/strong)
         topic_definition: Topic description
         context: Retrieved textbook context
-        gap_warnings: List of topics students at this level struggle with
+        gap_warnings: (deprecated) List of topics - use aggregated_gaps instead
+        aggregated_gaps: Dict from aggregate_student_gaps() with detailed statistics
 
     Returns:
         Formatted prompt string
@@ -70,8 +182,12 @@ def build_level_notes_prompt(
     subject_rules = SUBJECT_RULES_MAP.get(subject, "")
     level_info = LEVEL_DESCRIPTIONS.get(level, LEVEL_DESCRIPTIONS["medium"])
 
+    # Use new aggregated gaps format if available, fall back to old format
     gap_section = ""
-    if gap_warnings:
+    if aggregated_gaps:
+        gap_section = format_aggregated_gaps(aggregated_gaps)
+    elif gap_warnings:
+        # Backwards compatibility with old format
         gap_list = "\n".join(f"- {g}" for g in gap_warnings[:5])
         gap_section = f"""
 ## ПОПЕРЕДЖЕННЯ ПРО ПРОГАЛИНИ:
@@ -81,14 +197,15 @@ def build_level_notes_prompt(
 Зверни увагу на ці теми при поясненні нового матеріалу!
 """
 
-    prompt = f"""Створи конспект уроку для учнів {grade} класу з предмету "{subject}".
+    prompt = f"""Створи навчальний матеріал для учнів {grade} класу з предмету "{subject}".
 
-## ТЕМА УРОКУ:
+## ТЕМА:
 {topic_definition}
 
 ## РІВЕНЬ УЧНІВ: {level_info['name'].upper()}
 Стиль подачі: {level_info['style']}
 Фокус: {level_info['focus']}
+
 {gap_section}
 ## ПРАВИЛА ТА ФОРМУЛИ:
 {subject_rules if subject_rules else "Використовуй стандартні правила для цього предмету."}
@@ -96,28 +213,44 @@ def build_level_notes_prompt(
 ## МАТЕРІАЛ З ПІДРУЧНИКА:
 {context if context else "Контекст не знайдено. Використовуй власні знання."}
 
-## СТРУКТУРА КОНСПЕКТУ:
+## СТРУКТУРА ВІДПОВІДІ:
 
 ### TITLE:
-Придумай коротку назву уроку (1 рядок)
+Коротка назва теми (1 рядок)
 
-### CONTENTS (для учнів):
-1. **Вступ** - мотивація, чому це важливо
-2. **Основна частина** - теорія з прикладами
-3. **Практика** - 2-3 задачі з розв'язками
-4. **Висновки** - ключові тезиси для запам'ятовування
+### CONTENTS (навчальний матеріал ДЛЯ УЧНІВ):
+КРИТИЧНО ВАЖЛИВО — АДАПТУЙ ДО РІВНЯ "{level_info['name'].upper()}"!
+{level_info['style']}
+{level_info['focus']}
 
-### TEACHER_NOTES (для вчителя):
-- На що звернути увагу
-- Типові помилки учнів
-- Додаткові приклади (якщо потрібно)
-- Як перевірити розуміння
+Формат:
+- НЕ пиши "Привіт!", "Друзі!", "Сьогодні ми вивчимо..."
+- Починай одразу з матеріалу
+
+Структура:
+1. **Повторення** - коротко нагадати пов'язані поняття
+2. **Теорія** - означення, формули, правила (складність відповідно до рівня!)
+3. **Приклади** - задачі з розв'язками (складність відповідно до рівня!)
+4. **Підсумок** - ключові формули
+
+### TEACHER_NOTES (нотатки ДЛЯ ВЧИТЕЛЯ):
+ОБОВ'ЯЗКОВО почни з характеристики рівня учнів:
+- СЛАБКИЙ рівень → "Учні потребують додаткової підтримки. Поясніть матеріал повільно, з багатьма прикладами. Перевіряйте розуміння на кожному кроці."
+- СЕРЕДНІЙ рівень → "Учні мають базові знання. Можна рухатись у стандартному темпі з типовими завданнями."
+- СИЛЬНИЙ рівень → "Учні добре підготовлені. Можна давати складніші завдання, олімпіадні задачі, заохочувати самостійний пошук розв'язків."
+
+ЯКЩО є "ДАНІ ПРО УЧНІВ" вище:
+- "Пропущені уроки" → порадь коротко нагадати цю тему на початку
+- "Низькі оцінки" → порадь приділити більше часу на пояснення
+- Давай рекомендації ТІЛЬКИ для тем з даних, НЕ вигадуй проблем
+
+ЯКЩО даних ПРО ПРОГАЛИНИ немає — просто не згадуй про них (НЕ пиши "Специфічних рекомендацій немає").
 
 Відповідай у форматі JSON:
 {{
-    "title": "Назва уроку",
-    "contents": "Повний текст конспекту в Markdown",
-    "teacher_notes": "Нотатки для вчителя"
+    "title": "Назва теми",
+    "contents": "Навчальний матеріал (Markdown), АДАПТОВАНИЙ до рівня {level_info['name']}",
+    "teacher_notes": "Рекомендації на основі даних"
 }}"""
 
     return prompt
@@ -128,83 +261,117 @@ def build_individual_notes_prompt(
     grade: int,
     topic_definition: str,
     context: str,
-    student_info: dict,
+    student_info: dict | None = None,
+    aggregated_gaps: dict | None = None,
+    level: str | None = None,
 ) -> str:
     """
-    Build prompt for generating notes for a specific student (EP3.2).
+    Build prompt for generating notes for specific students (EP3.2).
 
     Args:
         subject: Subject name in Ukrainian
         grade: Grade level (8 or 9)
         topic_definition: Topic description
         context: Retrieved textbook context
-        student_info: Dict with student's level, problematic_topics, missed_topics
+        student_info: (deprecated) Dict with single student's data - use aggregated_gaps
+        aggregated_gaps: Dict from aggregate_student_gaps() with detailed statistics
+        level: Target level for the notes (weak/medium/strong)
 
     Returns:
         Formatted prompt string
     """
     subject_rules = SUBJECT_RULES_MAP.get(subject, "")
 
-    level = student_info.get("level", "medium")
+    # Determine level from parameters or student_info
+    if level is None and student_info:
+        level = student_info.get("level", "medium")
+    elif level is None:
+        level = "medium"
+
     level_info = LEVEL_DESCRIPTIONS.get(level, LEVEL_DESCRIPTIONS["medium"])
 
-    # Format student-specific info
-    problematic_topics = student_info.get("problematic_topics", [])
-    missed_topics = student_info.get("missed_topics", [])
+    # Use new aggregated gaps format if available
+    gap_section = ""
+    if aggregated_gaps:
+        gap_section = format_aggregated_gaps(aggregated_gaps)
+    elif student_info:
+        # Backwards compatibility with old format (single student)
+        problematic_topics = student_info.get("problematic_topics", [])
+        missed_topics = student_info.get("missed_topics", [])
 
-    problems_text = ""
-    if problematic_topics:
-        problems_list = "\n".join(f"- {t}" for t in problematic_topics[:5])
-        problems_text = f"""
+        problems_text = ""
+        if problematic_topics:
+            problems_list = "\n".join(f"- {t}" for t in problematic_topics[:5])
+            problems_text = f"""
 ## ПРОБЛЕМНІ ТЕМИ УЧНЯ:
 {problems_list}
 Зверни особливу увагу на ці теми при поясненні!
 """
 
-    missed_text = ""
-    if missed_topics:
-        missed_list = "\n".join(f"- {t}" for t in missed_topics[:5])
-        missed_text = f"""
+        missed_text = ""
+        if missed_topics:
+            missed_list = "\n".join(f"- {t}" for t in missed_topics[:5])
+            missed_text = f"""
 ## ПРОПУЩЕНІ ТЕМИ:
 {missed_list}
 Коротко нагадай ці теми, якщо вони пов'язані з новим матеріалом.
 """
+        gap_section = f"{problems_text}{missed_text}"
 
-    prompt = f"""Створи індивідуальний конспект уроку для учня {grade} класу з предмету "{subject}".
+    prompt = f"""Створи навчальний матеріал для учнів {grade} класу з предмету "{subject}".
 
-## ТЕМА УРОКУ:
+## ТЕМА:
 {topic_definition}
 
-## РІВЕНЬ УЧНЯ: {level_info['name'].upper()}
+## РІВЕНЬ УЧНІВ: {level_info['name'].upper()}
 Стиль подачі: {level_info['style']}
-{problems_text}{missed_text}
+Фокус: {level_info['focus']}
+
+{gap_section}
 ## ПРАВИЛА ТА ФОРМУЛИ:
 {subject_rules if subject_rules else "Використовуй стандартні правила для цього предмету."}
 
 ## МАТЕРІАЛ З ПІДРУЧНИКА:
 {context if context else "Контекст не знайдено. Використовуй власні знання."}
 
-## СТРУКТУРА КОНСПЕКТУ:
+## СТРУКТУРА ВІДПОВІДІ:
 
 ### TITLE:
-Придумай коротку назву (1 рядок)
+Коротка назва теми (1 рядок)
 
-### CONTENTS (адаптовано для цього учня):
-1. **Повторення** - нагадай пов'язані теми (особливо пропущені)
-2. **Новий матеріал** - з урахуванням рівня учня
-3. **Практика** - задачі відповідної складності
-4. **Самоперевірка** - як учень може перевірити себе
+### CONTENTS (навчальний матеріал ДЛЯ УЧНІВ):
+КРИТИЧНО ВАЖЛИВО — АДАПТУЙ ДО РІВНЯ "{level_info['name'].upper()}"!
+{level_info['style']}
+{level_info['focus']}
 
-### TEACHER_NOTES:
-- Рекомендації для роботи з цим учнем
-- На що звернути увагу
-- Як допомогти з проблемними темами
+Формат:
+- НЕ пиши "Привіт!", "Друзі!", "Сьогодні ми вивчимо..."
+- Починай одразу з матеріалу
+
+Структура:
+1. **Повторення** - коротко нагадати пов'язані поняття
+2. **Теорія** - означення, формули, правила (складність відповідно до рівня!)
+3. **Приклади** - задачі з розв'язками (складність відповідно до рівня!)
+4. **Підсумок** - ключові формули
+
+### TEACHER_NOTES (нотатки ДЛЯ ВЧИТЕЛЯ):
+ОБОВ'ЯЗКОВО почни з характеристики рівня учнів:
+- СЛАБКИЙ рівень → "Учні потребують додаткової підтримки. Поясніть матеріал повільно, з багатьма прикладами. Перевіряйте розуміння на кожному кроці."
+- СЕРЕДНІЙ рівень → "Учні мають базові знання. Можна рухатись у стандартному темпі з типовими завданнями."
+- СИЛЬНИЙ рівень → "Учні добре підготовлені. Можна давати складніші завдання, олімпіадні задачі, заохочувати самостійний пошук розв'язків."
+
+ЯКЩО є "ДАНІ ПРО УЧНІВ" вище:
+- "Пропущені уроки" → порадь коротко нагадати цю тему на початку
+- "Низькі оцінки" → порадь приділити більше часу на пояснення
+- Давай рекомендації ТІЛЬКИ для тем з даних, НЕ вигадуй проблем
+
+ЯКЩО даних ПРО ПРОГАЛИНИ немає — просто не згадуй про них (НЕ пиши "Специфічних рекомендацій немає").
 
 Відповідай у форматі JSON:
 {{
-    "title": "Назва уроку",
-    "contents": "Повний текст конспекту в Markdown",
-    "teacher_notes": "Нотатки для вчителя щодо цього учня"
+    "title": "Назва теми",
+    "contents": "Навчальний матеріал (Markdown), АДАПТОВАНИЙ до рівня {level_info['name']}",
+    "teacher_notes": "Рекомендації на основі даних"
 }}"""
 
     return prompt

@@ -74,6 +74,12 @@ class Settings(BaseSettings):
     phoenix_enabled: bool = False
     phoenix_endpoint: str = ""
 
+    # LangSmith
+    langsmith_enabled: bool = True
+    langsmith_api_key: str = ""
+    langsmith_project: str = "ai-tutor"
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

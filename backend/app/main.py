@@ -4,6 +4,14 @@ AI Tutor Backend - Main Application
 FastAPI application entry point.
 """
 
+# IMPORTANT: Set environment variables BEFORE any imports
+# This fixes the mutex.cc issue on macOS caused by grpcio fork safety
+import os as _os
+_os.environ.setdefault("GRPC_ENABLE_FORK_SUPPORT", "0")
+_os.environ.setdefault("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES")
+_os.environ.setdefault("GRPC_POLL_STRATEGY", "poll")
+_os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
+
 import logging
 from contextlib import asynccontextmanager
 

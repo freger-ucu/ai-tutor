@@ -13,7 +13,10 @@ V6 Changes:
 - Option-aware retrieval for Ukrainian language
 """
 
+import logging
 from typing import Dict, Any, List
+
+logger = logging.getLogger(__name__)
 
 from ..state import AgenticRAGState
 from ..config import get_settings
@@ -214,7 +217,7 @@ async def _retrieve_ukrainian(
         else:
             avg_score = 0.0
 
-        print(f"  [SmartRetrieve] Ukrainian V8: {len(passages)} passages from {extraction_metadata.get('pages_processed', 0)} pages ({rerank_method})")
+        logger.debug(f" Ukrainian V8: {len(passages)} passages from {extraction_metadata.get('pages_processed', 0)} pages ({rerank_method})")
 
     else:
         # Fallback: original format_context_with_topics
@@ -232,7 +235,7 @@ async def _retrieve_ukrainian(
             avg_score = 0.0
 
         topic_boosted_count = sum(1 for d in final_docs if d.get("topic_boosted", False))
-        print(f"  [SmartRetrieve] Ukrainian: {len(final_docs)} docs ({topic_boosted_count} topic-boosted, {rerank_method}, top_k={retrieval_top_k})")
+        logger.debug(f" Ukrainian: {len(final_docs)} docs ({topic_boosted_count} topic-boosted, {rerank_method}, top_k={retrieval_top_k})")
 
     return {
         "retrieved_docs": final_docs,

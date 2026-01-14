@@ -11,9 +11,12 @@ V9 Changes:
 - Configurable RRF weights per subject (BM25 vs Vector)
 """
 
+import logging
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Optional
+
+logger = logging.getLogger(__name__)
 
 # BM25 dependency
 try:
@@ -37,7 +40,7 @@ def _get_morph_analyzer():
             PYMORPHY_AVAILABLE = True
         except Exception as e:
             # pymorphy2 may have compatibility issues with newer Python
-            print(f"  [Warning] pymorphy2 not available: {e}")
+            logger.warning(f"pymorphy2 not available: {e}")
             MORPH_ANALYZER = None
             PYMORPHY_AVAILABLE = False
     return MORPH_ANALYZER
@@ -102,7 +105,7 @@ class HybridRetriever:
         candidates = self.data_loader.get_pages_for_subject_grade(subject, grade)
 
         if len(candidates) == 0:
-            print(f"  [Retriever] No pages found for {subject}, grade {grade}")
+            logger.warning(f"No pages found for {subject}, grade {grade}")
             return []
 
         # V9: Use dual-field BM25 for Ukrainian if enabled

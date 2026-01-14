@@ -9,22 +9,26 @@ Enhancements:
 - Algebra: Full worked examples (no truncation)
 """
 
+import logging
 from typing import Dict, Any
 
-from langgraph.graph import StateGraph, END
+logger = logging.getLogger(__name__)
 
 from .state import AgenticRAGState, SolverResult, create_initial_state
 from .nodes.smart_retrieve import smart_retrieve_node
 from .nodes.unified_generate import generate_answer_node
 
 
-def build_v4_graph() -> StateGraph:
+def build_v4_graph():
     """
     Build V4 Enhanced graph.
 
     Flow: smart_retrieve → generate_answer → END
     Total: 1 LLM call
     """
+    # Lazy import to avoid grpcio initialization at module load (macOS mutex.cc issue)
+    from langgraph.graph import StateGraph, END
+
     graph = StateGraph(AgenticRAGState)
 
     graph.add_node("smart_retrieve", smart_retrieve_node)
@@ -106,9 +110,7 @@ async def solve_question(
         )
 
     except Exception as e:
-        print(f"[ERROR] solve_question: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"solve_question failed: {e}", exc_info=True)
         return SolverResult(
             answer_index=0,
             confidence=0.1,

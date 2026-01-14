@@ -9,11 +9,14 @@ This approach is especially effective for Ukrainian language questions
 where RAG needs to find the correct grammatical concept/rule.
 """
 
+import logging
 import numpy as np
 from typing import List, Dict, Tuple, Optional
 
 from .rag_data_loader import get_data_loader
 from .llm_client import get_llm_client
+
+logger = logging.getLogger(__name__)
 
 
 class TopicRetriever:
@@ -51,7 +54,7 @@ class TopicRetriever:
         toc = self.data_loader.get_topics_for_subject_grade(subject, grade)
 
         if len(toc) == 0:
-            print(f"  [TopicRetriever] No topics found for {subject}, grade {grade}")
+            logger.debug(f" No topics found for {subject}, grade {grade}")
             return []
 
         # Get question embedding (API call, not LLM!)
@@ -75,7 +78,7 @@ class TopicRetriever:
                 valid_indices.append(i)
 
         if not topic_embeddings_list:
-            print(f"  [TopicRetriever] No topic embeddings available")
+            logger.debug(f" No topic embeddings available")
             return []
 
         topic_embeddings = np.vstack(topic_embeddings_list).astype(np.float32)
@@ -114,7 +117,7 @@ class TopicRetriever:
                 "topic_summary": str(row.get("topic_summary", ""))[:500],  # Truncate
             })
 
-        print(f"  [TopicRetriever] Found {len(results)} topics, top: {results[0]['topic_title'][:50] if results else 'none'}")
+        logger.debug(f" Found {len(results)} topics, top: {results[0]['topic_title'][:50] if results else 'none'}")
 
         return results
 
@@ -142,7 +145,7 @@ class TopicRetriever:
         pages = self.data_loader.get_pages_for_subject_grade(subject, grade)
 
         if len(pages) == 0:
-            print(f"  [TopicRetriever] No pages found for {subject}, grade {grade}")
+            logger.debug(f" No pages found for {subject}, grade {grade}")
             return []
 
         collected_pages = []
@@ -179,7 +182,7 @@ class TopicRetriever:
                     "subtopics": topic.get("subtopics", []),
                 })
 
-        print(f"  [TopicRetriever] Retrieved {len(collected_pages)} pages for {len(topics)} topics")
+        logger.debug(f" Retrieved {len(collected_pages)} pages for {len(topics)} topics")
 
         return collected_pages[:max_pages]
 

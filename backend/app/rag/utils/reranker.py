@@ -7,16 +7,32 @@ This significantly improves retrieval precision compared to bi-encoder only.
 Pipeline: Hybrid top-50 → Reranker top-6 → LLM
 """
 
+import logging
 from typing import List, Dict, Optional
 import numpy as np
 
-# Try to import sentence-transformers for cross-encoder
-try:
-    from sentence_transformers import CrossEncoder
-    CROSS_ENCODER_AVAILABLE = True
-except ImportError:
-    CROSS_ENCODER_AVAILABLE = False
-    CrossEncoder = None
+logger = logging.getLogger(__name__)
+
+# Lazy import of sentence-transformers to avoid grpcio crash on macOS
+# CrossEncoder is loaded on first use, not at module import
+_cross_encoder_checked = False
+_CrossEncoder = None
+CROSS_ENCODER_AVAILABLE = False  # Updated on first check
+
+
+def _get_cross_encoder_class():
+    """Lazy load CrossEncoder to avoid grpcio initialization at module load."""
+    global _cross_encoder_checked, _CrossEncoder, CROSS_ENCODER_AVAILABLE
+    if not _cross_encoder_checked:
+        _cross_encoder_checked = True
+        try:
+            from sentence_transformers import CrossEncoder
+            _CrossEncoder = CrossEncoder
+            CROSS_ENCODER_AVAILABLE = True
+        except ImportError:
+            _CrossEncoder = None
+            CROSS_ENCODER_AVAILABLE = False
+    return _CrossEncoder
 
 
 class Reranker:
@@ -40,15 +56,16 @@ class Reranker:
                 - "cross-encoder/ms-marco-MiniLM-L-6-v2" (fast, English)
         """
         self.model_name = model_name
-        self._model: Optional[CrossEncoder] = None
+        self._model = None
 
     @property
-    def model(self) -> Optional[CrossEncoder]:
+    def model(self):
         """Lazy-load the model."""
-        if self._model is None and CROSS_ENCODER_AVAILABLE:
-            print(f"  [Reranker] Loading {self.model_name}...")
+        CrossEncoder = _get_cross_encoder_class()
+        if self._model is None and CrossEncoder is not None:
+            logger.debug(f" Loading {self.model_name}...")
             self._model = CrossEncoder(self.model_name)
-            print(f"  [Reranker] Model loaded")
+            logger.debug(f" Model loaded")
         return self._model
 
     def rerank(
@@ -70,6 +87,7 @@ class Reranker:
         Returns:
             Top-k documents sorted by reranker score, with 'rerank_score' added
         """
+        _get_cross_encoder_class()  # Ensure availability is checked
         if not CROSS_ENCODER_AVAILABLE or not docs:
             # Fallback: return original order
             return docs[:top_k]
@@ -91,7 +109,7 @@ class Reranker:
         try:
             scores = model.predict(pairs, show_progress_bar=False)
         except Exception as e:
-            print(f"  [Reranker] Error: {e}")
+            logger.debug(f" Error: {e}")
             return docs[:top_k]
 
         # Add scores to docs
@@ -130,6 +148,7 @@ class Reranker:
         Returns:
             Reranked documents with combined scores
         """
+        _get_cross_encoder_class()  # Ensure availability is checked
         if not CROSS_ENCODER_AVAILABLE or not docs:
             return docs[:top_k]
 
@@ -143,7 +162,7 @@ class Reranker:
         try:
             q_scores = model.predict(q_pairs, show_progress_bar=False)
         except Exception as e:
-            print(f"  [Reranker] Error: {e}")
+            logger.debug(f" Error: {e}")
             return docs[:top_k]
 
         # Score with question + each option (take max)

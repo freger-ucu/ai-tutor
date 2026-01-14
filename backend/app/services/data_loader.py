@@ -1,14 +1,17 @@
 """
-Data Loader Service
+Benchmark Data Loader Service
 
-Loads and processes hackathon data files (benchmark_scores, benchmark_absences).
+Loads and processes benchmark data files (benchmark_scores, benchmark_absences).
 Provides fast lookups for teacher classes, student lists, student details, etc.
 """
 
+import logging
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from app.models.domain import (
     ClassInfo,
@@ -27,9 +30,9 @@ CURRENT_ACADEMIC_YEAR = "2025-2026"
 SUPPORTED_SUBJECTS = ["Алгебра", "Українська мова", "Історія України"]
 
 
-class DataLoader:
+class BenchmarkDataLoader:
     """
-    Loads parquet data and provides lookup methods for API endpoints.
+    Loads benchmark parquet data and provides lookup methods for API endpoints.
 
     Supports:
     - EP1: get_teacher_classes(teacher_id) - teacher's classes and subjects
@@ -60,7 +63,8 @@ class DataLoader:
 
         # Indexes for fast lookups
         self._teacher_classes: dict[int, list[ClassInfo]] = {}
-        self._class_students: dict[tuple[int, str], list[StudentSummary]] = {}
+        # Key: (class_id, subject, teacher_id) -> students taught by that teacher
+        self._class_students: dict[tuple[int, str, int], list[StudentSummary]] = {}
 
         # Load data on init
         self._load_data()
@@ -176,10 +180,11 @@ class DataLoader:
                 )
             )
 
-        # Build (class_id, subject) -> students index with levels
+        # Build (class_id, subject, teacher_id) -> students index with levels
+        # Each teacher may teach different students in the same class+subject
         self._class_students = {}
-        for (class_id, subject), group in self.scores_df.groupby(
-            ["class_id", "discipline_name"]
+        for (class_id, subject, teacher_id), group in self.scores_df.groupby(
+            ["class_id", "discipline_name", "teacher_id"]
         ):
             student_avgs = group.groupby("student_id")["score_numeric"].mean()
 
@@ -199,7 +204,7 @@ class DataLoader:
                 )
 
             students.sort(key=lambda s: s.student_id)
-            self._class_students[(int(class_id), subject)] = students
+            self._class_students[(int(class_id), subject, int(teacher_id))] = students
 
     # =========================================================================
     # EP1: Get Teacher Classes
@@ -225,20 +230,20 @@ class DataLoader:
         self,
         class_id: int,
         subject: str,
-        teacher_id: Optional[int] = None
+        teacher_id: int
     ) -> list[StudentSummary]:
         """
-        Get students in a class for a specific subject with their levels.
+        Get students in a class for a specific subject taught by a specific teacher.
 
         Args:
             class_id: Class identifier
             subject: Subject name (Ukrainian string)
-            teacher_id: Optional teacher filter (for validation, not used in lookup)
+            teacher_id: Teacher identifier (required - different teachers may have different students)
 
         Returns:
             List of StudentSummary with student_id, level, and average grade
         """
-        return self._class_students.get((class_id, subject), [])
+        return self._class_students.get((class_id, subject, teacher_id), [])
 
     # =========================================================================
     # EP3.1 Support: Get Students by Level
@@ -248,6 +253,7 @@ class DataLoader:
         self,
         class_id: int,
         subject: str,
+        teacher_id: int,
         levels: list[Level]
     ) -> list[StudentSummary]:
         """
@@ -256,12 +262,13 @@ class DataLoader:
         Args:
             class_id: Class identifier
             subject: Subject name
+            teacher_id: Teacher identifier
             levels: List of levels to filter by
 
         Returns:
             List of StudentSummary matching the specified levels
         """
-        all_students = self.get_class_students(class_id, subject)
+        all_students = self.get_class_students(class_id, subject, teacher_id)
         return [s for s in all_students if s.subject_level in levels]
 
     # =========================================================================
@@ -272,7 +279,8 @@ class DataLoader:
         self,
         student_id: int,
         class_id: int,
-        subject: str
+        subject: str,
+        teacher_id: int
     ) -> Optional[dict]:
         """
         Get detailed info about a student for a specific subject.
@@ -281,6 +289,7 @@ class DataLoader:
             student_id: Student identifier
             class_id: Class identifier
             subject: Subject name
+            teacher_id: Teacher identifier
 
         Returns:
             Dict with average_grade, level, skipped_lessons, problematic_topics
@@ -289,11 +298,12 @@ class DataLoader:
         if self.scores_df is None or self.scores_df.empty:
             return None
 
-        # Get student's scores for this class/subject
+        # Get student's scores for this class/subject/teacher
         mask = (
             (self.scores_df["student_id"] == student_id) &
             (self.scores_df["class_id"] == class_id) &
-            (self.scores_df["discipline_name"] == subject)
+            (self.scores_df["discipline_name"] == subject) &
+            (self.scores_df["teacher_id"] == teacher_id)
         )
         student_scores = self.scores_df[mask]
 
@@ -301,7 +311,7 @@ class DataLoader:
             return None
 
         # Get from pre-computed index
-        class_students = self.get_class_students(class_id, subject)
+        class_students = self.get_class_students(class_id, subject, teacher_id)
         student_summary = next(
             (s for s in class_students if s.student_id == student_id),
             None
@@ -473,8 +483,11 @@ class DataLoader:
         if student_scores.empty:
             return None
 
+        # Find the teacher for this student/class/subject
+        teacher_id = int(student_scores["teacher_id"].iloc[0])
+
         # Get from pre-computed index
-        class_students = self.get_class_students(class_id, subject)
+        class_students = self.get_class_students(class_id, subject, teacher_id)
         student_summary = next(
             (s for s in class_students if s.student_id == student_id),
             None
@@ -584,6 +597,7 @@ class DataLoader:
         self,
         class_id: int,
         subject: str,
+        teacher_id: int,
         level: str
     ) -> list[str]:
         """
@@ -594,6 +608,7 @@ class DataLoader:
         Args:
             class_id: Class ID
             subject: Subject name
+            teacher_id: Teacher ID
             level: Student level (weak/medium/strong)
 
         Returns:
@@ -602,8 +617,8 @@ class DataLoader:
         if self.scores_df is None or self.scores_df.empty:
             return []
 
-        # Get students in this class/subject at the specified level
-        students = self.get_class_students(class_id, subject)
+        # Get students in this class/subject/teacher at the specified level
+        students = self.get_class_students(class_id, subject, teacher_id)
         if not students:
             return []
 
@@ -614,11 +629,11 @@ class DataLoader:
 
         student_ids = [s.student_id for s in level_students]
 
-        # Get scores for these students
-        # Note: column is 'discipline_name' in scores_df
+        # Get scores for these students from this teacher
         mask = (
             (self.scores_df["class_id"] == class_id) &
             (self.scores_df["discipline_name"] == subject) &
+            (self.scores_df["teacher_id"] == teacher_id) &
             (self.scores_df["student_id"].isin(student_ids))
         )
         level_scores = self.scores_df[mask]
@@ -627,21 +642,150 @@ class DataLoader:
             return []
 
         # Find topics with low average scores (< 6)
-        # Note: column is 'score_numeric' in scores_df
         topic_scores = level_scores.groupby("topic_name")["score_numeric"].mean()
         problematic = topic_scores[topic_scores < 6].sort_values()
 
         # Return top 5 problematic topics
         return problematic.head(5).index.tolist()
 
+    # =========================================================================
+    # EP3 Aggregation: Aggregate Student Gaps for Notes Generation
+    # =========================================================================
+
+    def aggregate_student_gaps(
+        self,
+        student_ids: list[int],
+        class_id: int,
+        subject: str,
+        teacher_id: int
+    ) -> dict:
+        """
+        Aggregate gap statistics across a set of students.
+
+        Used for both EP3.1 (level-based) and EP3.2 (individual students)
+        to provide aggregated statistics for teacher notes.
+
+        Args:
+            student_ids: List of student IDs to aggregate
+            class_id: Class identifier
+            subject: Subject name
+            teacher_id: Teacher identifier
+
+        Returns:
+            Dict with:
+            - weak_topics: Dict[str, dict] with topic -> {count, avg_score, student_ids}
+            - skipped_topics: Dict[str, dict] with topic -> {count, student_ids}
+            - total_students: Total number of students analyzed
+        """
+        if not student_ids:
+            return {
+                "weak_topics": {},
+                "skipped_topics": {},
+                "total_students": 0
+            }
+
+        # --- Aggregate weak topics (low scores < 6) ---
+        weak_topics: dict[str, dict] = {}
+
+        if self.scores_df is not None and not self.scores_df.empty:
+            # Get scores for these students
+            mask = (
+                (self.scores_df["class_id"] == class_id) &
+                (self.scores_df["discipline_name"] == subject) &
+                (self.scores_df["teacher_id"] == teacher_id) &
+                (self.scores_df["student_id"].isin(student_ids))
+            )
+            student_scores = self.scores_df[mask]
+
+            if not student_scores.empty:
+                # For each student, find topics where they scored < 6
+                for student_id in student_ids:
+                    student_mask = student_scores["student_id"] == student_id
+                    student_data = student_scores[student_mask]
+
+                    if student_data.empty:
+                        continue
+
+                    # Calculate average per topic for this student
+                    topic_avgs = student_data.groupby("topic_name")["score_numeric"].mean()
+
+                    for topic, avg in topic_avgs.items():
+                        if avg < 6:  # Problematic topic
+                            topic_str = str(topic)
+                            if topic_str not in weak_topics:
+                                weak_topics[topic_str] = {
+                                    "count": 0,
+                                    "total_score": 0.0,
+                                    "student_ids": []
+                                }
+                            weak_topics[topic_str]["count"] += 1
+                            weak_topics[topic_str]["total_score"] += avg
+                            weak_topics[topic_str]["student_ids"].append(student_id)
+
+                # Calculate average score per topic
+                for topic in weak_topics:
+                    count = weak_topics[topic]["count"]
+                    total = weak_topics[topic]["total_score"]
+                    weak_topics[topic]["avg_score"] = round(total / count, 2) if count > 0 else 0.0
+                    del weak_topics[topic]["total_score"]  # Remove intermediate field
+
+                # Filter weak topics to only include those where 50%+ of students have it
+                total_students = len(student_ids)
+                if total_students > 0:
+                    weak_topics = {
+                        topic: info
+                        for topic, info in weak_topics.items()
+                        if info["count"] >= total_students * 0.5
+                    }
+
+        # --- Aggregate skipped topics ---
+        skipped_topics: dict[str, dict] = {}
+
+        if self.absences_df is not None and not self.absences_df.empty:
+            for student_id in student_ids:
+                skipped_lessons = self._get_skipped_lessons(student_id, class_id, subject)
+
+                for lesson in skipped_lessons:
+                    topic = lesson.topic
+                    if not topic:
+                        continue
+
+                    if topic not in skipped_topics:
+                        skipped_topics[topic] = {
+                            "count": 0,
+                            "student_ids": []
+                        }
+                    skipped_topics[topic]["count"] += 1
+                    skipped_topics[topic]["student_ids"].append(student_id)
+
+        # Filter skipped topics to only include those where 50%+ of students skipped
+        total_students = len(student_ids)
+        if total_students > 0:
+            skipped_topics = {
+                topic: info
+                for topic, info in skipped_topics.items()
+                if info["count"] >= total_students * 0.5
+            }
+
+        return {
+            "weak_topics": weak_topics,
+            "skipped_topics": skipped_topics,
+            "total_students": total_students
+        }
+
 
 # Singleton instance for app-wide use
-_data_loader: Optional[DataLoader] = None
+_benchmark_loader: Optional[BenchmarkDataLoader] = None
 
 
-def get_data_loader() -> DataLoader:
-    """Get or create the singleton DataLoader instance."""
-    global _data_loader
-    if _data_loader is None:
-        _data_loader = DataLoader()
-    return _data_loader
+def get_benchmark_loader() -> BenchmarkDataLoader:
+    """Get or create the singleton BenchmarkDataLoader instance."""
+    global _benchmark_loader
+    if _benchmark_loader is None:
+        _benchmark_loader = BenchmarkDataLoader()
+    return _benchmark_loader
+
+
+# Backwards-compatible aliases (deprecated)
+DataLoader = BenchmarkDataLoader
+get_data_loader = get_benchmark_loader

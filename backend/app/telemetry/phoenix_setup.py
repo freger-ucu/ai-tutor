@@ -5,6 +5,13 @@ Configures OpenTelemetry tracing with Phoenix for LLM observability.
 Enable via PHOENIX_ENABLED=true in .env
 """
 
+# Ensure GRPC env vars are set before any grpcio imports
+import os
+os.environ.setdefault("GRPC_ENABLE_FORK_SUPPORT", "0")
+os.environ.setdefault("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES")
+os.environ.setdefault("GRPC_POLL_STRATEGY", "poll")
+os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
+
 import logging
 from typing import Optional
 

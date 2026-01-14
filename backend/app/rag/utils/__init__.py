@@ -2,11 +2,12 @@
 
 from .hybrid_retriever import HybridRetriever
 from .llm_client import LLMClient, generate_json_safe
-from .rag_data_loader import DataLoader as RAGDataLoader
+from .rag_data_loader import TextbookDataLoader, get_textbook_loader
 
 __all__ = [
     "HybridRetriever",
     "LLMClient",
     "generate_json_safe",
-    "RAGDataLoader",
+    "TextbookDataLoader",
+    "get_textbook_loader",
 ]

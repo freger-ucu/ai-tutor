@@ -4,10 +4,13 @@ Teacher API Endpoints
 Implements EP1-EP7 per architecture.md contracts.
 """
 
+import json
+import logging
+import re
+
 from fastapi import APIRouter, HTTPException
 
-import json
-import re
+logger = logging.getLogger(__name__)
 
 from app.models.requests import (
     GetStudentListRequest,
@@ -29,6 +32,8 @@ from app.models.responses import (
     RecommendationResponse,
     SolverResponse,
     NotesResponse,
+    NotesStatistics,
+    TopicStatistic,
     TestResponse,
 )
 from app.models.domain import Question, AnswerOption
@@ -49,12 +54,90 @@ from app.prompts.notes_generator import (
     build_level_notes_prompt,
     build_individual_notes_prompt,
 )
-from app.prompts.test_generator import (
-    TEST_GENERATOR_SYSTEM_PROMPT,
-    build_test_generator_prompt,
-)
+
+# NOTE: generate_test_pool is imported lazily in generate_test_endpoint()
+# to avoid loading grpcio/langsmith at module import time (macOS mutex.cc issue)
 
 router = APIRouter()
+
+
+def _format_sources(references: list[dict]) -> list[str]:
+    """
+    Format RAG references into human-readable source strings.
+
+    Args:
+        references: List of dicts with 'book', 'section', 'topic', 'page'
+
+    Returns:
+        List of formatted source strings like "Істер, Розділ 2, с. 45"
+    """
+    sources = []
+    for ref in references:
+        book = ref.get("book", "")
+        section = ref.get("section", "")
+        page = ref.get("page", 0)
+
+        if book and section:
+            sources.append(f"{book}, {section}, с. {page}")
+        elif book:
+            sources.append(f"{book}, с. {page}")
+
+    return sources
+
+
+def _build_notes_statistics(aggregated_gaps: dict | None) -> NotesStatistics | None:
+    """
+    Convert aggregated_gaps dict to NotesStatistics model.
+
+    Args:
+        aggregated_gaps: Dict from aggregate_student_gaps()
+
+    Returns:
+        NotesStatistics model or None if no meaningful data
+    """
+    if not aggregated_gaps:
+        return None
+
+    raw_weak = aggregated_gaps.get("weak_topics", {})
+    raw_skipped = aggregated_gaps.get("skipped_topics", {})
+
+    # Return None if there's no actual data
+    if not raw_weak and not raw_skipped:
+        return None
+
+    weak_topics = []
+    for topic, info in raw_weak.items():
+        # Clean topic name (strip whitespace/newlines)
+        clean_topic = topic.strip()
+        if not clean_topic:
+            continue
+        weak_topics.append(TopicStatistic(
+            topic=clean_topic,
+            count=info.get("count", 0),
+            avg_score=info.get("avg_score")
+        ))
+
+    skipped_topics = []
+    for topic, info in raw_skipped.items():
+        # Clean topic name (strip whitespace/newlines)
+        clean_topic = topic.strip()
+        if not clean_topic:
+            continue
+        skipped_topics.append(TopicStatistic(
+            topic=clean_topic,
+            count=info.get("count", 0),
+            avg_score=None
+        ))
+
+    # Return None if after cleaning there's nothing
+    if not weak_topics and not skipped_topics:
+        return None
+
+    return NotesStatistics(
+        total_students=aggregated_gaps.get("total_students", 0),
+        weak_topics=weak_topics,
+        skipped_topics=skipped_topics
+    )
 
 
 def _parse_notes_json(response: str, topic_definition: str) -> dict:
@@ -264,7 +347,8 @@ def get_student_details(request: StudentDetailsRequest) -> StudentDetailsRespons
     details = data_loader.get_student_details(
         student_id=request.student_id,
         class_id=request.class_id,
-        subject=request.subject
+        subject=request.subject,
+        teacher_id=request.teacher_id
     )
 
     if details is None:
@@ -404,13 +488,22 @@ async def generate_level_notes(
     grade: int,
     level: str,
     topic_definition: str,
-    gap_warnings: list[str] | None = None
+    gap_warnings: list[str] | None = None,
+    aggregated_gaps: dict | None = None
 ) -> dict:
     """
     Generate notes for a student level using RAG + LLM.
 
+    Args:
+        subject: Subject name
+        grade: Grade level (8 or 9)
+        level: Student level (weak/medium/strong)
+        topic_definition: Topic description
+        gap_warnings: (deprecated) Simple list of topics
+        aggregated_gaps: Aggregated statistics from aggregate_student_gaps()
+
     Returns:
-        dict with 'title', 'contents', 'teacher_notes'
+        dict with 'title', 'contents', 'teacher_notes', 'references'
     """
     # RAG retrieval
     retriever = get_retriever()
@@ -420,17 +513,18 @@ async def generate_level_notes(
         grade=grade
     )
 
-    # Format context
-    context, _ = format_context(docs, max_chars=6000, subject=subject)
+    # Format context and get references
+    context, references = format_context(docs, max_chars=6000, subject=subject)
 
-    # Build prompt
+    # Build prompt with aggregated gaps
     prompt = build_level_notes_prompt(
         subject=subject,
         grade=grade,
         level=level,
         topic_definition=topic_definition,
         context=context,
-        gap_warnings=gap_warnings
+        gap_warnings=gap_warnings,
+        aggregated_gaps=aggregated_gaps
     )
 
     full_prompt = f"{NOTES_SYSTEM_PROMPT}\n\n{prompt}"
@@ -443,21 +537,33 @@ async def generate_level_notes(
         max_tokens=2500
     )
 
-    # Parse JSON response
-    return _parse_notes_json(response, topic_definition)
+    # Parse JSON response and add references
+    result = _parse_notes_json(response, topic_definition)
+    result["references"] = references
+    return result
 
 
 async def generate_individual_notes(
     subject: str,
     grade: int,
     topic_definition: str,
-    student_info: dict
+    student_info: dict | None = None,
+    aggregated_gaps: dict | None = None,
+    level: str | None = None
 ) -> dict:
     """
-    Generate notes for a specific student using RAG + LLM.
+    Generate notes for specific students using RAG + LLM.
+
+    Args:
+        subject: Subject name
+        grade: Grade level (8 or 9)
+        topic_definition: Topic description
+        student_info: (deprecated) Single student data - use aggregated_gaps
+        aggregated_gaps: Aggregated statistics from aggregate_student_gaps()
+        level: Target level for the notes
 
     Returns:
-        dict with 'title', 'contents', 'teacher_notes'
+        dict with 'title', 'contents', 'teacher_notes', 'references'
     """
     # RAG retrieval
     retriever = get_retriever()
@@ -467,16 +573,18 @@ async def generate_individual_notes(
         grade=grade
     )
 
-    # Format context
-    context, _ = format_context(docs, max_chars=6000, subject=subject)
+    # Format context and get references
+    context, references = format_context(docs, max_chars=6000, subject=subject)
 
-    # Build prompt
+    # Build prompt with aggregated gaps
     prompt = build_individual_notes_prompt(
         subject=subject,
         grade=grade,
         topic_definition=topic_definition,
         context=context,
-        student_info=student_info
+        student_info=student_info,
+        aggregated_gaps=aggregated_gaps,
+        level=level
     )
 
     full_prompt = f"{NOTES_SYSTEM_PROMPT}\n\n{prompt}"
@@ -489,11 +597,13 @@ async def generate_individual_notes(
         max_tokens=2500
     )
 
-    # Parse JSON response
-    return _parse_notes_json(response, topic_definition)
+    # Parse JSON response and add references
+    result = _parse_notes_json(response, topic_definition)
+    result["references"] = references
+    return result
 
 
-@router.post("/notes/by-level", response_model=NotesResponse)
+@router.post("/notes/by-level", response_model=NotesResponse, response_model_exclude_none=True)
 async def generate_notes_by_level(
     request: GenerateLevelNotesRequest
 ) -> NotesResponse:
@@ -501,6 +611,7 @@ async def generate_notes_by_level(
     EP3.1: Generate notes for students by level.
 
     Generates lesson notes adapted to specified student levels.
+    Uses aggregated statistics from all students at the specified level(s).
     """
     data_loader = get_data_loader()
 
@@ -512,43 +623,64 @@ async def generate_notes_by_level(
     grade = class_info["class_number"]
 
     # Get the first level (or combine if multiple)
-    # For simplicity, use the first level in the list
     if request.level_list:
         level = request.level_list[0].value
     else:
         level = "medium"
 
-    # Get gap warnings for this level (problematic topics)
-    gap_warnings = data_loader.get_level_gap_warnings(
+    # Get students at the specified level(s)
+    all_students = data_loader.get_class_students(
         class_id=request.class_id,
         subject=request.subject,
-        level=level
+        teacher_id=request.teacher_id
     )
 
-    # Generate notes
+    # Filter to students at specified levels
+    target_levels = {lv.value for lv in request.level_list} if request.level_list else {"medium"}
+    student_ids = [
+        s.student_id for s in all_students
+        if s.subject_level.value in target_levels
+    ]
+
+    # Aggregate gaps across all students at this level
+    aggregated_gaps = data_loader.aggregate_student_gaps(
+        student_ids=student_ids,
+        class_id=request.class_id,
+        subject=request.subject,
+        teacher_id=request.teacher_id
+    )
+
+    # Generate notes with aggregated statistics
     result = await generate_level_notes(
         subject=request.subject,
         grade=grade,
         level=level,
         topic_definition=request.topic_definition,
-        gap_warnings=gap_warnings
+        aggregated_gaps=aggregated_gaps
     )
+
+    # Format sources and statistics for response
+    sources = _format_sources(result.get("references", []))
+    statistics = _build_notes_statistics(aggregated_gaps)
 
     return NotesResponse(
         title=result["title"],
         contents=result["contents"],
-        teacher_notes=result["teacher_notes"]
+        teacher_notes=result["teacher_notes"],
+        sources=sources,
+        statistics=statistics
     )
 
 
-@router.post("/notes/individual", response_model=NotesResponse)
+@router.post("/notes/individual", response_model=NotesResponse, response_model_exclude_none=True)
 async def generate_notes_individual(
     request: GenerateIndividualNotesRequest
 ) -> NotesResponse:
     """
     EP3.2: Generate notes for specific students.
 
-    Generates individualized lesson notes for selected students.
+    Generates lesson notes for selected students, using aggregated statistics
+    from all students in the list (not just the first one).
     """
     data_loader = get_data_loader()
 
@@ -559,41 +691,60 @@ async def generate_notes_individual(
 
     grade = class_info["class_number"]
 
-    # For simplicity, use the first student's info
     if not request.student_list:
         raise HTTPException(status_code=400, detail="student_list cannot be empty")
 
-    student_id = request.student_list[0]
-
-    # Get student's details
-    student_details = data_loader.get_student_details(
-        student_id=student_id,
+    # Validate that at least one student exists
+    all_students = data_loader.get_class_students(
         class_id=request.class_id,
-        subject=request.subject
+        subject=request.subject,
+        teacher_id=request.teacher_id
+    )
+    student_id_set = {s.student_id for s in all_students}
+    valid_students = [sid for sid in request.student_list if sid in student_id_set]
+
+    if not valid_students:
+        raise HTTPException(status_code=404, detail="No valid students found in class")
+
+    # Determine the predominant level for the group
+    student_levels = [
+        s.subject_level.value for s in all_students
+        if s.student_id in valid_students
+    ]
+    if student_levels:
+        # Use the most common level
+        from collections import Counter
+        level = Counter(student_levels).most_common(1)[0][0]
+    else:
+        level = "medium"
+
+    # Aggregate gaps across ALL students in the list
+    aggregated_gaps = data_loader.aggregate_student_gaps(
+        student_ids=valid_students,
+        class_id=request.class_id,
+        subject=request.subject,
+        teacher_id=request.teacher_id
     )
 
-    if student_details is None:
-        raise HTTPException(status_code=404, detail="Student not found in class")
-
-    # Build student info for prompt
-    student_info = {
-        "level": student_details["level"].value,
-        "problematic_topics": [t.topic for t in student_details["problematic_topics"]],
-        "missed_topics": [l.topic for l in student_details["skipped_lessons"]]
-    }
-
-    # Generate notes
+    # Generate notes with aggregated statistics
     result = await generate_individual_notes(
         subject=request.subject,
         grade=grade,
         topic_definition=request.topic_definition,
-        student_info=student_info
+        aggregated_gaps=aggregated_gaps,
+        level=level
     )
+
+    # Format sources and statistics for response
+    sources = _format_sources(result.get("references", []))
+    statistics = _build_notes_statistics(aggregated_gaps)
 
     return NotesResponse(
         title=result["title"],
         contents=result["contents"],
-        teacher_notes=result["teacher_notes"]
+        teacher_notes=result["teacher_notes"],
+        sources=sources,
+        statistics=statistics
     )
 
 
@@ -602,83 +753,17 @@ async def generate_notes_individual(
 # =============================================================================
 
 
-async def generate_test_pool(
-    subject: str,
-    grade: int,
-    topic_definition: str,
-    num_questions: int = 30
-) -> dict:
-    """
-    Generate a pool of test questions using RAG + LLM.
-
-    Returns:
-        dict with 'title' and 'questions' list
-    """
-    # RAG retrieval
-    retriever = get_retriever()
-    docs = await retriever.retrieve(
-        query=topic_definition,
-        subject=subject,
-        grade=grade
-    )
-
-    # Format context
-    context, _ = format_context(docs, max_chars=6000, subject=subject)
-
-    # Build prompt
-    prompt = build_test_generator_prompt(
-        subject=subject,
-        grade=grade,
-        topic_definition=topic_definition,
-        context=context,
-        num_questions=num_questions
-    )
-
-    full_prompt = f"{TEST_GENERATOR_SYSTEM_PROMPT}\n\n{prompt}"
-
-    # Generate test questions
-    llm_client = get_llm_client()
-    response = await llm_client.generate(
-        prompt=full_prompt,
-        temperature=0.8,  # Higher temperature for variety
-        max_tokens=4000   # Allow long responses for many questions
-    )
-
-    # Parse JSON response
-    try:
-        response_text = response.strip()
-        if "{" in response_text and "}" in response_text:
-            start = response_text.find("{")
-            end = response_text.rfind("}") + 1
-            json_str = response_text[start:end]
-            result = json.loads(json_str)
-        else:
-            result = {
-                "title": f"Тест: {topic_definition[:50]}",
-                "questions": []
-            }
-
-        # Ensure required fields
-        if "title" not in result:
-            result["title"] = f"Тест: {topic_definition[:50]}"
-        if "questions" not in result:
-            result["questions"] = []
-
-        return result
-
-    except json.JSONDecodeError:
-        return {
-            "title": f"Тест: {topic_definition[:50]}",
-            "questions": []
-        }
-
-
-@router.post("/test", response_model=TestResponse)
+@router.post("/test/generate", response_model=TestResponse)
 async def generate_test_endpoint(
     request: GenerateTestRequest
 ) -> TestResponse:
     """
-    EP4: Generate a pool of test questions.
+    EP4: Generate a pool of test questions using agentic workflow.
+
+    Uses generate-then-validate approach:
+    1. Each question is generated individually
+    2. Each question is validated by a checker LLM
+    3. Invalid questions are retried or downgraded in difficulty
 
     Generates diverse questions (multiple choice and open) at various difficulty levels.
     """
@@ -691,16 +776,23 @@ async def generate_test_endpoint(
 
     grade = class_info["class_number"]
 
-    # Generate test pool
-    result = await generate_test_pool(
+    # Lazy import to avoid grpcio/langsmith loading at startup (macOS mutex.cc issue)
+    from app.graph.flows.test_gen import generate_test_pool
+
+    # Generate validated test pool using LangGraph workflow
+    validated_questions, stats = await generate_test_pool(
         subject=request.subject,
         grade=grade,
-        topic_definition=request.topic_definition
+        topic_definition=request.topic_definition,
+        num_questions=30,
+        max_retries=2,
     )
+
+    logger.info(f"Test generation stats: {stats}")
 
     # Convert raw questions to Question objects
     questions = []
-    for q in result.get("questions", []):
+    for q in validated_questions:
         try:
             # Map type string to QuestionType enum
             q_type_str = q.get("type", "open").lower()
@@ -713,7 +805,10 @@ async def generate_test_endpoint(
 
             # Map difficulty string to Difficulty enum
             diff_str = q.get("difficulty", "medium").lower()
-            difficulty = Difficulty(diff_str) if diff_str in ["easy", "medium", "hard"] else Difficulty.MEDIUM
+            # Map "hard" to "difficult" for enum compatibility
+            if diff_str == "hard":
+                diff_str = "difficult"
+            difficulty = Difficulty(diff_str) if diff_str in ["easy", "medium", "difficult"] else Difficulty.MEDIUM
 
             # Build answer options for multiple choice
             answer_options = None
@@ -735,11 +830,13 @@ async def generate_test_endpoint(
                 subtopics=[]
             )
             questions.append(question)
-        except Exception:
-            # Skip malformed questions
+        except Exception as e:
+            # Log and skip malformed questions
+            logger.warning(f"Failed to parse question: {e}", exc_info=True)
+            logger.debug(f"Question data: {q}")
             continue
 
     return TestResponse(
-        title=result.get("title", f"Тест: {request.topic_definition[:50]}"),
+        title=f"Тест: {request.topic_definition[:50]}",
         questions=questions
     )

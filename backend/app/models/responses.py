@@ -64,11 +64,39 @@ class StudentListResponse(BaseModel):
     students: list[StudentSummaryResponse]
 
 
+class TopicStatistic(BaseModel):
+    """Statistics for a single topic."""
+    topic: str
+    count: int = Field(..., description="Number of students affected")
+    avg_score: float | None = Field(None, description="Average score (for weak topics)")
+
+
+class NotesStatistics(BaseModel):
+    """Aggregated statistics for notes generation."""
+    total_students: int = Field(..., description="Total students in the group")
+    weak_topics: list[TopicStatistic] = Field(
+        default_factory=list,
+        description="Topics with low scores (< 6)"
+    )
+    skipped_topics: list[TopicStatistic] = Field(
+        default_factory=list,
+        description="Topics students missed"
+    )
+
+
 class NotesResponse(BaseModel):
     """EP3.1 & EP3.2: Generated notes."""
     title: str
     contents: str = Field(..., description="Lesson content in markdown")
     teacher_notes: str = Field(..., description="Tips for the teacher")
+    sources: list[str] = Field(
+        default_factory=list,
+        description="RAG sources used (e.g., 'Істер, Розділ 2, с. 45')"
+    )
+    statistics: NotesStatistics | None = Field(
+        None,
+        description="Aggregated student gap statistics"
+    )
 
 
 class TestResponse(BaseModel):

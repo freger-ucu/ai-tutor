@@ -2,14 +2,17 @@
 Data loader for Agentic RAG - loads textbook pages, TOC, and questions.
 """
 
+import logging
 import pandas as pd
 from pathlib import Path
 from typing import Optional
 
 from ..config import get_settings, get_data_path, get_embedding_path
 
+logger = logging.getLogger(__name__)
 
-class DataLoader:
+
+class TextbookDataLoader:
     """
     Load and cache data from parquet files.
 
@@ -39,7 +42,7 @@ class DataLoader:
         if self._benchmark_questions is None:
             path = get_data_path("lms_questions_dev.parquet")
             self._benchmark_questions = pd.read_parquet(path)
-            print(f"[DataLoader] Loaded {len(self._benchmark_questions)} benchmark questions")
+            logger.info(f" Loaded {len(self._benchmark_questions)} benchmark questions")
         return self._benchmark_questions
 
     def load_textbook_pages(self) -> pd.DataFrame:
@@ -65,10 +68,10 @@ class DataLoader:
                     all_pages["page_metadata"].apply(has_theory)
                 ]
                 self._textbook_pages = theory_pages
-                print(f"[DataLoader] Loaded {len(theory_pages)}/{len(all_pages)} theory pages (filtered)")
+                logger.info(f" Loaded {len(theory_pages)}/{len(all_pages)} theory pages (filtered)")
             else:
                 self._textbook_pages = all_pages
-                print(f"[DataLoader] Loaded {len(all_pages)} textbook pages (all)")
+                logger.info(f" Loaded {len(all_pages)} textbook pages (all)")
 
         return self._textbook_pages
 
@@ -77,7 +80,7 @@ class DataLoader:
         if self._toc is None:
             path = get_embedding_path("toc_for_hackathon_with_subtopics.parquet")
             self._toc = pd.read_parquet(path)
-            print(f"[DataLoader] Loaded {len(self._toc)} TOC topics")
+            logger.info(f" Loaded {len(self._toc)} TOC topics")
         return self._toc
 
     def get_pages_for_subject_grade(
@@ -121,23 +124,29 @@ class DataLoader:
 
 
 # Global instance
-_data_loader: Optional[DataLoader] = None
+_textbook_loader: Optional[TextbookDataLoader] = None
 
 
-def get_data_loader(theory_only: bool = True) -> DataLoader:
+def get_textbook_loader(theory_only: bool = True) -> TextbookDataLoader:
     """
-    Get singleton data loader instance.
+    Get singleton textbook data loader instance.
 
     Args:
         theory_only: Filter to theory pages only (default True for better RAG)
     """
-    global _data_loader
-    if _data_loader is None:
-        _data_loader = DataLoader(theory_only=theory_only)
-    return _data_loader
+    global _textbook_loader
+    if _textbook_loader is None:
+        _textbook_loader = TextbookDataLoader(theory_only=theory_only)
+    return _textbook_loader
 
 
-def reset_data_loader():
-    """Reset data loader (for testing with different settings)."""
-    global _data_loader
-    _data_loader = None
+def reset_textbook_loader():
+    """Reset textbook data loader (for testing with different settings)."""
+    global _textbook_loader
+    _textbook_loader = None
+
+
+# Backwards-compatible aliases (deprecated)
+DataLoader = TextbookDataLoader
+get_data_loader = get_textbook_loader
+reset_data_loader = reset_textbook_loader

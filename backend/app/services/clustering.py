@@ -54,7 +54,8 @@ class ClusteringService:
     def cluster_students(
         self,
         class_id: int,
-        subject: str
+        subject: str,
+        teacher_id: int
     ) -> list[StudentCluster]:
         """
         Cluster all students in a class by performance.
@@ -62,11 +63,12 @@ class ClusteringService:
         Args:
             class_id: Class identifier
             subject: Subject name
+            teacher_id: Teacher identifier
 
         Returns:
             List of 3 StudentCluster objects (weak, medium, strong)
         """
-        students = self.data_loader.get_class_students(class_id, subject)
+        students = self.data_loader.get_class_students(class_id, subject, teacher_id)
 
         # Initialize empty clusters
         clusters = {
@@ -128,7 +130,8 @@ class ClusteringService:
         self,
         student_id: int,
         class_id: int,
-        subject: str
+        subject: str,
+        teacher_id: int
     ) -> Optional[ClusterAssignment]:
         """
         Get cluster assignment for a specific student.
@@ -137,11 +140,12 @@ class ClusteringService:
             student_id: Student identifier
             class_id: Class identifier
             subject: Subject name
+            teacher_id: Teacher identifier
 
         Returns:
             ClusterAssignment or None if student not found
         """
-        students = self.data_loader.get_class_students(class_id, subject)
+        students = self.data_loader.get_class_students(class_id, subject, teacher_id)
 
         if not students:
             return None
@@ -171,7 +175,8 @@ class ClusteringService:
     def get_cluster_distribution(
         self,
         class_id: int,
-        subject: str
+        subject: str,
+        teacher_id: int
     ) -> ClusterDistribution:
         """
         Get distribution of students across clusters.
@@ -179,11 +184,12 @@ class ClusteringService:
         Args:
             class_id: Class identifier
             subject: Subject name
+            teacher_id: Teacher identifier
 
         Returns:
             ClusterDistribution with counts and percentages
         """
-        clusters = self.cluster_students(class_id, subject)
+        clusters = self.cluster_students(class_id, subject, teacher_id)
 
         weak = next(c for c in clusters if c.cluster_type == Level.WEAK)
         medium = next(c for c in clusters if c.cluster_type == Level.MEDIUM)
