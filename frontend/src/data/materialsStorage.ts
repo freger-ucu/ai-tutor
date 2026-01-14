@@ -4,6 +4,9 @@ export interface MaterialItem {
   id: string;
   type: MaterialType;
   title: string;
+  content?: string;
+  teacherNotes?: string;
+  questions?: unknown;
   teacherId?: string;
   courseId?: string;
   className?: string;

@@ -10,12 +10,21 @@ import PillButton from "../components/PillButton";
 import SelectStudentsModal from "../components/SelectStudentsModal";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { addMaterial, getMaterials } from "../data/materialsStorage";
+import {
+  generateNotesByLevel,
+  generateNotesIndividual,
+  generateTest,
+} from "../api/teacher";
+import { classIdToLabel } from "../data/classUtils";
+import { toNumericId } from "../api/idUtils";
 
 const courseLabels: Record<string, string> = {
   "algebra-8": "Алгебра",
+  "geometry-8": "Геометрія",
   "history-8": "Історія України",
   "ukr-lang-8": "Українська мова",
   "algebra-9": "Алгебра",
+  "geometry-9": "Геометрія",
   "history-9": "Історія України",
   "ukr-lang-9": "Українська мова",
 };
@@ -33,15 +42,34 @@ const TeacherTopic = () => {
   const [previousModal, setPreviousModal] = useState<"material" | "test" | null>(
     null
   );
+  const [audienceSelection, setAudienceSelection] = useState<{
+    levels: ("weak" | "medium" | "strong")[];
+    students: number[];
+  } | null>(null);
 
   const [materialName, setMaterialName] = useState("");
   const [testName, setTestName] = useState("");
-  const decodedClass = classId ? decodeURIComponent(classId) : "";
+  const [isGeneratingMaterial, setIsGeneratingMaterial] = useState(false);
+  const [isGeneratingTest, setIsGeneratingTest] = useState(false);
+  const decodedClassId = classId ? Number(decodeURIComponent(classId)) : null;
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
-  const courseLabel = courseId ? courseLabels[courseId] ?? courseId : "";
+  const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
+  const courseLabel = decodedCourse
+    ? courseLabels[decodedCourse] ?? decodedCourse
+    : "";
+  const subjectName = courseLabel || decodedCourse;
+  const backToClassHref = id ? `/teacher/${id}` : "/";
+  const classNumberMatch = decodedCourse.match(/(\d+)$/);
+  const classNumber = classNumberMatch ? Number(classNumberMatch[1]) : null;
+  const classLabel =
+    decodedClassId && classNumber
+      ? classIdToLabel(classNumber, decodedClassId)
+      : "";
+  const apiTeacherId = teacher?.apiId ?? toNumericId(id) ?? 0;
+  const apiClassId = decodedClassId ?? 0;
 
-  const [notes, setNotes] = useState<string[]>([]);
-  const [tests, setTests] = useState<string[]>([]);
+  const [notes, setNotes] = useState<{ id: string; title: string }[]>([]);
+  const [tests, setTests] = useState<{ id: string; title: string }[]>([]);
   const isMaterialModalOpen = activeModal === "material";
   const isTestModalOpen = activeModal === "test";
   const isAudienceModalOpen = activeModal === "audience";
@@ -49,21 +77,21 @@ const TeacherTopic = () => {
   useEffect(() => {
     const storedNotes = getMaterials({
       teacherId: id,
-      courseId,
-      className: decodedClass,
+      courseId: decodedCourse,
+      className: classLabel,
       topicName: decodedTopic,
       type: "note",
-    }).map((item) => item.title);
+    }).map((item) => ({ id: item.id, title: item.title }));
     const storedTests = getMaterials({
       teacherId: id,
-      courseId,
-      className: decodedClass,
+      courseId: decodedCourse,
+      className: classLabel,
       topicName: decodedTopic,
       type: "test",
-    }).map((item) => item.title);
+    }).map((item) => ({ id: item.id, title: item.title }));
     setNotes(storedNotes);
     setTests(storedTests);
-  }, [id, courseId, decodedClass, decodedTopic]);
+  }, [id, decodedCourse, classLabel, decodedTopic]);
 
   const handleOpenAudience = (from: "material" | "test") => {
     setPreviousModal(from);
@@ -74,14 +102,60 @@ const TeacherTopic = () => {
     levels: string[];
     students: string[];
   }) => {
-    // In a real app, we would store this selection to use when generating
-    console.log("Audience selected:", selection);
+    const levelMap: Record<string, "weak" | "medium" | "strong"> = {
+      Високий: "strong",
+      Середній: "medium",
+      Низький: "weak",
+    };
+    setAudienceSelection({
+      levels: selection.levels
+        .map((level) => levelMap[level])
+        .filter(Boolean),
+      students: selection.students
+        .map((studentId) => toNumericId(studentId))
+        .filter((value): value is number => value !== null),
+    });
     // Return to the previous modal
     if (previousModal) {
       setActiveModal(previousModal);
     } else {
       setActiveModal(null);
     }
+  };
+
+  const buildFallbackNote = (topicDefinition: string) => {
+    const fallbackTitle =
+      topicDefinition.trim() || decodedTopic || "Конспект";
+    return {
+      title: `Конспект. ${fallbackTitle}`,
+      contents: topicDefinition.trim() || `Матеріали для теми: ${fallbackTitle}`,
+      teacher_notes: "Створено локально (без відповіді сервера).",
+    };
+  };
+
+  const buildFallbackTest = (topicDefinition: string) => {
+    const fallbackTitle =
+      topicDefinition.trim() || decodedTopic || "Тест";
+    return {
+      title: `Тест. ${fallbackTitle}`,
+      questions: [
+        {
+          question: `Запитання за темою: ${fallbackTitle}`,
+          type: "single_choice",
+          difficulty: "easy",
+          answer_options: [
+            { answer: "Правильна відповідь", correct: true },
+            { answer: "Варіант 2", correct: false },
+            { answer: "Варіант 3", correct: false },
+            { answer: "Варіант 4", correct: false },
+          ],
+          explanation:
+            "Це демо-запитання. Додайте серверну генерацію для реальних тестів.",
+          topic: fallbackTitle,
+          subtopics: [],
+        },
+      ],
+    };
   };
 
   return (
@@ -92,27 +166,41 @@ const TeacherTopic = () => {
             teacher ? `${teacher.firstName} ${teacher.lastName}` : "Вчитель"
           }
           activeItem="materials"
+          afterPrimaryNav={
+            <Link
+              to={backToClassHref}
+              className="flex w-full items-start justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 hover:bg-slate-100"
+            >
+              <span className="mt-0.5 inline-block h-5 w-5 rounded-md bg-slate-200" />
+              <span>Назад до класу</span>
+            </Link>
+          }
         >
           <div className="space-y-4">
             {notes.map((item) => (
-              <div key={item} className="flex items-center gap-3">
-                <span className="inline-block h-5 w-5 rounded-md bg-slate-200" />
-                <span>{item}</span>
-              </div>
+              <Link
+                key={item.id}
+                to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
+                className="flex w-full items-start justify-start gap-3 rounded-2xl px-4 py-3 text-slate-700 hover:bg-slate-100"
+              >
+                <span className="mt-0.5 inline-block h-5 w-5 rounded-md bg-slate-200" />
+                <span>{item.title}</span>
+              </Link>
             ))}
             {tests.map((item) => (
-              <div key={item} className="flex items-center gap-3">
-                <span className="inline-block h-5 w-5 rounded-md bg-slate-200" />
-                <span>{item}</span>
-              </div>
+              <Link
+                key={item.id}
+                to={`/teacher/${id}/test/${item.id}`}
+                className="flex w-full items-start justify-start gap-3 rounded-2xl px-4 py-3 text-slate-700 hover:bg-slate-100"
+              >
+                <span className="mt-0.5 inline-block h-5 w-5 rounded-md bg-slate-200" />
+                <span>{item.title}</span>
+              </Link>
             ))}
           </div>
         </TeacherSidebar>
         <main className="flex-1 px-10 py-10">
-          <div className="text-sm font-medium text-white/80">
-            {courseLabel} / {decodedClass} / {decodedTopic}
-          </div>
-          <Panel className="mt-6">
+          <Panel>
             <div className="grid gap-6 md:grid-cols-[1fr_1fr_1fr_auto]">
               <div>
                 <div className="text-xs font-semibold uppercase text-slate-400">
@@ -127,7 +215,7 @@ const TeacherTopic = () => {
                   Клас
                 </div>
                 <div className="mt-2 text-sm font-semibold text-slate-900">
-                  {decodedClass}
+                  {classLabel}
                 </div>
               </div>
               <div>
@@ -156,15 +244,17 @@ const TeacherTopic = () => {
               <div className="mt-4 space-y-4">
                 {notes.map((item) => (
                   <Card
-                    key={item}
+                    key={item.id}
                     className="flex items-center justify-between px-5 py-4"
                   >
                     <div className="flex items-center gap-3 text-sm font-semibold text-slate-900">
                       <span className="inline-block h-6 w-6 rounded-md bg-slate-200" />
-                      {item}
+                      {item.title}
                     </div>
                     {/* Link to Note View */}
-                    <Link to={`/teacher/${id}/note/${courseId}/${topicId}/${encodeURIComponent(item)}`}>
+                    <Link
+                      to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
+                    >
                         <PillButton label="Переглянути" />
                     </Link>
                   </Card>
@@ -180,13 +270,13 @@ const TeacherTopic = () => {
             <section>
               <h2 className="text-xl font-semibold text-white">Тести</h2>
               <div className="mt-4 space-y-4">
-                {tests.map((item, index) => (
-                  <Card key={item} className="px-5 py-5">
+                {tests.map((item) => (
+                  <Card key={item.id} className="px-5 py-5">
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-semibold text-slate-900">
-                        {item}
+                        {item.title}
                       </div>
-                      <Link to={`/teacher/${id}/test/test-${index + 1}`}>
+                      <Link to={`/teacher/${id}/test/${item.id}`}>
                         <PillButton label="Переглянути" />
                       </Link>
                     </div>
@@ -224,19 +314,71 @@ const TeacherTopic = () => {
           onChange={setMaterialName}
           primaryLabel="Згенерувати"
           onSecondaryClick={() => handleOpenAudience("material")}
-          onPrimaryClick={() => {
-            if (!materialName.trim()) {
+          onPrimaryClick={async () => {
+            if (!materialName.trim() || isGeneratingMaterial) {
               return;
             }
-            const created = addMaterial({
-              type: "note",
-              title: materialName.trim(),
-              teacherId: id,
-              courseId,
-              className: decodedClass,
-              topicName: decodedTopic,
-            });
-            setNotes((prev) => [...prev, created.title]);
+            setIsGeneratingMaterial(true);
+            try {
+              const topicDefinition = materialName.trim();
+              const response =
+                audienceSelection?.students?.length
+                  ? await generateNotesIndividual({
+                      class_id: apiClassId,
+                      teacher_id: apiTeacherId,
+                      subject: subjectName,
+                      student_list: audienceSelection.students,
+                      topic_definition: topicDefinition,
+                    })
+                  : await generateNotesByLevel({
+                      class_id: apiClassId,
+                      teacher_id: apiTeacherId,
+                      subject: subjectName,
+                      level_list:
+                        audienceSelection?.levels?.length
+                          ? audienceSelection.levels
+                          : ["weak", "medium", "strong"],
+                      topic_definition: topicDefinition,
+                    });
+
+              const payload = response?.title
+                ? response
+                : buildFallbackNote(topicDefinition);
+
+              const created = addMaterial({
+                type: "note",
+                title: payload.title,
+                content: payload.contents,
+                teacherNotes: payload.teacher_notes,
+                teacherId: id,
+                courseId: decodedCourse,
+                className: classLabel,
+                topicName: decodedTopic,
+              });
+              setNotes((prev) => [
+                ...prev,
+                { id: created.id, title: created.title },
+              ]);
+            } catch (error) {
+              console.error(error);
+              const fallback = buildFallbackNote(materialName.trim());
+              const created = addMaterial({
+                type: "note",
+                title: fallback.title,
+                content: fallback.contents,
+                teacherNotes: fallback.teacher_notes,
+                teacherId: id,
+                courseId: decodedCourse,
+                className: classLabel,
+                topicName: decodedTopic,
+              });
+              setNotes((prev) => [
+                ...prev,
+                { id: created.id, title: created.title },
+              ]);
+            } finally {
+              setIsGeneratingMaterial(false);
+            }
             setActiveModal(null);
             setMaterialName("");
           }}
@@ -254,19 +396,54 @@ const TeacherTopic = () => {
           onChange={setTestName}
           primaryLabel="Згенерувати"
           onSecondaryClick={() => handleOpenAudience("test")}
-          onPrimaryClick={() => {
-            if (!testName.trim()) {
+          onPrimaryClick={async () => {
+            if (!testName.trim() || isGeneratingTest) {
               return;
             }
-            const created = addMaterial({
-              type: "test",
-              title: testName.trim(),
-              teacherId: id,
-              courseId,
-              className: decodedClass,
-              topicName: decodedTopic,
-            });
-            setTests((prev) => [...prev, created.title]);
+            setIsGeneratingTest(true);
+            try {
+              const topicDefinition = testName.trim();
+              const response = await generateTest({
+                class_id: apiClassId,
+                teacher_id: apiTeacherId,
+                subject: subjectName,
+                topic_definition: topicDefinition,
+              });
+              const payload = response?.title
+                ? response
+                : buildFallbackTest(topicDefinition);
+              const created = addMaterial({
+                type: "test",
+                title: payload.title,
+                questions: payload.questions,
+                teacherId: id,
+                courseId: decodedCourse,
+                className: classLabel,
+                topicName: decodedTopic,
+              });
+              setTests((prev) => [
+                ...prev,
+                { id: created.id, title: created.title },
+              ]);
+            } catch (error) {
+              console.error(error);
+              const fallback = buildFallbackTest(testName.trim());
+              const created = addMaterial({
+                type: "test",
+                title: fallback.title,
+                questions: fallback.questions,
+                teacherId: id,
+                courseId: decodedCourse,
+                className: classLabel,
+                topicName: decodedTopic,
+              });
+              setTests((prev) => [
+                ...prev,
+                { id: created.id, title: created.title },
+              ]);
+            } finally {
+              setIsGeneratingTest(false);
+            }
             setActiveModal(null);
             setTestName("");
           }}
@@ -279,7 +456,7 @@ const TeacherTopic = () => {
           if (previousModal) setActiveModal(previousModal);
           else setActiveModal(null);
         }}
-        classNameFilter={decodedClass}
+        classNameFilter={classLabel}
         onSave={handleAudienceSave}
       />
     </div>
