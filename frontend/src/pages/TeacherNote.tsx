@@ -1,13 +1,29 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import TeacherSidebar from "../components/TeacherSidebar";
 import SelectStudentsModal from "../components/SelectStudentsModal";
-import { getMaterials } from "../data/materialsStorage";
+import { getMaterials, updateMaterial } from "../data/materialsStorage";
 import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
 import { getTeacherStudents } from "../api/teacher";
+
+const PencilIcon = () => (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
 
 const escapeHtml = (value: string) =>
   value
@@ -107,6 +123,10 @@ const TeacherNote = () => {
   const { teacherId, courseId, classId, topicId, noteId } = useParams();
 
   const [isAudienceModalOpen, setIsAudienceModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [editTeacherNotes, setEditTeacherNotes] = useState("");
+  const [materialVersion, setMaterialVersion] = useState(0);
 
   const decodedClassId = classId ? Number(decodeURIComponent(classId)) : null;
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
@@ -131,7 +151,7 @@ const TeacherNote = () => {
   const [classStudents, setClassStudents] = useState<number[]>([]);
   const noteMaterial = useMemo(
     () => getMaterials({ type: "note" }).find((item) => item.id === noteId),
-    [noteId]
+    [noteId, materialVersion]
   );
   const noteTitle = noteMaterial?.title ?? decodedNote;
   const teacherNotes = noteMaterial?.teacherNotes?.trim();
@@ -206,6 +226,28 @@ const TeacherNote = () => {
       });
   }, [apiTeacherId, apiClassId, subjectName]);
 
+  const handleStartEdit = useCallback(() => {
+    setEditContent(noteMaterial?.content ?? "");
+    setEditTeacherNotes(noteMaterial?.teacherNotes ?? "");
+    setIsEditMode(true);
+  }, [noteMaterial?.content, noteMaterial?.teacherNotes]);
+
+  const handleCancelEdit = useCallback(() => {
+    setIsEditMode(false);
+    setEditContent("");
+    setEditTeacherNotes("");
+  }, []);
+
+  const handleSaveEdit = useCallback(() => {
+    if (!noteId) return;
+    updateMaterial(noteId, {
+      content: editContent,
+      teacherNotes: editTeacherNotes,
+    });
+    setMaterialVersion((v) => v + 1);
+    setIsEditMode(false);
+  }, [noteId, editContent, editTeacherNotes]);
+
   return (
     <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden">
       <div className="flex h-full">
@@ -265,18 +307,30 @@ const TeacherNote = () => {
 
           {/* Main Card */}
           <div className="mt-4 flex-1 rounded-[32px] bg-white p-2 shadow-xl flex flex-col md:flex-row overflow-hidden min-h-0">
-             
+
              {/* Note Content Area */}
-             <div className="flex-1 p-8 md:p-10 overflow-y-auto">
+             <div className="flex-1 p-8 md:p-10 overflow-y-auto flex flex-col">
                 <h2 className="text-xl font-bold text-slate-900 mb-6">{noteTitle}</h2>
-                
-                {noteContentHtml ? (
+
+                {isEditMode ? (
+                  <div className="flex-1 flex flex-col">
+                    <label className="text-sm font-medium text-slate-700 mb-2">
+                      Зміст конспекту 
+                    </label>
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className="flex-1 min-h-[300px] w-full rounded-xl border border-slate-200 p-4 text-sm text-slate-800 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
+                      placeholder="Введіть зміст конспекту..."
+                    />
+                  </div>
+                ) : noteContentHtml ? (
                   <div
-                    className="text-sm leading-relaxed text-slate-800"
+                    className="text-sm leading-relaxed text-slate-800 flex-1"
                     dangerouslySetInnerHTML={{ __html: noteContentHtml }}
                   />
                 ) : (
-                  <div className="space-y-6 text-sm leading-relaxed text-slate-800">
+                  <div className="space-y-6 text-sm leading-relaxed text-slate-800 flex-1">
                       <p>
                           <strong>Іменник</strong> — самостійна частина мови, що називає предмети, істот, явища, поняття і відповідає на питання хто? що?
                       </p>
@@ -309,12 +363,50 @@ const TeacherNote = () => {
                       </div>
                   </div>
                 )}
+
+                {/* Edit/Save buttons at bottom */}
+                <div className="mt-6 pt-4 border-t border-slate-100">
+                  {isEditMode ? (
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleSaveEdit}
+                        className="flex items-center gap-2 rounded-full bg-[#1E73F7] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1A63D6]"
+                      >
+                        Зберегти зміни
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCancelEdit}
+                        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Скасувати
+                      </button>
+                    </div>
+                  ) : noteMaterial ? (
+                    <button
+                      type="button"
+                      onClick={handleStartEdit}
+                      className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:border-[#1E73F7] hover:text-[#1E73F7]"
+                    >
+                      <PencilIcon />
+                      Редагувати конспект
+                    </button>
+                  ) : null}
+                </div>
              </div>
 
              {/* Right Sidebar - "Notes" / TOC */}
-             <div className="w-full md:w-80 bg-[#E9F1FF] rounded-[24px] m-2 p-6 overflow-y-auto">
+             <div className="w-full md:w-80 bg-[#E9F1FF] rounded-[24px] m-2 p-6 overflow-y-auto flex flex-col">
                 <h3 className="text-base font-bold text-slate-900 mb-4">Нотатки</h3>
-                {teacherNotes ? (
+                {isEditMode ? (
+                  <textarea
+                    value={editTeacherNotes}
+                    onChange={(e) => setEditTeacherNotes(e.target.value)}
+                    className="flex-1 min-h-[200px] w-full rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
+                    placeholder="Нотатки для вчителя..."
+                  />
+                ) : teacherNotes ? (
                   <div className="text-xs leading-relaxed text-slate-700 whitespace-pre-wrap">
                     {teacherNotes}
                   </div>
