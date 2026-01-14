@@ -3,6 +3,7 @@ interface GenerateModalContentProps {
   value: string;
   onChange: (value: string) => void;
   primaryLabel: string;
+  isLoading?: boolean;
   onPrimaryClick: () => void;
   onSecondaryClick?: () => void;
 }
@@ -12,6 +13,7 @@ const GenerateModalContent = ({
   value,
   onChange,
   primaryLabel,
+  isLoading = false,
   onPrimaryClick,
   onSecondaryClick,
 }: GenerateModalContentProps) => {
@@ -41,9 +43,26 @@ const GenerateModalContent = ({
         <button
           type="button"
           onClick={onPrimaryClick}
-          className="rounded-full bg-[#1E73F7] px-7 py-3 text-sm font-semibold text-white shadow transition hover:-translate-y-0.5 hover:bg-[#1A63D6] hover:shadow-lg cursor-pointer"
+          disabled={isLoading}
+          className="flex items-center justify-center gap-2 rounded-full bg-[#1E73F7] px-7 py-3 text-sm font-semibold text-white shadow transition hover:-translate-y-0.5 hover:bg-[#1A63D6] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70"
         >
           {primaryLabel}
+          {isLoading && (
+            <span className="flex items-center gap-1">
+              <span
+                className="inline-block h-2 w-2 animate-bounce rounded-full bg-white"
+                style={{ animationDelay: "0ms" }}
+              />
+              <span
+                className="inline-block h-2 w-2 animate-bounce rounded-full bg-white"
+                style={{ animationDelay: "150ms" }}
+              />
+              <span
+                className="inline-block h-2 w-2 animate-bounce rounded-full bg-white"
+                style={{ animationDelay: "300ms" }}
+              />
+            </span>
+          )}
         </button>
       </div>
     </div>

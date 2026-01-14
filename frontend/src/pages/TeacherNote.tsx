@@ -6,6 +6,100 @@ import SelectStudentsModal from "../components/SelectStudentsModal";
 import { getMaterials } from "../data/materialsStorage";
 import { classIdToLabel } from "../data/classUtils";
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+const formatInline = (value: string) => {
+  const withCode = value.replace(
+    /`([^`]+)`/g,
+    "<code class=\"rounded bg-slate-100 px-1 py-0.5 text-xs font-semibold text-slate-900\">$1</code>"
+  );
+  const withBold = withCode.replace(
+    /\*\*([^*]+)\*\*/g,
+    "<strong class=\"font-semibold text-slate-900\">$1</strong>"
+  );
+  return withBold.replace(
+    /\*([^*]+)\*/g,
+    "<em class=\"italic text-slate-800\">$1</em>"
+  );
+};
+
+const renderMarkdown = (markdown: string) => {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  let html = "";
+  let inUl = false;
+  let inOl = false;
+
+  const closeLists = () => {
+    if (inUl) {
+      html += "</ul>";
+      inUl = false;
+    }
+    if (inOl) {
+      html += "</ol>";
+      inOl = false;
+    }
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      closeLists();
+      html += "<br />";
+      continue;
+    }
+
+    const safe = formatInline(escapeHtml(trimmed));
+
+    if (trimmed.startsWith("### ")) {
+      closeLists();
+      html += `<h3 class="mt-6 text-base font-semibold text-slate-900">${safe.slice(4)}</h3>`;
+      continue;
+    }
+    if (trimmed.startsWith("## ")) {
+      closeLists();
+      html += `<h2 class="mt-6 text-lg font-semibold text-slate-900">${safe.slice(3)}</h2>`;
+      continue;
+    }
+    if (trimmed.startsWith("# ")) {
+      closeLists();
+      html += `<h1 class="mt-6 text-xl font-bold text-slate-900">${safe.slice(2)}</h1>`;
+      continue;
+    }
+
+    if (trimmed.startsWith("- ")) {
+      if (!inUl) {
+        closeLists();
+        html += "<ul class=\"mt-3 list-disc space-y-1 pl-5\">";
+        inUl = true;
+      }
+      html += `<li>${safe.slice(2)}</li>`;
+      continue;
+    }
+
+    const orderedMatch = trimmed.match(/^(\d+)\.\s+/);
+    if (orderedMatch) {
+      if (!inOl) {
+        closeLists();
+        html += "<ol class=\"mt-3 list-decimal space-y-1 pl-5\">";
+        inOl = true;
+      }
+      html += `<li>${safe.slice(orderedMatch[0].length)}</li>`;
+      continue;
+    }
+
+    closeLists();
+    html += `<p class="mt-3">${safe}</p>`;
+  }
+
+  closeLists();
+  return html;
+};
+
 const TeacherNote = () => {
   const { teacherId, courseId, classId, topicId, noteId } = useParams();
   
@@ -31,6 +125,10 @@ const TeacherNote = () => {
     [noteId]
   );
   const noteTitle = noteMaterial?.title ?? decodedNote;
+  const teacherNotes = noteMaterial?.teacherNotes?.trim();
+  const noteContentHtml = noteMaterial?.content
+    ? renderMarkdown(noteMaterial.content)
+    : null;
   const sidebarCourseId = noteMaterial?.courseId ?? decodedCourse;
   const sidebarTopicName = noteMaterial?.topicName ?? decodedTopic;
   const encodedTopic = sidebarTopicName ? encodeURIComponent(sidebarTopicName) : "";
@@ -135,10 +233,11 @@ const TeacherNote = () => {
              <div className="flex-1 p-8 md:p-10 overflow-y-auto">
                 <h2 className="text-xl font-bold text-slate-900 mb-6">{noteTitle}</h2>
                 
-                {noteMaterial?.content ? (
-                  <div className="text-sm leading-relaxed text-slate-800 whitespace-pre-wrap">
-                    {noteMaterial.content}
-                  </div>
+                {noteContentHtml ? (
+                  <div
+                    className="text-sm leading-relaxed text-slate-800"
+                    dangerouslySetInnerHTML={{ __html: noteContentHtml }}
+                  />
                 ) : (
                   <div className="space-y-6 text-sm leading-relaxed text-slate-800">
                       <p>
@@ -178,23 +277,15 @@ const TeacherNote = () => {
              {/* Right Sidebar - "Notes" / TOC */}
              <div className="w-full md:w-80 bg-[#E9F1FF] rounded-[24px] m-2 p-6 overflow-y-auto">
                 <h3 className="text-base font-bold text-slate-900 mb-4">Нотатки</h3>
-                <ul className="space-y-2 text-xs font-medium text-slate-700">
-                    <li>Самостійна частина мови</li>
-                    <li>Питання хто? що?</li>
-                    <li>Лексичне значення</li>
-                    <li>Назви істот / неістоти</li>
-                    <li>Абстрактні іменники</li>
-                    <li>Конкретні іменники</li>
-                    <li>Власні іменники</li>
-                    <li>Загальні іменники</li>
-                    <li>Число іменника (однина, множина)</li>
-                    <li>Відмінок</li>
-                    <li>Відмінювання</li>
-                    <li>Відміни іменників (I–IV)</li>
-                    <li>Синтаксична роль (підмет, додаток)</li>
-                    <li>Правопис іменників</li>
-                    <li>Велика літера в іменниках</li>
-                </ul>
+                {teacherNotes ? (
+                  <div className="text-xs leading-relaxed text-slate-700 whitespace-pre-wrap">
+                    {teacherNotes}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-700">
+                    Нотатки відсутні.
+                  </div>
+                )}
              </div>
 
           </div>
