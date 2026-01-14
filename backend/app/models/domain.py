@@ -60,12 +60,6 @@ class ProblematicTopic(BaseModel):
     average_score: float = Field(..., ge=0, le=12)
 
 
-class Solution(BaseModel):
-    """A solved question from the solver."""
-    question: str
-    answer_explained: str
-
-
 class QuestionResult(BaseModel):
     """Result of a single question in a completed test."""
     question: str

@@ -11,10 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.models.domain import (
-    Question,
-    Solution,
-)
+from app.models.domain import Question
 from app.models.enums import Level
 
 
@@ -118,12 +115,6 @@ class RecommendationResponse(BaseModel):
     feedback: str
 
 
-class SolverResponse(BaseModel):
-    """EP7: Solved single question with explanation."""
-    question: str
-    answer_explained: str
-
-
 # =============================================================================
 # STUDENT RESPONSES
 # =============================================================================
@@ -169,13 +160,7 @@ class ErrorResponse(BaseModel):
 # =============================================================================
 
 
-class AnswerKeyResponse(BaseModel):
-    """Answer key with solutions for generated questions."""
-    solutions: list[Solution]
-
-
 class FullPipelineResponse(BaseModel):
     """Internal: Full pipeline integration test response."""
     notes: NotesResponse
     test: TestResponse
-    answer_key: AnswerKeyResponse

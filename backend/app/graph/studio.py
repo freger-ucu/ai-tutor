@@ -36,24 +36,6 @@ def notes_graph():
     return workflow
 
 
-def solver_graph():
-    """Build solver graph."""
-    from langgraph.graph import StateGraph, END
-    from app.graph.flows.solver import (
-        SolverState,
-        retrieve_rag_node,
-        solve_question_node,
-    )
-
-    workflow = StateGraph(SolverState)
-    workflow.add_node("retrieve_rag", retrieve_rag_node)
-    workflow.add_node("solve_question", solve_question_node)
-    workflow.set_entry_point("retrieve_rag")
-    workflow.add_edge("retrieve_rag", "solve_question")
-    workflow.add_edge("solve_question", END)
-    return workflow
-
-
 def test_gen_graph():
     """Build test generation graph (parallel architecture with planning).
 

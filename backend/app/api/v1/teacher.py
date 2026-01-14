@@ -1,7 +1,7 @@
 """
 Teacher API Endpoints
 
-Implements EP1-EP7 per architecture.md contracts.
+Implements EP1-EP6 per architecture.md contracts.
 """
 
 import logging
@@ -14,7 +14,6 @@ from app.models.requests import (
     GetStudentListRequest,
     StudentDetailsRequest,
     StudentRecommendationRequest,
-    SolverRequest,
     GenerateLevelNotesRequest,
     GenerateIndividualNotesRequest,
     GenerateTestRequest,
@@ -28,7 +27,6 @@ from app.models.responses import (
     ProblematicTopicResponse,
     ClassInfoResponse,
     RecommendationResponse,
-    SolverResponse,
     NotesResponse,
     NotesStatistics,
     TopicStatistic,
@@ -38,14 +36,9 @@ from app.models.domain import Question, AnswerOption
 from app.models.enums import QuestionType, Difficulty
 from app.services.data_loader import get_data_loader
 from app.rag.utils.llm_client import get_llm_client
-from app.rag.utils.hybrid_retriever import get_retriever, format_context
 from app.prompts.recommendation import (
     RECOMMENDATION_SYSTEM_PROMPT,
     build_recommendation_prompt,
-)
-from app.prompts.solver import (
-    SOLVER_SYSTEM_PROMPT,
-    build_solver_prompt,
 )
 # Notes generation now uses the LangGraph flow in app.graph.flows.notes
 
@@ -324,72 +317,6 @@ async def get_student_recommendation(
     )
 
     return RecommendationResponse(feedback=feedback)
-
-
-# =============================================================================
-# EP7: Solver - Solve Single Question with RAG
-# =============================================================================
-
-
-async def solve_question(
-    subject: str,
-    grade: int,
-    question: str
-) -> str:
-    """
-    Solve a single question using RAG + LLM.
-
-    Retrieves relevant textbook content and generates step-by-step solution.
-    """
-    # RAG retrieval
-    retriever = get_retriever()
-    docs = await retriever.retrieve(
-        query=question,
-        subject=subject,
-        grade=grade
-    )
-
-    # Format context from retrieved documents
-    context, _ = format_context(docs, max_chars=6000, subject=subject)
-
-    # Build prompt
-    prompt = build_solver_prompt(
-        subject=subject,
-        grade=grade,
-        question=question,
-        context=context
-    )
-
-    full_prompt = f"{SOLVER_SYSTEM_PROMPT}\n\n{prompt}"
-
-    # Generate solution
-    llm_client = get_llm_client()
-    response = await llm_client.generate(
-        prompt=full_prompt,
-        temperature=0.3,  # Lower temperature for more precise answers
-        max_tokens=1500   # Allow longer responses for detailed explanations
-    )
-
-    return response
-
-
-async def solver_endpoint(request: SolverRequest) -> SolverResponse:
-    """
-    EP7: Solve a single question with RAG-grounded explanation.
-
-    Uses textbook content to provide step-by-step solution.
-    Note: Route is registered in router.py at /solver (not under /teacher).
-    """
-    answer_explained = await solve_question(
-        subject=request.subject,
-        grade=request.grade,
-        question=request.question
-    )
-
-    return SolverResponse(
-        question=request.question,
-        answer_explained=answer_explained
-    )
 
 
 # =============================================================================

@@ -9,7 +9,6 @@ This document describes the LangGraph flows, RAG system, and technical relations
 - [System Overview](#system-overview)
 - [LangGraph Flows](#langgraph-flows)
   - [Test Generation Flow (EP4)](#test-generation-flow-ep4)
-  - [Solver Flow (EP7)](#solver-flow-ep7)
   - [Notes Generation Flow (EP3)](#notes-generation-flow-ep3)
   - [Feedback Flow (EP10)](#feedback-flow-ep10)
   - [Check Answer Flow (EP9)](#check-answer-flow-ep9)
@@ -27,13 +26,12 @@ This document describes the LangGraph flows, RAG system, and technical relations
 ```mermaid
 graph TB
     subgraph "API Layer"
-        T[Teacher Endpoints<br/>EP1-EP7]
+        T[Teacher Endpoints<br/>EP1-EP6]
         S[Student Endpoints<br/>EP8-EP10]
     end
 
     subgraph "LangGraph Flows"
         TG[Test Generation]
-        SV[Solver]
         NT[Notes]
         FB[Feedback]
         CA[Check Answer]
@@ -52,11 +50,11 @@ graph TB
         TOC[(Table of Contents)]
     end
 
-    T --> TG & SV & NT & RC
+    T --> TG & NT & RC
     S --> FB & CA
 
-    TG & SV & NT & CA --> RAG
-    TG & SV & NT & FB & CA & RC --> LLM
+    TG & NT & CA --> RAG
+    TG & NT & FB & CA & RC --> LLM
     T & S --> DL
 
     RAG --> EMB & TOC
@@ -141,46 +139,6 @@ graph LR
 - LLM calls: 10 concurrent
 
 **LLM Calls:** ~1 + 2N (1 planning + N generation + N validation, where N = total questions)
-
----
-
-### Solver Flow (EP7)
-
-Solves questions using RAG-enhanced generation with subject-specific prompts.
-
-```mermaid
-graph LR
-    A[retrieve_rag] --> B[generate_answer]
-    B --> C((END))
-
-    style A fill:#e1f5fe
-    style B fill:#fff3e0
-```
-
-**State:** `SolverState`
-
-| Key Field | Type | Description |
-|-----------|------|-------------|
-| question_text | string | Question to solve |
-| subject | string | Subject name |
-| grade | int | Grade level |
-| answers | list[str] | Answer options (for MC) |
-| rag_context | string | Retrieved textbook content |
-| answer_index | int | Selected answer index |
-| confidence | float | Confidence score |
-| reasoning | string | Step-by-step explanation |
-
-**Flow Details:**
-
-1. **retrieve_rag**: Hybrid retrieval (BM25 + vector) with RRF fusion
-2. **generate_answer**: Subject-specific prompt → JSON response with answer and reasoning
-
-**Subject-Specific Prompts:**
-- **Algebra**: Focus on formulas, step-by-step calculation
-- **Ukrainian**: Grammar rules, examples
-- **History**: Facts, dates, context
-
-**LLM Calls:** 1
 
 ---
 
@@ -628,14 +586,13 @@ backend/
 ├── app/
 │   ├── api/v1/           # HTTP endpoints
 │   │   ├── router.py     # Main router
-│   │   ├── teacher.py    # EP1-EP7
+│   │   ├── teacher.py    # EP1-EP6
 │   │   ├── student.py    # EP8-EP10
 │   │   └── health.py     # Health checks
 │   │
 │   ├── graph/            # LangGraph workflows
 │   │   ├── flows/        # Individual flows
 │   │   │   ├── test_gen.py
-│   │   │   ├── solver.py
 │   │   │   ├── notes.py
 │   │   │   ├── feedback.py
 │   │   │   ├── check_answer.py

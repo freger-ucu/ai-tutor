@@ -16,7 +16,6 @@ This document provides complete endpoint contracts with request/response schemas
   - [EP4: Generate Test](#ep4-generate-test)
   - [EP5: Get Student Details](#ep5-get-student-details)
   - [EP6: Get Student Recommendation](#ep6-get-student-recommendation)
-  - [EP7: Solver](#ep7-solver)
 - [Student Endpoints](#student-endpoints)
   - [EP8: Get Student Info](#ep8-get-student-info)
   - [EP9: Check Open Answer](#ep9-check-open-answer)
@@ -393,41 +392,6 @@ Generates AI-powered recommendation for a student.
 
 **Error Responses:**
 - `404`: Student not found or does not have this subject
-
----
-
-### EP7: Solver
-
-Solves a question with RAG-grounded explanation.
-
-**Endpoint:** `POST /solver`
-
-> Note: This endpoint is at `/api/v1/solver`, not under `/teacher`.
-
-**Request Body:** `SolverRequest`
-
-```json
-{
-  "subject": "Алгебра",
-  "grade": 9,
-  "question": "Знайдіть корені рівняння x² - 7x + 12 = 0"
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| subject | string | Yes | Subject name in Ukrainian |
-| grade | integer | Yes | Grade level (8 or 9) |
-| question | string | Yes | Question to solve |
-
-**Response:** `SolverResponse`
-
-```json
-{
-  "question": "Знайдіть корені рівняння x² - 7x + 12 = 0",
-  "answer_explained": "**Розв'язання:**\n\nДано: x² - 7x + 12 = 0\n\n**Крок 1:** Обчислюємо дискримінант\nD = b² - 4ac = (-7)² - 4(1)(12) = 49 - 48 = 1\n\n**Крок 2:** Оскільки D > 0, рівняння має два корені\nx₁ = (7 + √1) / 2 = 8/2 = 4\nx₂ = (7 - √1) / 2 = 6/2 = 3\n\n**Відповідь:** x = 3 або x = 4\n\n[Джерело: Істер, Розділ 3, с. 52]"
-}
-```
 
 ---
 

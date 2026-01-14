@@ -68,13 +68,6 @@ class StudentRecommendationRequest(BaseModel):
     subject: str = Field(..., description="Subject name in Ukrainian")
 
 
-class SolverRequest(BaseModel):
-    """EP7: Solve a single question with RAG-grounded explanation."""
-    subject: str = Field(..., description="Subject name in Ukrainian")
-    grade: int = Field(..., ge=8, le=9, description="Grade level (8 or 9)")
-    question: str = Field(..., description="Question to solve")
-
-
 # =============================================================================
 # STUDENT REQUESTS
 # =============================================================================

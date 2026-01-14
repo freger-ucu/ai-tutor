@@ -190,7 +190,6 @@ langgraph dev
 | Graph | Description |
 |-------|-------------|
 | notes | Generate lesson notes with prerequisite-aware recap |
-| solver | Solve questions using RAG |
 | test_gen | Generate validated test questions with planning-based parallel architecture |
 | check_answer | Evaluate student answers |
 | feedback | Generate test feedback |
