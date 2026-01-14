@@ -116,7 +116,13 @@ Retrieves students in a class with their performance levels.
 
 ### EP3.1: Generate Notes by Level
 
-Generates lesson notes adapted to student ability levels.
+Generates lesson notes adapted to student ability levels with prerequisite-aware recap.
+
+The flow internally:
+1. Analyzes students to compute performance level and knowledge gaps
+2. Uses LLM to filter which gaps are prerequisites for the topic
+3. Retrieves RAG context for both the main topic and prerequisites
+4. Generates notes with optional recap section for missed prerequisites
 
 **Endpoint:** `POST /teacher/notes/by-level`
 
@@ -174,7 +180,9 @@ Generates lesson notes adapted to student ability levels.
 
 ### EP3.2: Generate Notes Individual
 
-Generates personalized notes for specific students.
+Generates personalized notes for specific students with prerequisite-aware recap.
+
+Uses the same internal flow as EP3.1, but targets specific students instead of level groups.
 
 **Endpoint:** `POST /teacher/notes/individual`
 

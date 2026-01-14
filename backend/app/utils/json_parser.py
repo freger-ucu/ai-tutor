@@ -23,33 +23,42 @@ def strip_markdown_code_blocks(text: str) -> str:
     - ```json ... ```
     - ``` ... ```
     - Plain text (returns as-is)
+    - Nested code blocks inside JSON strings
 
     Args:
         text: Input text possibly wrapped in code blocks
 
     Returns:
-        Text with code block markers removed
+        Text with outer code block markers removed
     """
     text = text.strip()
 
-    # Handle ```json blocks
-    if "```json" in text:
-        text = text.split("```json", 1)[1]
-        if "```" in text:
-            text = text.split("```", 1)[0]
+    # Handle ```json blocks - find the LAST ``` to handle nested blocks
+    if text.startswith("```json"):
+        text = text[7:].strip()  # Remove ```json
+        # Find the last ``` which closes the outer block
+        last_fence = text.rfind("\n```")
+        if last_fence != -1:
+            text = text[:last_fence]
+        elif text.endswith("```"):
+            text = text[:-3]
         return text.strip()
 
     # Handle plain ``` blocks
-    if "```" in text:
-        parts = text.split("```")
-        if len(parts) >= 2:
-            inner = parts[1].strip()
-            # Remove language identifier if present (e.g., "json\n{...")
-            if inner and inner[0].isalpha():
-                lines = inner.split("\n", 1)
-                if len(lines) > 1:
-                    inner = lines[1].strip()
-            return inner
+    if text.startswith("```"):
+        # Remove opening fence and optional language identifier
+        lines = text.split("\n", 1)
+        if len(lines) > 1:
+            text = lines[1]
+        else:
+            text = text[3:]
+        # Find the last ``` which closes the outer block
+        last_fence = text.rfind("\n```")
+        if last_fence != -1:
+            text = text[:last_fence]
+        elif text.endswith("```"):
+            text = text[:-3]
+        return text.strip()
 
     return text
 
@@ -78,6 +87,42 @@ def extract_json_object(text: str) -> Optional[str]:
     return None
 
 
+def fix_json_newlines(json_str: str) -> str:
+    """
+    Fix unescaped newlines inside JSON string values.
+
+    LLMs often return JSON with literal newlines in string values,
+    which is invalid JSON. This function escapes them.
+    """
+    result = []
+    in_string = False
+    escape_next = False
+
+    for char in json_str:
+        if escape_next:
+            result.append(char)
+            escape_next = False
+            continue
+
+        if char == '\\':
+            result.append(char)
+            escape_next = True
+            continue
+
+        if char == '"':
+            in_string = not in_string
+            result.append(char)
+            continue
+
+        if in_string and char == '\n':
+            result.append('\\n')
+            continue
+
+        result.append(char)
+
+    return ''.join(result)
+
+
 def parse_json_response(
     response: str,
     fallback: Optional[dict] = None,
@@ -90,7 +135,8 @@ def parse_json_response(
     1. Direct JSON parse
     2. Strip markdown code blocks, then parse
     3. Extract JSON object from text, then parse
-    4. Return fallback dict if all parsing fails
+    4. Fix unescaped newlines, then parse
+    5. Return fallback dict if all parsing fails
 
     Args:
         response: Raw LLM response text
@@ -128,16 +174,24 @@ def parse_json_response(
     if json_str:
         try:
             return json.loads(json_str)
+        except json.JSONDecodeError:
+            pass
+
+        # Strategy 4: Fix unescaped newlines in JSON strings
+        try:
+            fixed = fix_json_newlines(json_str)
+            return json.loads(fixed)
         except json.JSONDecodeError as e:
             logger.debug(
-                f"[{context}] JSON decode error: {e}" if context
-                else f"JSON decode error: {e}"
+                f"[{context}] JSON decode error after newline fix: {e}" if context
+                else f"JSON decode error after newline fix: {e}"
             )
 
-    # All strategies failed
+    # All strategies failed - log first 500 chars for debugging
+    preview = response[:500] if len(response) > 500 else response
     logger.warning(
-        f"[{context}] Failed to parse JSON from response (length={len(response)})"
-        if context else f"Failed to parse JSON from response (length={len(response)})"
+        f"[{context}] Failed to parse JSON from response (length={len(response)}). Preview: {preview!r}"
+        if context else f"Failed to parse JSON from response (length={len(response)}). Preview: {preview!r}"
     )
     return fallback
 

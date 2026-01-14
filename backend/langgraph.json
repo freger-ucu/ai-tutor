@@ -1,0 +1,14 @@
+{
+  "$schema": "https://langchain-ai.github.io/langgraph/schema/langgraph.json",
+  "graphs": {
+    "notes": "./app/graph/studio.py:notes_graph",
+    "solver": "./app/graph/studio.py:solver_graph",
+    "test_gen": "./app/graph/studio.py:test_gen_graph",
+    "check_answer": "./app/graph/studio.py:check_answer_graph",
+    "feedback": "./app/graph/studio.py:feedback_graph",
+    "recommendation": "./app/graph/studio.py:recommendation_graph"
+  },
+  "env": ".env",
+  "python_version": "3.11",
+  "dependencies": ["./requirements.txt"]
+}

@@ -158,11 +158,11 @@ graph LR
 
 ### Notes Generation Flow (EP3)
 
-Generates lesson notes adapted to student levels with prerequisite-aware recap. Uses intersection logic to only include prereqs that students actually missed.
+Generates lesson notes adapted to student levels with prerequisite-aware recap. Uses LLM to intelligently filter which student gaps are actual prerequisites for the topic.
 
 ```mermaid
 graph LR
-    A[aggregate_gaps] --> B[filter_prereqs]
+    A[analyze_students] --> B[collect_gaps]
     B --> C[retrieve_rag]
     C --> D[generate_notes]
     D --> E((END))
@@ -173,66 +173,85 @@ graph LR
     style D fill:#fff3e0
 ```
 
+**Input (Minimal):**
+
+Only 4 fields required:
+| Field | Type | Description |
+|-------|------|-------------|
+| student_ids | list[int] | Students to generate notes for |
+| subject | string | Алгебра, Українська мова, Історія України |
+| grade | int | 8 or 9 |
+| topic_definition | string | Topic to teach |
+
 **State:** `NotesState`
 
-| Key Field | Type | Description |
+| Key Field | Type | Computed By |
 |-----------|------|-------------|
-| topic_definition | string | Main topic |
-| level | string | Target level (weak/medium/strong) |
-| aggregated_gaps | dict | Weak topics and skipped topics |
-| missed_prereqs | list[str] | Prerequisites that students actually missed (gaps ∩ topic prereqs) |
-| rag_context | string | Main topic content |
-| prereq_context | string | Prerequisite content (for missed prereqs only) |
-| topic_references | list | Main topic sources |
-| prereq_references | list | Prerequisite sources |
-| contents | string | Generated notes (markdown with Recap/Lesson sections) |
-| teacher_notes | string | Tips for the teacher (includes recap recommendation) |
+| level | string | analyze_students (weak/medium/strong) |
+| aggregated_gaps | dict | analyze_students (weak_topics + skipped_topics) |
+| class_id | int | analyze_students |
+| teacher_id | int | analyze_students |
+| student_gaps | list[str] | collect_gaps (LLM-filtered prerequisites) |
+| rag_context | string | retrieve_rag (main topic content) |
+| gaps_context | string | retrieve_rag (prerequisite content) |
+| rag_references | list | retrieve_rag (combined sources) |
+| title | string | generate_notes |
+| contents | string | generate_notes (markdown) |
+| teacher_notes | string | generate_notes |
 
 **Flow Details:**
 
-1. **aggregate_gaps**: Collect weak/skipped topics from student data
-2. **filter_prereqs**: Find intersection of student gaps and topic prerequisites
-   - Get known prerequisites for the current topic from `PREREQ_MAP`
-   - Find which of those prereqs students actually missed/struggled with
-   - Return only the intersection (gaps ∩ prereqs)
+1. **analyze_students**: Load student data from BenchmarkDataLoader
+   - If level provided: use it directly (EP3.1 passes level from request)
+   - If level not provided: compute from class quartiles (EP3.2)
+   - Aggregate gaps (weak_topics + skipped_topics) from student records
+   - Detect class_id and teacher_id from student data
+
+2. **collect_gaps**: Use LLM to filter prerequisites
+   - Collect all gaps (union of weak_topics and skipped_topics)
+   - Ask LLM which gaps are actual prerequisites for the topic
+   - Returns only topics necessary to understand the new topic
+
 3. **retrieve_rag**:
    - Always retrieve main topic content (top_k=5, max_chars=6000)
-   - If there are missed prereqs, also retrieve prereq content (top_k=3, max_chars=3000)
+   - If prerequisites exist, also retrieve prereq content (top_k=3, max_chars=3000)
+
 4. **generate_notes**: LLM generation with combined context
-   - If missed prereqs exist: `## Повторення (Recap)` → `## Урок (Lesson)` structure
-   - If no missed prereqs: `## Урок (Lesson)` only
+   - If prerequisites exist: `## Повторення (Recap)` → `## Урок (Lesson)` structure
+   - If no prerequisites: `## Урок (Lesson)` only
    - Teacher notes include recap recommendation when applicable
 
-**Prerequisite Intersection Logic:**
+**Level Handling:**
+- **EP3.1 (by-level)**: Level is provided by request → passed directly to flow
+- **EP3.2 (individual)**: Level computed from students using class quartiles:
 ```
-missed_prereqs = student_gaps ∩ topic_prerequisites
+Q1, Q3 = quartiles(all_class_scores)
 
-Example:
-  Topic: "квадратні рівняння"
-  Topic prereqs: ["дискримінант", "формули коренів", "квадратний тричлен", "лінійні рівняння"]
-  Student gaps: ["дискримінант", "функції", "графіки"]
-  Missed prereqs: ["дискримінант"]  # Only prereqs that are also gaps
+WEAK:   avg_score < Q1
+MEDIUM: Q1 ≤ avg_score ≤ Q3
+STRONG: avg_score > Q3
 ```
 
-**Prerequisite Mapping (PREREQ_MAP):**
+**Prerequisite Filtering (LLM-based):**
 ```
-"квадратні рівняння" → ["дискримінант", "формули коренів", "квадратний тричлен", "лінійні рівняння"]
-"дієприкметники" → ["дієслово", "прикметник", "дієприкметниковий зворот"]
-"друга світова війна" → ["міжвоєнний період", "передумови війни", "версальський договір"]
+Input:
+  Topic: "Теорема Вієта"
+  Student gaps: ["Дискримінант", "Лінійні рівняння", "Функції", "Графіки"]
+
+LLM determines which are prerequisites:
+  Output: ["Дискримінант", "Лінійні рівняння"]  # Required to understand Vieta's theorem
 ```
 
 **Output Structure:**
 ```markdown
 ## Повторення
-[Recap of missed prerequisites - only if missed_prereqs is not empty]
+[Recap of prerequisites - only if student_gaps is not empty]
 
 ## Урок
-[Main lesson content]
+[Main lesson content adapted to student level]
 ```
 
-**Sources:** Combined topic + prereq references
-
-**LLM Calls:** 1
+**LLM Calls:** 2 (1 for prerequisite filtering + 1 for notes generation)
 
 ---
 

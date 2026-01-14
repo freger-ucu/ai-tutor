@@ -166,6 +166,48 @@ For detailed documentation, see:
 - [Business Value](docs/business-value.md) - Business value of each endpoint
 - [API Contracts](docs/api-contracts.md) - Complete API specifications with examples
 
+## LangGraph Studio (Local Development)
+
+LangGraph Studio allows you to visualize and debug LangGraph flows locally.
+
+### Setup
+
+1. Install LangGraph CLI:
+```bash
+pip install langgraph-cli
+```
+
+2. Run the studio:
+```bash
+cd backend
+langgraph dev
+```
+
+3. Open the Studio UI at the URL shown in the terminal (usually http://localhost:8123)
+
+### Available Graphs
+
+| Graph | Description |
+|-------|-------------|
+| notes | Generate lesson notes with prerequisite-aware recap |
+| solver | Solve questions using RAG |
+| test_gen | Generate test questions |
+| check_answer | Evaluate student answers |
+| feedback | Generate test feedback |
+| recommendation | Generate teaching recommendations |
+
+### Notes Graph Input
+
+The notes graph requires only 4 input fields:
+- `student_ids`: List of student IDs (e.g., `[1, 2, 3]`)
+- `subject`: Subject name (`Алгебра`, `Українська мова`, `Історія України`)
+- `grade`: Grade level (`8` or `9`)
+- `topic_definition`: Topic to teach (e.g., `Квадратні рівняння`)
+
+All other fields (level, gaps, RAG context) are computed automatically by the graph nodes.
+
+---
+
 ## Troubleshooting
 
 ### macOS Fork Safety Issues

@@ -31,6 +31,10 @@ frontend/.env.local
 # Docker
 .docker/
 
+# LangGraph Studio
+.langgraph_api/
+.langgraph/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -64,3 +68,6 @@ AI_Tutor_Tasks.md
 T0_Basic_Architecture.md
 endpoints_all.md
 endpoints_teacher.md
+
+test-frontend/
+Archive better ukr 2/
