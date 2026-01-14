@@ -1,7 +1,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { teachers } from "../data/teachers";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import TeacherSidebar from "../components/TeacherSidebar";
@@ -11,7 +10,7 @@ import {
   getTeacherStudents,
 } from "../api/teacher";
 import type { TeacherClassItem, TeacherStudentItem } from "../api/teacher";
-import { classIdToLabel, classLabelToId } from "../data/classUtils";
+import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
 
 const subjectSlugMap: Record<string, string> = {
@@ -40,63 +39,10 @@ const subjectFromCourseId = (courseId: string) => {
   return subjectLabelMap[slug] ?? courseId;
 };
 
-const fallbackCourses = [
-  {
-    grade: "8 клас",
-    items: [
-      { id: "algebra-8", name: "Алгебра" },
-      { id: "history-8", name: "Історія України" },
-      { id: "ukr-lang-8", name: "Українська мова" },
-    ],
-  },
-  {
-    grade: "9 клас",
-    items: [
-      { id: "algebra-9", name: "Алгебра" },
-      { id: "history-9", name: "Історія України" },
-      { id: "ukr-lang-9", name: "Українська мова" },
-    ],
-  },
-];
-
-const fallbackClassesByCourse: Record<
-  string,
-  { id: number; label: string }[]
-> = {
-  "algebra-8": ["8"].map((label) => ({
-    id: classLabelToId(label) ?? 0,
-    label,
-  })),
-  "history-8": ["8"].map((label) => ({
-    id: classLabelToId(label) ?? 0,
-    label,
-  })),
-  "ukr-lang-8": ["8"].map((label) => ({
-    id: classLabelToId(label) ?? 0,
-    label,
-  })),
-  "algebra-9": ["9"].map((label) => ({
-    id: classLabelToId(label) ?? 0,
-    label,
-  })),
-  "history-9": ["9"].map((label) => ({
-    id: classLabelToId(label) ?? 0,
-    label,
-  })),
-  "ukr-lang-9": ["9"].map((label) => ({
-    id: classLabelToId(label) ?? 0,
-    label,
-  })),
-};
-
 const Teacher = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const teacher = useMemo(
-    () => teachers.find((item) => item.id === id),
-    [id]
-  );
-  const apiTeacherId = teacher?.apiId ?? toNumericId(id) ?? 0;
+  const apiTeacherId = toNumericId(id) ?? 0;
   const [teacherClasses, setTeacherClasses] = useState<TeacherClassItem[]>([]);
   const [teacherStudents, setTeacherStudents] = useState<TeacherStudentItem[]>([]);
 
@@ -117,8 +63,8 @@ const Teacher = () => {
   const { courses, classesByCourse, courseSubjectMap } = useMemo(() => {
     if (!teacherClasses.length) {
       return {
-        courses: fallbackCourses,
-        classesByCourse: fallbackClassesByCourse,
+        courses: [],
+        classesByCourse: {},
         courseSubjectMap: {} as Record<string, string>,
       };
     }
@@ -157,31 +103,17 @@ const Teacher = () => {
     };
   }, [teacherClasses]);
 
-  // Filter courses based on teacher's allowed subjects
-  const filteredCourses = useMemo(() => {
-    if (!teacher || !teacher.subjectIds) return courses;
-
-    return courses
-      .map((gradeGroup) => ({
-        ...gradeGroup,
-        items: gradeGroup.items.filter((item) =>
-          teacher.subjectIds?.some((subjectId) => item.id.startsWith(subjectId))
-        ),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [teacher, courses]);
-
-
-  const initialCourseId = filteredCourses[0]?.items[0]?.id ?? "";
+  const filteredCourses = courses;
+  const initialCourseId = courses[0]?.items[0]?.id ?? "";
 
   useEffect(() => {
-    if (filteredCourses[0]?.items[0]?.id) {
-      setSelectedCourseId(filteredCourses[0].items[0].id);
-      const firstCourseId = filteredCourses[0].items[0].id;
+    if (courses[0]?.items[0]?.id) {
+      setSelectedCourseId(courses[0].items[0].id);
+      const firstCourseId = courses[0].items[0].id;
       const classes = classesByCourse[firstCourseId] ?? [];
       setSelectedClassId(classes[0]?.id ?? null);
     }
-  }, [teacher, filteredCourses, classesByCourse]);
+  }, [courses, classesByCourse]);
 
   const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
   const currentClasses = classesByCourse[selectedCourseId] ?? [];
@@ -204,9 +136,14 @@ const Teacher = () => {
   };
 
   useEffect(() => {
+    const subject =
+      courseSubjectMap[selectedCourseId] ?? subjectFromCourseId(selectedCourseId);
     const storedTopics = getTopics({
       teacherId: id,
       courseId: selectedCourseId,
+      subject,
+      classId: selectedClassId ?? undefined,
+      className: selectedClassLabel,
     });
     const nextTopicsByClass = storedTopics.reduce<Record<string, string[]>>(
       (acc, item) => {
@@ -223,7 +160,7 @@ const Teacher = () => {
       {}
     );
     setTopicsByClass(nextTopicsByClass);
-  }, [id, selectedCourseId]);
+  }, [id, selectedCourseId, selectedClassId, selectedClassLabel, courseSubjectMap]);
 
   useEffect(() => {
     if (!apiTeacherId || !selectedClassId) {
@@ -251,10 +188,14 @@ const Teacher = () => {
       return;
     }
 
+    const subject =
+      courseSubjectMap[selectedCourseId] ?? subjectFromCourseId(selectedCourseId);
     const created = addTopic({
       title: trimmedTopic,
       teacherId: id,
       courseId: selectedCourseId,
+      subject,
+      classId: selectedClassId ?? undefined,
       className: selectedClassLabel,
     });
     setTopicsByClass((prev) => {
@@ -293,7 +234,7 @@ const Teacher = () => {
       <div className="flex min-h-screen">
         <TeacherSidebar
           teacherName={
-            teacher ? `${teacher.firstName} ${teacher.lastName}` : "Вчитель"
+            id ? `Вчитель ${id}` : "Вчитель"
           }
           activeItem="materials"
         />
@@ -302,6 +243,12 @@ const Teacher = () => {
             <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
               <Panel title="Курси">
                 <div className="space-y-6">
+                  {filteredCourses.length === 0 && (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                      Немає доступних курсів. Перевірте ID вчителя або дані в
+                      бекенді.
+                    </div>
+                  )}
                   {filteredCourses.map((group) => (
                     <div key={group.grade}>
                       <div className="text-sm font-semibold text-slate-700">
@@ -326,6 +273,32 @@ const Teacher = () => {
                       </div>
                     </div>
                   ))}
+                  {currentClasses.length > 0 && (
+                    <div className="border-t border-slate-200 pt-4">
+                      <div className="text-sm font-semibold text-slate-700">
+                        Клас
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {currentClasses.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setSelectedClassId(item.id)}
+                            className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
+                              selectedClassId === item.id
+                                ? "border-[#BFD6FF] bg-[#E9F1FF] text-slate-900"
+                                : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+                            } cursor-pointer`}
+                          >
+                            <span>{item.label}</span>
+                            <span className="text-xs text-slate-500">
+                              ID {item.id}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </Panel>
               <Panel title="Теми">
@@ -346,7 +319,8 @@ const Teacher = () => {
             </div>
             <button
               type="button"
-              className="absolute bottom-0 right-0 flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#1E73F7] shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-xl cursor-pointer"
+              disabled={!selectedClassId}
+              className="absolute bottom-0 right-0 flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#1E73F7] shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
               onClick={() => setIsTopicModalOpen(true)}
             >
               <span className="text-lg">＋</span>

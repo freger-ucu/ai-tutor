@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { teachers } from "../data/teachers";
 import AddMaterialsCard from "../components/AddMaterialsCard";
 import Card from "../components/Card";
 import GenerateModalContent from "../components/GenerateModalContent";
@@ -14,6 +13,7 @@ import {
   generateNotesByLevel,
   generateNotesIndividual,
   generateTest,
+  getTeacherStudents,
 } from "../api/teacher";
 import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
@@ -32,10 +32,6 @@ const courseLabels: Record<string, string> = {
 const TeacherTopic = () => {
   const { id, courseId, classId, topicId } = useParams();
   const navigate = useNavigate();
-  const teacher = useMemo(
-    () => teachers.find((item) => item.id === id),
-    [id]
-  );
   const [activeModal, setActiveModal] = useState<"material" | "test" | "audience" | null>(
     null
   );
@@ -53,6 +49,7 @@ const TeacherTopic = () => {
   const [isGeneratingMaterial, setIsGeneratingMaterial] = useState(false);
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
   const [materialError, setMaterialError] = useState<string | null>(null);
+  const [classStudents, setClassStudents] = useState<number[]>([]);
   const decodedClassId = classId ? Number(decodeURIComponent(classId)) : null;
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
@@ -67,7 +64,7 @@ const TeacherTopic = () => {
     decodedClassId && classNumber
       ? classIdToLabel(classNumber, decodedClassId)
       : "";
-  const apiTeacherId = teacher?.apiId ?? toNumericId(id) ?? 0;
+  const apiTeacherId = toNumericId(id) ?? 0;
   const apiClassId = decodedClassId ?? 0;
 
   const [notes, setNotes] = useState<{ id: string; title: string }[]>([]);
@@ -80,6 +77,8 @@ const TeacherTopic = () => {
     const storedNotes = getMaterials({
       teacherId: id,
       courseId: decodedCourse,
+      subject: subjectName,
+      classId: apiClassId || undefined,
       className: classLabel,
       topicName: decodedTopic,
       type: "note",
@@ -87,13 +86,34 @@ const TeacherTopic = () => {
     const storedTests = getMaterials({
       teacherId: id,
       courseId: decodedCourse,
+      subject: subjectName,
+      classId: apiClassId || undefined,
       className: classLabel,
       topicName: decodedTopic,
       type: "test",
     }).map((item) => ({ id: item.id, title: item.title }));
     setNotes(storedNotes);
     setTests(storedTests);
-  }, [id, decodedCourse, classLabel, decodedTopic]);
+  }, [id, decodedCourse, classLabel, decodedTopic, apiClassId, subjectName]);
+
+  useEffect(() => {
+    if (!apiTeacherId || !apiClassId || !subjectName) {
+      setClassStudents([]);
+      return;
+    }
+    getTeacherStudents({
+      class_id: apiClassId,
+      teacher_id: apiTeacherId,
+      subject: subjectName,
+    })
+      .then((response) => {
+        setClassStudents(response.students.map((student) => student.student_id));
+      })
+      .catch((error) => {
+        console.error(error);
+        setClassStudents([]);
+      });
+  }, [apiTeacherId, apiClassId, subjectName]);
 
   const handleOpenAudience = (from: "material" | "test") => {
     setPreviousModal(from);
@@ -155,7 +175,7 @@ const TeacherTopic = () => {
       <div className="flex min-h-screen">
         <TeacherSidebar
           teacherName={
-            teacher ? `${teacher.firstName} ${teacher.lastName}` : "Вчитель"
+            id ? `Вчитель ${id}` : "Вчитель"
           }
           activeItem="materials"
           afterPrimaryNav={
@@ -360,6 +380,8 @@ const TeacherTopic = () => {
                   teacherNotes: response.teacher_notes,
                   teacherId: id,
                   courseId: decodedCourse,
+                  subject: subjectName,
+                  classId: apiClassId || undefined,
                   className: classLabel,
                   topicName: decodedTopic,
                 });
@@ -421,6 +443,8 @@ const TeacherTopic = () => {
                 questions: payload.questions,
                 teacherId: id,
                 courseId: decodedCourse,
+                subject: subjectName,
+                classId: apiClassId || undefined,
                 className: classLabel,
                 topicName: decodedTopic,
               });
@@ -437,6 +461,8 @@ const TeacherTopic = () => {
                 questions: fallback.questions,
                 teacherId: id,
                 courseId: decodedCourse,
+                subject: subjectName,
+                classId: apiClassId || undefined,
                 className: classLabel,
                 topicName: decodedTopic,
               });
@@ -459,7 +485,7 @@ const TeacherTopic = () => {
           if (previousModal) setActiveModal(previousModal);
           else setActiveModal(null);
         }}
-        classNameFilter={classLabel}
+        students={classStudents.map((studentId) => ({ id: studentId }))}
         onSave={handleAudienceSave}
       />
     </div>

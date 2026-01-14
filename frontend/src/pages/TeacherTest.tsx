@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { teachers } from "../data/teachers";
 import { getTestById, getTestStatistics, mockTestData } from "../data/mockTests";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { TestContainer } from "../components/test";
@@ -8,14 +7,11 @@ import SelectStudentsModal from "../components/SelectStudentsModal";
 import { getMaterials } from "../data/materialsStorage";
 import { withGeneratedQuestions } from "../data/testMapper";
 import { classLabelToId } from "../data/classUtils";
+import { getTeacherStudents } from "../api/teacher";
+import { toNumericId } from "../api/idUtils";
 
 const TeacherTest = () => {
   const { id, testId } = useParams();
-
-  const teacher = useMemo(
-    () => teachers.find((item) => item.id === id),
-    [id]
-  );
 
   const storedTest = useMemo(
     () => getMaterials({ type: "test" }).find((item) => item.id === testId),
@@ -59,11 +55,21 @@ const TeacherTest = () => {
     "Українська мова": "ukr-lang",
     "Історія України": "history",
   };
+  const subjectLabelMap: Record<string, string> = {
+    algebra: "Алгебра",
+    geometry: "Геометрія",
+    "ukr-lang": "Українська мова",
+    history: "Історія України",
+  };
   const courseId =
     storedTest?.courseId ??
     (testData?.subject && classNumber
       ? `${subjectSlugMap[testData.subject] ?? testData.subject.toLowerCase().replace(/\s+/g, "-")}-${classNumber}`
       : "");
+  const subjectSlug =
+    courseId.split("-").slice(0, -1).join("-") || courseId;
+  const subjectName =
+    testData?.subject ?? subjectLabelMap[subjectSlug] ?? "";
   const encodedTopic = testData?.topicName
     ? encodeURIComponent(testData.topicName)
     : "";
@@ -81,6 +87,8 @@ const TeacherTest = () => {
     const filters: {
       teacherId?: string;
       courseId?: string;
+      subject?: string;
+      classId?: number;
       className?: string;
       topicName?: string;
     } = {
@@ -91,10 +99,36 @@ const TeacherTest = () => {
     if (courseId) {
       filters.courseId = courseId;
     }
+    if (subjectName) {
+      filters.subject = subjectName;
+    }
+    if (classId) {
+      filters.classId = classId;
+    }
     return getMaterials(filters);
-  }, [id, courseId, testData?.className, testData?.topicName]);
+  }, [id, courseId, testData?.className, testData?.topicName, subjectName, classId]);
   const sidebarNotes = sidebarMaterials.filter((item) => item.type === "note");
   const sidebarTests = sidebarMaterials.filter((item) => item.type === "test");
+  const [classStudents, setClassStudents] = useState<number[]>([]);
+  useEffect(() => {
+    const apiTeacherId = toNumericId(id) ?? 0;
+    if (!apiTeacherId || !classId || !subjectName) {
+      setClassStudents([]);
+      return;
+    }
+    getTeacherStudents({
+      class_id: classId,
+      teacher_id: apiTeacherId,
+      subject: subjectName,
+    })
+      .then((response) => {
+        setClassStudents(response.students.map((student) => student.student_id));
+      })
+      .catch((error) => {
+        console.error(error);
+        setClassStudents([]);
+      });
+  }, [id, classId, subjectName]);
 
   if (!testData) {
     return (
@@ -108,7 +142,7 @@ const TeacherTest = () => {
     <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
       <TeacherSidebar
         teacherName={
-          teacher ? `${teacher.firstName} ${teacher.lastName}` : "Вчитель"
+          id ? `Вчитель ${id}` : "Вчитель"
         }
         activeItem="materials"
         afterPrimaryNav={
@@ -204,7 +238,7 @@ const TeacherTest = () => {
       <SelectStudentsModal
         isOpen={isAudienceModalOpen}
         onClose={() => setIsAudienceModalOpen(false)}
-        classNameFilter={testData.className}
+        students={classStudents.map((studentId) => ({ id: studentId }))}
         onSave={(selection) => {
             console.log("Saved selection", selection);
             setIsAudienceModalOpen(false);

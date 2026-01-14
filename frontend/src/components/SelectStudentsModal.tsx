@@ -1,18 +1,17 @@
 import { useState, useMemo } from "react";
-import { students } from "../data/students";
 import Modal from "./Modal";
 
 interface SelectStudentsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  classNameFilter?: string; // e.g. "8-A"
+  students?: { id: number; label?: string }[];
   onSave?: (selection: { levels: string[]; students: string[] }) => void;
 }
 
 const SelectStudentsModal = ({
   isOpen,
   onClose,
-  classNameFilter,
+  students,
   onSave,
 }: SelectStudentsModalProps) => {
   const [activeTab, setActiveTab] = useState<"levels" | "individual">("levels");
@@ -23,11 +22,14 @@ const SelectStudentsModal = ({
   // Student selections
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
 
-  // Filter valid students for this class
-  const classStudents = useMemo(() => {
-    if (!classNameFilter) return students;
-    return students.filter((s) => s.className === classNameFilter);
-  }, [classNameFilter]);
+  const classStudents = useMemo(
+    () =>
+      (students ?? []).map((student) => ({
+        id: String(student.id),
+        label: student.label ?? `Учень ${student.id}`,
+      })),
+    [students]
+  );
 
   const toggleLevel = (level: string) => {
     setSelectedLevels((prev) =>
@@ -127,6 +129,11 @@ const SelectStudentsModal = ({
 
                 {activeTab === "individual" && (
                      <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                        {classStudents.length === 0 && (
+                          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                            Немає учнів для вибору.
+                          </div>
+                        )}
                         {classStudents.map((student) => (
                              <label
                                 key={student.id}
@@ -136,13 +143,13 @@ const SelectStudentsModal = ({
                              >
                                 <div className="h-8 w-8 overflow-hidden rounded-full bg-slate-200">
                                      <img 
-                                        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${student.firstName}`} 
-                                        alt={student.firstName}
+                                        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`} 
+                                        alt={student.label}
                                         className="h-full w-full object-cover" 
                                      />
                                 </div>
                                 <div className={`flex-1 text-sm font-semibold ${selectedStudents.includes(student.id) ? "text-[#1E73F7]" : "text-slate-700"}`}>
-                                    {student.firstName} {student.lastName}
+                                    {student.label}
                                 </div>
                                 <div className={`flex h-6 w-6 items-center justify-center rounded border transition ${
                                     selectedStudents.includes(student.id) ? "border-[#1E73F7] bg-[#1E73F7]" : "border-slate-300 bg-white"

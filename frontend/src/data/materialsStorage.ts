@@ -7,6 +7,8 @@ export interface MaterialItem {
   content?: string;
   teacherNotes?: string;
   questions?: unknown;
+  classId?: number;
+  subject?: string;
   teacherId?: string;
   courseId?: string;
   className?: string;
@@ -17,6 +19,8 @@ export interface MaterialItem {
 export interface TopicItem {
   id: string;
   title: string;
+  classId?: number;
+  subject?: string;
   teacherId?: string;
   courseId?: string;
   className?: string;
@@ -86,6 +90,8 @@ const writeTopics = (items: TopicItem[]) => {
 export const getMaterials = (filters?: {
   teacherId?: string;
   courseId?: string;
+  subject?: string;
+  classId?: number;
   className?: string;
   topicName?: string;
   type?: MaterialType;
@@ -99,10 +105,28 @@ export const getMaterials = (filters?: {
     if (filters.teacherId && item.teacherId !== filters.teacherId) {
       return false;
     }
-    if (filters.courseId && item.courseId !== filters.courseId) {
+    if (filters.subject) {
+      if (item.subject && item.subject !== filters.subject) {
+        return false;
+      }
+      if (!item.subject && filters.courseId && item.courseId !== filters.courseId) {
+        return false;
+      }
+    } else if (filters.courseId && item.courseId !== filters.courseId) {
       return false;
     }
-    if (filters.className && item.className !== filters.className) {
+    if (typeof filters.classId === "number") {
+      if (typeof item.classId === "number" && item.classId !== filters.classId) {
+        return false;
+      }
+      if (
+        typeof item.classId !== "number" &&
+        filters.className &&
+        item.className !== filters.className
+      ) {
+        return false;
+      }
+    } else if (filters.className && item.className !== filters.className) {
       return false;
     }
     if (filters.topicName && item.topicName !== filters.topicName) {
@@ -130,6 +154,8 @@ export const addMaterial = (input: Omit<MaterialItem, "id" | "createdAt">) => {
 export const getTopics = (filters?: {
   teacherId?: string;
   courseId?: string;
+  subject?: string;
+  classId?: number;
   className?: string;
 }) => {
   const items = readTopics();
@@ -141,10 +167,28 @@ export const getTopics = (filters?: {
     if (filters.teacherId && item.teacherId !== filters.teacherId) {
       return false;
     }
-    if (filters.courseId && item.courseId !== filters.courseId) {
+    if (filters.subject) {
+      if (item.subject && item.subject !== filters.subject) {
+        return false;
+      }
+      if (!item.subject && filters.courseId && item.courseId !== filters.courseId) {
+        return false;
+      }
+    } else if (filters.courseId && item.courseId !== filters.courseId) {
       return false;
     }
-    if (filters.className && item.className !== filters.className) {
+    if (typeof filters.classId === "number") {
+      if (typeof item.classId === "number" && item.classId !== filters.classId) {
+        return false;
+      }
+      if (
+        typeof item.classId !== "number" &&
+        filters.className &&
+        item.className !== filters.className
+      ) {
+        return false;
+      }
+    } else if (filters.className && item.className !== filters.className) {
       return false;
     }
     return true;

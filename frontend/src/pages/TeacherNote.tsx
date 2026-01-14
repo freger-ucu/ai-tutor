@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { teachers } from "../data/teachers";
 import TeacherSidebar from "../components/TeacherSidebar";
 import SelectStudentsModal from "../components/SelectStudentsModal";
 import { getMaterials } from "../data/materialsStorage";
 import { classIdToLabel } from "../data/classUtils";
+import { toNumericId } from "../api/idUtils";
+import { getTeacherStudents } from "../api/teacher";
 
 const escapeHtml = (value: string) =>
   value
@@ -102,11 +103,6 @@ const renderMarkdown = (markdown: string) => {
 
 const TeacherNote = () => {
   const { teacherId, courseId, classId, topicId, noteId } = useParams();
-  
-  const teacher = useMemo(
-    () => teachers.find((item) => item.id === teacherId),
-    [teacherId]
-  );
 
   const [isAudienceModalOpen, setIsAudienceModalOpen] = useState(false);
 
@@ -114,12 +110,23 @@ const TeacherNote = () => {
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
   const decodedNote = noteId ? decodeURIComponent(noteId) : "Іменник"; 
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
+  const subjectSlug = decodedCourse.split("-").slice(0, -1).join("-");
+  const subjectLabelMap: Record<string, string> = {
+    algebra: "Алгебра",
+    geometry: "Геометрія",
+    "ukr-lang": "Українська мова",
+    history: "Історія України",
+  };
+  const subjectName = subjectLabelMap[subjectSlug] ?? decodedCourse;
   const classNumberMatch = decodedCourse.match(/(\d+)$/);
   const classNumber = classNumberMatch ? Number(classNumberMatch[1]) : null;
   const classLabel =
     decodedClassId && classNumber
       ? classIdToLabel(classNumber, decodedClassId)
       : "";
+  const apiTeacherId = toNumericId(teacherId) ?? 0;
+  const apiClassId = decodedClassId ?? 0;
+  const [classStudents, setClassStudents] = useState<number[]>([]);
   const noteMaterial = useMemo(
     () => getMaterials({ type: "note" }).find((item) => item.id === noteId),
     [noteId]
@@ -147,6 +154,8 @@ const TeacherNote = () => {
     const filters: {
       teacherId?: string;
       courseId?: string;
+      subject?: string;
+      classId?: number;
       className?: string;
       topicName?: string;
     } = {
@@ -157,17 +166,50 @@ const TeacherNote = () => {
     if (sidebarCourseId) {
       filters.courseId = sidebarCourseId;
     }
+    if (subjectName) {
+      filters.subject = subjectName;
+    }
+    if (apiClassId) {
+      filters.classId = apiClassId;
+    }
     return getMaterials(filters);
-  }, [teacherId, classLabel, noteMaterial?.className, noteMaterial?.topicName, sidebarCourseId, sidebarTopicName]);
+  }, [
+    teacherId,
+    classLabel,
+    noteMaterial?.className,
+    noteMaterial?.topicName,
+    sidebarCourseId,
+    sidebarTopicName,
+    subjectName,
+    apiClassId,
+  ]);
   const sidebarNotes = sidebarMaterials.filter((item) => item.type === "note");
   const sidebarTests = sidebarMaterials.filter((item) => item.type === "test");
+  useEffect(() => {
+    if (!apiTeacherId || !apiClassId || !subjectName) {
+      setClassStudents([]);
+      return;
+    }
+    getTeacherStudents({
+      class_id: apiClassId,
+      teacher_id: apiTeacherId,
+      subject: subjectName,
+    })
+      .then((response) => {
+        setClassStudents(response.students.map((student) => student.student_id));
+      })
+      .catch((error) => {
+        console.error(error);
+        setClassStudents([]);
+      });
+  }, [apiTeacherId, apiClassId, subjectName]);
 
   return (
     <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden">
       <div className="flex h-full">
         <TeacherSidebar
           teacherName={
-            teacher ? `${teacher.firstName} ${teacher.lastName}` : "Вчитель"
+            teacherId ? `Вчитель ${teacherId}` : "Вчитель"
           }
           activeItem="materials"
           afterPrimaryNav={
@@ -318,7 +360,7 @@ const TeacherNote = () => {
       <SelectStudentsModal
         isOpen={isAudienceModalOpen}
         onClose={() => setIsAudienceModalOpen(false)}
-        classNameFilter={classLabel}
+        students={classStudents.map((studentId) => ({ id: studentId }))}
         onSave={(selection) => {
             console.log("Saved selection", selection);
             setIsAudienceModalOpen(false);

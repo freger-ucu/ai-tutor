@@ -1,11 +1,13 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { getMaterials } from "../data/materialsStorage";
 import { getTestById, mockTestData } from "../data/mockTests";
-import { students } from "../data/students";
 import { TestContainer } from "../components/test";
 import { withGeneratedQuestions } from "../data/testMapper";
 import { markStudentTestCompleted } from "../data/studentProgress";
+import { getStudentData } from "../api/student";
+import { toNumericId } from "../api/idUtils";
+import { classIdToLabel } from "../data/classUtils";
 
 const subjects = [
   { id: "algebra", label: "Алгебра", icon: <span className="text-xl">√x</span> },
@@ -28,20 +30,42 @@ const subjects = [
     ),
   },
 ];
+const subjectLabelMap: Record<string, string> = {
+  algebra: "Алгебра",
+  history: "Історія України",
+  "ukr-lang": "Українська мова",
+};
 
 const StudentTest = () => {
   const { studentId, testId } = useParams();
   const navigate = useNavigate();
-
-  const student = useMemo(
-    () => students.find((s) => s.id === studentId),
-    [studentId]
-  );
+  const [apiSubjects, setApiSubjects] = useState<string[]>([]);
+  const [studentGrade, setStudentGrade] = useState<number | null>(null);
+  const [studentClassId, setStudentClassId] = useState<number | null>(null);
+  const [studentError, setStudentError] = useState<string | null>(null);
 
   const storedTest = useMemo(
     () => getMaterials({ type: "test" }).find((item) => item.id === testId),
     [testId]
   );
+  useEffect(() => {
+    const apiId = toNumericId(studentId);
+    if (!apiId) {
+      setStudentError("Учня не знайдено");
+      return;
+    }
+    getStudentData(apiId)
+      .then((response) => {
+        setApiSubjects(response.subjects);
+        setStudentGrade(response.class_number);
+        setStudentClassId(response.class_id);
+        setStudentError(null);
+      })
+      .catch((error) => {
+        console.error(error);
+        setStudentError("Учня не знайдено");
+      });
+  }, [studentId]);
 
   const testData = useMemo(() => {
     if (!testId) return undefined;
@@ -91,14 +115,27 @@ const StudentTest = () => {
       : `/student/${studentId}`;
   const subjectSlug =
     courseId.split("-").slice(0, -1).join("-") || courseId;
-  const sidebarClassName = student?.className ?? testData?.className ?? "";
+  const subjectName =
+    testData?.subject ?? subjectLabelMap[subjectSlug] ?? "";
+  const classLabel =
+    studentGrade && studentClassId
+      ? classIdToLabel(studentGrade, studentClassId)
+      : studentGrade
+      ? String(studentGrade)
+      : "";
+  const sidebarClassName = classLabel || testData?.className || "";
   const sidebarTopicName = testData?.topicName ?? "";
+  const availableSubjects = apiSubjects.length
+    ? subjects.filter((subject) => apiSubjects.includes(subject.label))
+    : subjects;
   const sidebarMaterials = useMemo(() => {
     if (!sidebarClassName || !sidebarTopicName) {
       return [];
     }
     const filters: {
       courseId?: string;
+      subject?: string;
+      classId?: number;
       className?: string;
       topicName?: string;
     } = {
@@ -108,10 +145,24 @@ const StudentTest = () => {
     if (courseId) {
       filters.courseId = courseId;
     }
+    if (subjectName) {
+      filters.subject = subjectName;
+    }
+    if (studentClassId) {
+      filters.classId = studentClassId;
+    }
     return getMaterials(filters);
-  }, [courseId, sidebarClassName, sidebarTopicName]);
+  }, [courseId, sidebarClassName, sidebarTopicName, subjectName, studentClassId]);
   const sidebarNotes = sidebarMaterials.filter((item) => item.type === "note");
   const sidebarTests = sidebarMaterials.filter((item) => item.type === "test");
+
+  if (studentError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#1E73F7]">
+        <div className="text-xl text-white">Учня не знайдено</div>
+      </div>
+    );
+  }
 
   if (!testData) {
     return (
@@ -136,15 +187,15 @@ const StudentTest = () => {
              />
             <div>
               <div className="text-base font-semibold text-slate-900">
-                {student ? `${student.firstName} ${student.lastName}` : "Учень"}
+                {studentId ? `Учень ${studentId}` : "Учень"}
               </div>
-              {student && (
-                <div className="text-xs text-slate-500">Клас: {student.className}</div>
-              )}
+              <div className="text-xs text-slate-500">
+                Клас: {classLabel || testData?.className || "—"}
+              </div>
             </div>
           </div>
           <div className="mt-8 space-y-2">
-            {subjects.map((subject) => {
+            {availableSubjects.map((subject) => {
               const isActive = subjectSlug === subject.id;
               return (
                 <button
