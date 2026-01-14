@@ -6,6 +6,7 @@ interface GenerateModalContentProps {
   isLoading?: boolean;
   onPrimaryClick: () => void;
   onSecondaryClick?: () => void;
+  secondaryLabel?: string;
 }
 
 const GenerateModalContent = ({
@@ -16,6 +17,7 @@ const GenerateModalContent = ({
   isLoading = false,
   onPrimaryClick,
   onSecondaryClick,
+  secondaryLabel = "Змінити цільову аудиторію",
 }: GenerateModalContentProps) => {
   return (
     <div className="flex flex-col gap-8">
@@ -32,7 +34,16 @@ const GenerateModalContent = ({
         rows={4}
         className="w-full resize-none rounded-[28px] bg-[#E9F1FF] px-8 py-6 text-lg font-medium text-slate-700 placeholder-slate-500 outline-none transition focus:bg-white focus:ring-2 focus:ring-[#BFD6FF]"
       />
-      <div className="flex items-center justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {onSecondaryClick && (
+          <button
+            type="button"
+            onClick={onSecondaryClick}
+            className="flex items-center justify-center gap-2 rounded-full border-2 border-[#1E73F7] bg-white px-6 py-2.5 text-sm font-semibold text-[#1E73F7] transition hover:bg-[#E9F1FF]"
+          >
+            {secondaryLabel}
+          </button>
+        )}
         <button
           type="button"
           onClick={onPrimaryClick}
