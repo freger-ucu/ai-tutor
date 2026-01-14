@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
+import BackButton from "../components/BackButton";
+import Breadcrumbs from "../components/Breadcrumbs";
 import Card from "../components/Card";
 import Panel from "../components/Panel";
 import PillButton from "../components/PillButton";
@@ -235,8 +237,17 @@ const StudentTopic = () => {
         </aside>
 
         <main className="ml-72 flex-1 px-10 py-10 w-full">
+          <div className="flex items-center gap-4 mb-6">
+            <BackButton fallbackPath={`/student/${studentId}`} />
+            <Breadcrumbs
+              items={[
+                { label: courseLabel || subjectName, href: `/student/${studentId}` },
+                { label: decodedTopic || "Тема" },
+              ]}
+            />
+          </div>
 
-          <Panel className="mt-6">
+          <Panel>
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">{decodedTopic}</h1>

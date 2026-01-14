@@ -32,14 +32,7 @@ const GenerateModalContent = ({
         rows={4}
         className="w-full resize-none rounded-[28px] bg-[#E9F1FF] px-8 py-6 text-lg font-medium text-slate-700 placeholder-slate-500 outline-none transition focus:bg-white focus:ring-2 focus:ring-[#BFD6FF]"
       />
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onSecondaryClick}
-          className="rounded-full bg-[#E9F1FF] px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-[#DDEBFF] cursor-pointer"
-        >
-          Змінити цільову аудиторію
-        </button>
+      <div className="flex items-center justify-end">
         <button
           type="button"
           onClick={onPrimaryClick}

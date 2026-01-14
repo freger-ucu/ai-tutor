@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
+import BackButton from "../components/BackButton";
+import Breadcrumbs from "../components/Breadcrumbs";
 import { getMaterials } from "../data/materialsStorage";
 import { getTestById, mockTestData } from "../data/mockTests";
 import { TestContainer } from "../components/test";
@@ -328,17 +330,7 @@ const StudentTest = () => {
             })}
           </div>
 
-          <div className="mt-6">
-            <Link
-              to={backToTopicHref}
-              className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <span className="inline-block h-5 w-5 rounded-md bg-slate-200" />
-              Назад до теми
-            </Link>
-          </div>
-
-          <div className="mt-4 border-t border-slate-200 pt-6 space-y-4 text-sm">
+          <div className="mt-6 border-t border-slate-200 pt-6 space-y-4 text-sm">
             {sidebarNotes.map((item) => (
               <Link
                 key={item.id}
@@ -367,7 +359,17 @@ const StudentTest = () => {
           </div>
         </aside>
         <main className="ml-72 flex-1 px-10 py-10 w-full">
-          <div className="mt-6">
+          <div className="flex items-center gap-4 mb-6">
+            <BackButton fallbackPath={backToTopicHref} />
+            <Breadcrumbs
+              items={[
+                { label: subjectName || "Предмет", href: `/student/${studentId}` },
+                { label: testData.topicName || "Тема", href: backToTopicHref },
+                { label: testData.title },
+              ]}
+            />
+          </div>
+          <div>
             <TestContainer
               testData={testData}
               showStatistics={false}

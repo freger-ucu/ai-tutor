@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import AddMaterialsCard from "../components/AddMaterialsCard";
+import BackButton from "../components/BackButton";
+import Breadcrumbs from "../components/Breadcrumbs";
 import Card from "../components/Card";
 import GenerateModalContent from "../components/GenerateModalContent";
 import Modal from "../components/Modal";
@@ -178,15 +180,6 @@ const TeacherTopic = () => {
             id ? `Вчитель ${id}` : "Вчитель"
           }
           activeItem="materials"
-          afterPrimaryNav={
-            <Link
-              to={backToClassHref}
-              className="flex w-full items-start justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 hover:bg-slate-100"
-            >
-              <span className="mt-0.5 inline-block h-5 w-5 rounded-md bg-slate-200" />
-              <span>Назад до класу</span>
-            </Link>
-          }
         >
           <div className="space-y-4">
             {notes.map((item) => (
@@ -212,6 +205,16 @@ const TeacherTopic = () => {
           </div>
         </TeacherSidebar>
         <main className="flex-1 px-10 py-10">
+          <div className="flex items-center gap-4 mb-6">
+            <BackButton fallbackPath={`/teacher/${id}`} />
+            <Breadcrumbs
+              items={[
+                { label: "Матеріали", href: `/teacher/${id}` },
+                { label: classLabel || "Клас" },
+                { label: decodedTopic || "Тема" },
+              ]}
+            />
+          </div>
           <Panel>
             <div className="grid gap-6 md:grid-cols-[1fr_1fr_1fr_auto]">
               <div>
@@ -237,16 +240,6 @@ const TeacherTopic = () => {
                 <div className="mt-2 text-sm font-semibold text-slate-900">
                   {decodedTopic}
                 </div>
-              </div>
-              <div className="flex items-center justify-start md:justify-end">
-                <PillButton
-                  label="Приєднатись"
-                  size="md"
-                  className="rounded-2xl"
-                  icon={
-                    <span className="inline-block h-5 w-5 rounded-full bg-[#1E73F7]/20" />
-                  }
-                />
               </div>
             </div>
           </Panel>

@@ -151,6 +151,21 @@ export const addMaterial = (input: Omit<MaterialItem, "id" | "createdAt">) => {
   return nextItem;
 };
 
+export const updateMaterial = (
+  id: string,
+  updates: Partial<Omit<MaterialItem, "id" | "createdAt">>
+) => {
+  const items = readMaterials();
+  const index = items.findIndex((item) => item.id === id);
+  if (index === -1) {
+    return null;
+  }
+  const updated = { ...items[index], ...updates };
+  items[index] = updated;
+  writeMaterials(items);
+  return updated;
+};
+
 export const getTopics = (filters?: {
   teacherId?: string;
   courseId?: string;
