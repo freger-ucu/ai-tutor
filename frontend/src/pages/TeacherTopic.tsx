@@ -452,6 +452,9 @@ const TeacherTopic = () => {
                 ...prev,
                 { id: created.id, title: created.title },
               ]);
+              if (id) {
+                navigate(`/teacher/${id}/test/${created.id}`);
+              }
             } catch (error) {
               console.error(error);
               const fallback = buildFallbackTest(testName.trim());
@@ -470,6 +473,9 @@ const TeacherTopic = () => {
                 ...prev,
                 { id: created.id, title: created.title },
               ]);
+              if (id) {
+                navigate(`/teacher/${id}/test/${created.id}`);
+              }
             } finally {
               setIsGeneratingTest(false);
             }

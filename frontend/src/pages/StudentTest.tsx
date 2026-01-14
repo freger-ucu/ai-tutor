@@ -5,7 +5,7 @@ import { getTestById, mockTestData } from "../data/mockTests";
 import { TestContainer } from "../components/test";
 import { withGeneratedQuestions } from "../data/testMapper";
 import { markStudentTestCompleted } from "../data/studentProgress";
-import { getStudentData } from "../api/student";
+import { checkOpenQuestion, getStudentData, getTestFeedback } from "../api/student";
 import { toNumericId } from "../api/idUtils";
 import { classIdToLabel } from "../data/classUtils";
 
@@ -36,6 +36,100 @@ const subjectLabelMap: Record<string, string> = {
   "ukr-lang": "Українська мова",
 };
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+const formatInline = (value: string) => {
+  const withCode = value.replace(
+    /`([^`]+)`/g,
+    "<code class=\"rounded bg-slate-100 px-1 py-0.5 text-xs font-semibold text-slate-900\">$1</code>"
+  );
+  const withBold = withCode.replace(
+    /\*\*([^*]+)\*\*/g,
+    "<strong class=\"font-semibold text-slate-900\">$1</strong>"
+  );
+  return withBold.replace(
+    /\*([^*]+)\*/g,
+    "<em class=\"italic text-slate-800\">$1</em>"
+  );
+};
+
+const renderMarkdown = (markdown: string) => {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  let html = "";
+  let inUl = false;
+  let inOl = false;
+
+  const closeLists = () => {
+    if (inUl) {
+      html += "</ul>";
+      inUl = false;
+    }
+    if (inOl) {
+      html += "</ol>";
+      inOl = false;
+    }
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      closeLists();
+      html += "<br />";
+      continue;
+    }
+
+    const safe = formatInline(escapeHtml(trimmed));
+
+    if (trimmed.startsWith("### ")) {
+      closeLists();
+      html += `<h3 class="mt-6 text-base font-semibold text-slate-900">${safe.slice(4)}</h3>`;
+      continue;
+    }
+    if (trimmed.startsWith("## ")) {
+      closeLists();
+      html += `<h2 class="mt-6 text-lg font-semibold text-slate-900">${safe.slice(3)}</h2>`;
+      continue;
+    }
+    if (trimmed.startsWith("# ")) {
+      closeLists();
+      html += `<h1 class="mt-6 text-xl font-bold text-slate-900">${safe.slice(2)}</h1>`;
+      continue;
+    }
+
+    if (trimmed.startsWith("- ")) {
+      if (!inUl) {
+        closeLists();
+        html += "<ul class=\"mt-3 list-disc space-y-1 pl-5\">";
+        inUl = true;
+      }
+      html += `<li>${safe.slice(2)}</li>`;
+      continue;
+    }
+
+    const orderedMatch = trimmed.match(/^(\d+)\.\s+/);
+    if (orderedMatch) {
+      if (!inOl) {
+        closeLists();
+        html += "<ol class=\"mt-3 list-decimal space-y-1 pl-5\">";
+        inOl = true;
+      }
+      html += `<li>${safe.slice(orderedMatch[0].length)}</li>`;
+      continue;
+    }
+
+    closeLists();
+    html += `<p class="mt-3">${safe}</p>`;
+  }
+
+  closeLists();
+  return html;
+};
+
 const StudentTest = () => {
   const { studentId, testId } = useParams();
   const navigate = useNavigate();
@@ -43,6 +137,9 @@ const StudentTest = () => {
   const [studentGrade, setStudentGrade] = useState<number | null>(null);
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
   const [studentError, setStudentError] = useState<string | null>(null);
+  const [testFeedback, setTestFeedback] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
 
   const storedTest = useMemo(
     () => getMaterials({ type: "test" }).find((item) => item.id === testId),
@@ -67,30 +164,40 @@ const StudentTest = () => {
       });
   }, [studentId]);
 
+  useEffect(() => {
+    setTestFeedback(null);
+    setFeedbackError(null);
+    setIsFeedbackLoading(false);
+  }, [testId]);
+
   const testData = useMemo(() => {
     if (!testId) return undefined;
-    
-    // 1. Try to find in dynamic materials first (created by teacher)
-    // We fetch all tests to find the matching ID
-    const foundMaterial = storedTest;
 
-    if (foundMaterial) {
-        const hasQuestions = Array.isArray(foundMaterial.questions);
-        const withGenerated = hasQuestions
-          ? withGeneratedQuestions(mockTestData, foundMaterial.questions)
-          : mockTestData;
-        return {
-            ...withGenerated,
-            id: foundMaterial.id,
-            title: foundMaterial.title,
-            topicName: foundMaterial.topicName ?? mockTestData.topicName,
-            className: foundMaterial.className ?? mockTestData.className,
-            subject: "Тест",
-        };
+    const fallbackBase = getTestById(testId) ?? mockTestData;
+
+    if (storedTest) {
+      const base = {
+        ...fallbackBase,
+        id: storedTest.id,
+        title: storedTest.title,
+        subject: storedTest.subject ?? fallbackBase.subject,
+        className: storedTest.className ?? fallbackBase.className,
+        topicName: storedTest.topicName ?? fallbackBase.topicName,
+      };
+      const withGenerated = Array.isArray(storedTest.questions)
+        ? withGeneratedQuestions(base, storedTest.questions)
+        : base;
+      return {
+        ...withGenerated,
+        id: storedTest.id,
+        title: storedTest.title,
+        subject: storedTest.subject ?? withGenerated.subject,
+        className: storedTest.className ?? withGenerated.className,
+        topicName: storedTest.topicName ?? withGenerated.topicName,
+      };
     }
 
-    // 2. Fallback to hardcoded/legacy mock lookup
-    return getTestById(testId);
+    return fallbackBase;
   }, [testId, storedTest]);
 
   const classNumberMatch = testData?.className?.match(/(\d+)/);
@@ -265,7 +372,23 @@ const StudentTest = () => {
               testData={testData}
               showStatistics={false}
               viewMode="student"
-              onFinish={(result) => {
+              onEvaluateOpen={async ({ question, answer }) => {
+                const apiStudentId = toNumericId(studentId);
+                if (!apiStudentId || !subjectName) {
+                  return { correct: false, feedback: "Неможливо перевірити відповідь." };
+                }
+                const topic =
+                  question.topic ?? testData.topicName ?? testData.title;
+                return checkOpenQuestion({
+                  student_id: apiStudentId,
+                  subject: subjectName,
+                  topic,
+                  subtopics: question.subtopics ?? [],
+                  question: question.text,
+                  answer,
+                });
+              }}
+              onFinish={async (result) => {
                 if (studentId && testId) {
                   markStudentTestCompleted({
                     studentId,
@@ -274,8 +397,83 @@ const StudentTest = () => {
                     totalQuestions: result.totalQuestions,
                   });
                 }
+
+                const apiStudentId = toNumericId(studentId);
+                const apiTeacherId = toNumericId(storedTest?.teacherId);
+                if (!apiStudentId || !apiTeacherId || !subjectName) {
+                  return;
+                }
+                setIsFeedbackLoading(true);
+                setFeedbackError(null);
+                setTestFeedback(null);
+
+                const questions = result.answers
+                  .map((answer) => {
+                    const question = testData.questions.find(
+                      (item) => item.id === answer.questionId
+                    );
+                    if (!question) {
+                      return null;
+                    }
+                    const selectedText = answer.selectedOptionIds
+                      .map(
+                        (optionId) =>
+                          question.options.find((option) => option.id === optionId)
+                            ?.text
+                      )
+                      .filter((value): value is string => Boolean(value))
+                      .join(", ");
+                    const responseText =
+                      question.type === "open"
+                        ? answer.openAnswer?.trim() ?? ""
+                        : selectedText;
+                    return {
+                      question: question.text,
+                      answer: responseText,
+                      correct: answer.isCorrect,
+                      topic: question.topic ?? testData.topicName ?? testData.title,
+                      subtopics: question.subtopics ?? [],
+                    };
+                  })
+                  .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+                try {
+                  const feedback = await getTestFeedback({
+                    student_id: apiStudentId,
+                    teacher_id: apiTeacherId,
+                    subject: subjectName,
+                    questions,
+                  });
+                  setTestFeedback(feedback.feedback);
+                } catch (error) {
+                  console.error(error);
+                  setFeedbackError("Не вдалося отримати фідбек по тесту.");
+                } finally {
+                  setIsFeedbackLoading(false);
+                }
               }}
             />
+            {(isFeedbackLoading || testFeedback || feedbackError) && (
+              <div className="mt-6 rounded-2xl bg-white p-6 text-sm text-slate-700 shadow-sm">
+                <div className="text-base font-semibold text-slate-900">
+                  Підсумковий фідбек
+                </div>
+                {isFeedbackLoading && (
+                  <div className="mt-3 text-slate-500">Формуємо фідбек...</div>
+                )}
+                {feedbackError && (
+                  <div className="mt-3 text-rose-500">{feedbackError}</div>
+                )}
+                {testFeedback && (
+                  <div
+                    className="mt-3"
+                    dangerouslySetInnerHTML={{
+                      __html: renderMarkdown(testFeedback),
+                    }}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </main>
       </div>

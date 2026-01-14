@@ -18,27 +18,28 @@ const TeacherTest = () => {
     [testId]
   );
   const testData = useMemo(() => {
-    const base = getTestById(testId ?? "");
+    const fallbackBase = getTestById(testId ?? "") ?? mockTestData;
     if (!storedTest) {
-      return base;
+      return fallbackBase;
     }
-    const fallback = base ?? mockTestData;
-    if (!storedTest.questions || !Array.isArray(storedTest.questions)) {
-      return {
-        ...fallback,
-        id: storedTest.id,
-        title: storedTest.title,
-        topicName: storedTest.topicName ?? fallback.topicName,
-        className: storedTest.className ?? fallback.className,
-      };
-    }
-    const withGenerated = withGeneratedQuestions(fallback, storedTest.questions);
+    const base = {
+      ...fallbackBase,
+      id: storedTest.id,
+      title: storedTest.title,
+      subject: storedTest.subject ?? fallbackBase.subject,
+      topicName: storedTest.topicName ?? fallbackBase.topicName,
+      className: storedTest.className ?? fallbackBase.className,
+    };
+    const withGenerated = Array.isArray(storedTest.questions)
+      ? withGeneratedQuestions(base, storedTest.questions)
+      : base;
     return {
       ...withGenerated,
       id: storedTest.id,
       title: storedTest.title,
-      topicName: storedTest.topicName ?? fallback.topicName,
-      className: storedTest.className ?? fallback.className,
+      subject: storedTest.subject ?? withGenerated.subject,
+      topicName: storedTest.topicName ?? withGenerated.topicName,
+      className: storedTest.className ?? withGenerated.className,
     };
   }, [testId, storedTest]);
   const statistics = useMemo(() => getTestStatistics(testId ?? ""), [testId]);

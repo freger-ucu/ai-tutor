@@ -1,4 +1,5 @@
 import type { TestData, TestQuestion, TestOption, DifficultyLevel } from "../types/testTypes";
+import type { QuestionType } from "../types/testTypes";
 
 interface GeneratedAnswerOption {
   answer: string;
@@ -24,12 +25,7 @@ const toDifficulty = (difficulty: GeneratedQuestion["difficulty"]): DifficultyLe
 
 const toOptionsFromGenerated = (options: GeneratedAnswerOption[] | null): TestOption[] => {
   if (!options || options.length === 0) {
-    return [
-      {
-        id: "open",
-        text: "Відкрите питання",
-      },
-    ];
+    return [];
   }
   return options.map((option, index) => ({
     id: `opt-${index + 1}`,
@@ -37,31 +33,39 @@ const toOptionsFromGenerated = (options: GeneratedAnswerOption[] | null): TestOp
   }));
 };
 
-const toCorrectOptionId = (
+const toCorrectOptionIds = (
   options: GeneratedAnswerOption[] | null,
   mapped: TestOption[]
 ) => {
   if (!options || options.length === 0) {
-    return mapped[0]?.id ?? "open";
+    return [];
   }
-  const correctIndex = options.findIndex((option) => option.correct);
-  if (correctIndex === -1) {
-    return mapped[0]?.id ?? "opt-1";
+  const correctIndices = options
+    .map((option, index) => (option.correct ? index : -1))
+    .filter((index) => index >= 0);
+  if (!correctIndices.length) {
+    return [];
   }
-  return mapped[correctIndex]?.id ?? mapped[0]?.id ?? "opt-1";
+  return correctIndices
+    .map((index) => mapped[index]?.id)
+    .filter((value): value is string => Boolean(value));
 };
 
 export const mapGeneratedQuestions = (questions: GeneratedQuestion[]): TestQuestion[] => {
   return questions.map((question, index) => {
     const options = toOptionsFromGenerated(question.answer_options);
+    const type = question.type as QuestionType;
     return {
       id: `gen-${index + 1}`,
       number: index + 1,
       text: question.question,
       options,
-      correctOptionId: toCorrectOptionId(question.answer_options, options),
+      correctOptionIds: toCorrectOptionIds(question.answer_options, options),
       difficulty: toDifficulty(question.difficulty),
       explanation: question.explanation,
+      type,
+      topic: question.topic,
+      subtopics: question.subtopics ?? [],
     };
   });
 };
