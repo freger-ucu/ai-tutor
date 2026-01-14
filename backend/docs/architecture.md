@@ -9,7 +9,6 @@ This document describes the LangGraph flows, RAG system, and technical relations
 - [System Overview](#system-overview)
 - [LangGraph Flows](#langgraph-flows)
   - [Test Generation Flow (EP4)](#test-generation-flow-ep4)
-  - [Solver Flow (EP7)](#solver-flow-ep7)
   - [Notes Generation Flow (EP3)](#notes-generation-flow-ep3)
   - [Feedback Flow (EP10)](#feedback-flow-ep10)
   - [Check Answer Flow (EP9)](#check-answer-flow-ep9)
@@ -27,13 +26,12 @@ This document describes the LangGraph flows, RAG system, and technical relations
 ```mermaid
 graph TB
     subgraph "API Layer"
-        T[Teacher Endpoints<br/>EP1-EP7]
+        T[Teacher Endpoints<br/>EP1-EP6]
         S[Student Endpoints<br/>EP8-EP10]
     end
 
     subgraph "LangGraph Flows"
         TG[Test Generation]
-        SV[Solver]
         NT[Notes]
         FB[Feedback]
         CA[Check Answer]
@@ -52,11 +50,11 @@ graph TB
         TOC[(Table of Contents)]
     end
 
-    T --> TG & SV & NT & RC
+    T --> TG & NT & RC
     S --> FB & CA
 
-    TG & SV & NT & CA --> RAG
-    TG & SV & NT & FB & CA & RC --> LLM
+    TG & NT & CA --> RAG
+    TG & NT & FB & CA & RC --> LLM
     T & S --> DL
 
     RAG --> EMB & TOC
@@ -141,46 +139,6 @@ graph LR
 - LLM calls: 10 concurrent
 
 **LLM Calls:** ~1 + 2N (1 planning + N generation + N validation, where N = total questions)
-
----
-
-### Solver Flow (EP7)
-
-Solves questions using RAG-enhanced generation with subject-specific prompts.
-
-```mermaid
-graph LR
-    A[retrieve_rag] --> B[generate_answer]
-    B --> C((END))
-
-    style A fill:#e1f5fe
-    style B fill:#fff3e0
-```
-
-**State:** `SolverState`
-
-| Key Field | Type | Description |
-|-----------|------|-------------|
-| question_text | string | Question to solve |
-| subject | string | Subject name |
-| grade | int | Grade level |
-| answers | list[str] | Answer options (for MC) |
-| rag_context | string | Retrieved textbook content |
-| answer_index | int | Selected answer index |
-| confidence | float | Confidence score |
-| reasoning | string | Step-by-step explanation |
-
-**Flow Details:**
-
-1. **retrieve_rag**: Hybrid retrieval (BM25 + vector) with RRF fusion
-2. **generate_answer**: Subject-specific prompt → JSON response with answer and reasoning
-
-**Subject-Specific Prompts:**
-- **Algebra**: Focus on formulas, step-by-step calculation
-- **Ukrainian**: Grammar rules, examples
-- **History**: Facts, dates, context
-
-**LLM Calls:** 1
 
 ---
 
@@ -285,13 +243,12 @@ LLM determines which are prerequisites:
 
 ### Feedback Flow (EP10)
 
-Generates constructive feedback after a test, grouped by topic.
+Generates constructive feedback after a test, grouped by topic. Output is concise and factual, written FOR the student but without excessive emotion or greetings.
 
 ```mermaid
 graph LR
     A[aggregate_topics] --> B[generate_feedback]
-    B --> C[format_response]
-    C --> D((END))
+    B --> C((END))
 
     style A fill:#e8f5e9
     style B fill:#fff3e0
@@ -301,6 +258,8 @@ graph LR
 
 | Key Field | Type | Description |
 |-----------|------|-------------|
+| student_id | int | Student identifier |
+| subject | string | Subject name |
 | questions | list | Test results |
 | correct_count | int | Number correct |
 | total_count | int | Total questions |
@@ -311,8 +270,13 @@ graph LR
 **Flow Details:**
 
 1. **aggregate_topics**: Group questions by topic/subtopic, count correct/incorrect
-2. **generate_feedback**: LLM generates motivating feedback
-3. **format_response**: Passthrough (formatting done in generation)
+2. **generate_feedback**: LLM generates concise feedback
+
+**Output Style:**
+- Concise, factual (Ukrainian language)
+- Written FOR the student, but without excessive emotion
+- No greetings ("Привіт"), no motivational phrases ("Вірю в тебе")
+- Maximum 2-3 short paragraphs
 
 **Note:** This flow does NOT use RAG (design decision — prompts work well without it).
 
@@ -322,14 +286,13 @@ graph LR
 
 ### Check Answer Flow (EP9)
 
-Evaluates open-ended answers using RAG-grounded evaluation.
+Evaluates open-ended answers using RAG-grounded evaluation. The endpoint uses the LangGraph flow for consistent behavior with LangGraph Studio.
 
 ```mermaid
 graph LR
     A[build_query] --> B[retrieve_rag]
     B --> C[evaluate_answer]
-    C --> D[format_response]
-    D --> E((END))
+    C --> D((END))
 
     style A fill:#e8f5e9
     style B fill:#e1f5fe
@@ -340,19 +303,23 @@ graph LR
 
 | Key Field | Type | Description |
 |-----------|------|-------------|
+| student_id | int | Student identifier |
+| subject | string | Subject name |
+| grade | int | Grade level (8-9) |
 | topic | string | Question topic |
+| subtopics | list[str] | Subtopics |
 | question | string | Question text |
 | student_answer | string | Answer to evaluate |
+| query | string | Built RAG query (topic + question) |
 | rag_context | string | Retrieved reference content |
 | is_correct | bool | Evaluation result |
 | feedback | string | Constructive feedback |
 
 **Flow Details:**
 
-1. **build_query**: Combine topic + question for RAG
+1. **build_query**: Combine topic + question into RAG query
 2. **retrieve_rag**: Get reference content (top_k=4, max_chars=4000)
 3. **evaluate_answer**: LLM evaluates answer against context
-4. **format_response**: Passthrough
 
 **LLM Calls:** 1
 
@@ -360,13 +327,12 @@ graph LR
 
 ### Recommendation Flow (EP6)
 
-Generates teacher-facing recommendations based on student performance.
+Generates teacher-facing recommendations based on student performance. Output style is concise and factual (no greetings, no addressing teacher directly).
 
 ```mermaid
 graph LR
     A[prepare_data] --> B[generate_recommendation]
-    B --> C[format_response]
-    C --> D((END))
+    B --> C((END))
 
     style A fill:#e8f5e9
     style B fill:#fff3e0
@@ -387,7 +353,11 @@ graph LR
 
 1. **prepare_data**: Validate and normalize input
 2. **generate_recommendation**: LLM generates professional advice
-3. **format_response**: Passthrough
+
+**Output Style:**
+- Concise, factual (Ukrainian language)
+- No greetings ("Шановний вчителю"), no goodbyes
+- Maximum 2-3 short paragraphs
 
 **Note:** This flow does NOT use RAG (design decision).
 
@@ -628,14 +598,13 @@ backend/
 ├── app/
 │   ├── api/v1/           # HTTP endpoints
 │   │   ├── router.py     # Main router
-│   │   ├── teacher.py    # EP1-EP7
+│   │   ├── teacher.py    # EP1-EP6
 │   │   ├── student.py    # EP8-EP10
 │   │   └── health.py     # Health checks
 │   │
 │   ├── graph/            # LangGraph workflows
 │   │   ├── flows/        # Individual flows
 │   │   │   ├── test_gen.py
-│   │   │   ├── solver.py
 │   │   │   ├── notes.py
 │   │   │   ├── feedback.py
 │   │   │   ├── check_answer.py

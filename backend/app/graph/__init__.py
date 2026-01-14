@@ -13,30 +13,27 @@ Architecture:
 
 Flows:
 - notes: EP3.1 + EP3.2 (student/teacher notes generation)
-- solver: EP7 (question solving with RAG)
 - test_gen: EP4 (batch test generation with sample validation)
 - check_answer: EP9 (open question answer checking)
 - feedback: EP10 (test feedback generation)
 - recommendation: EP6 (learning recommendations)
 
 NOTE: All imports are lazy to avoid grpcio mutex.cc crash on macOS.
-Import directly from submodules: from app.graph.flows.solver import solve_question
+Import directly from submodules: from app.graph.flows.notes import generate_notes
 """
 
 # Lazy imports to avoid grpcio initialization at package load (macOS mutex.cc issue)
-# Import directly from submodules instead: from app.graph.flows.solver import solve_question
+# Import directly from submodules instead: from app.graph.flows.notes import generate_notes
 
 __all__ = [
     # Graphs
     "notes_graph",
-    "solver_graph",
     "test_gen_graph",
     "check_answer_graph",
     "feedback_graph",
     "recommendation_graph",
     # States (for type hints)
     "NotesState",
-    "SolverState",
     "TestGenState",
     "CheckAnswerState",
     "FeedbackState",
@@ -54,9 +51,6 @@ def __getattr__(name):
     if name in ("notes_graph", "NotesState"):
         from .flows.notes import notes_graph, NotesState
         return notes_graph if name == "notes_graph" else NotesState
-    elif name in ("solver_graph", "SolverState"):
-        from .flows.solver import solver_graph, SolverState
-        return solver_graph if name == "solver_graph" else SolverState
     elif name in ("test_gen_graph", "TestGenState", "GenerationStats"):
         from .flows.test_gen import test_gen_graph, TestGenState, GenerationStats
         if name == "test_gen_graph":

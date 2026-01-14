@@ -920,6 +920,10 @@ def get_test_gen_graph():
     return _test_gen_graph
 
 
+# For backwards compatibility
+test_gen_graph = None
+
+
 # =============================================================================
 # Public API
 # =============================================================================

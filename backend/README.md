@@ -144,19 +144,19 @@ backend/
 
 ## API Endpoints Overview
 
-### Teacher Endpoints (EP1-EP7)
-- `GET /api/v1/teacher/topics` - List available topics
-- `GET /api/v1/teacher/students` - Get students for a class
-- `POST /api/v1/teacher/notes` - Generate lesson notes
-- `POST /api/v1/teacher/test` - Generate test questions
-- `GET /api/v1/teacher/students/{id}/report` - Student performance report
-- `POST /api/v1/teacher/students/{id}/recommendation` - Get teaching recommendations
-- `POST /api/v1/teacher/solve` - Solve a question with RAG
+### Teacher Endpoints (EP1-EP6)
+- `GET /api/v1/teacher/{teacher_id}` - EP1: Get teacher's classes and subjects
+- `POST /api/v1/teacher/students` - EP2: Get students in a class with levels
+- `POST /api/v1/teacher/notes/by-level` - EP3.1: Generate notes by student level
+- `POST /api/v1/teacher/notes/individual` - EP3.2: Generate notes for specific students
+- `POST /api/v1/teacher/test/generate` - EP4: Generate validated test questions
+- `POST /api/v1/teacher/student/details` - EP5: Get detailed student performance
+- `POST /api/v1/teacher/student/recommendation` - EP6: Get AI teaching recommendations
 
 ### Student Endpoints (EP8-EP10)
-- `POST /api/v1/student/explain` - Explain a concept
-- `POST /api/v1/student/check-answer` - Evaluate an answer
-- `POST /api/v1/student/feedback` - Get test feedback
+- `GET /api/v1/student/{student_id}` - EP8: Get student's class and subjects with levels
+- `POST /api/v1/student/check-open` - EP9: Evaluate open-ended answer (RAG-grounded)
+- `POST /api/v1/student/test-feedback` - EP10: Get feedback after completing a test
 
 ## Documentation
 
@@ -187,14 +187,13 @@ langgraph dev
 
 ### Available Graphs
 
-| Graph | Description |
-|-------|-------------|
-| notes | Generate lesson notes with prerequisite-aware recap |
-| solver | Solve questions using RAG |
-| test_gen | Generate validated test questions with planning-based parallel architecture |
-| check_answer | Evaluate student answers |
-| feedback | Generate test feedback |
-| recommendation | Generate teaching recommendations |
+| Graph | Endpoint | Description |
+|-------|----------|-------------|
+| notes | EP3 | Generate lesson notes with prerequisite-aware recap |
+| test_gen | EP4 | Generate validated test questions with planning-based parallel architecture |
+| check_answer | EP9 | Evaluate open-ended answers using RAG-grounded evaluation |
+| feedback | EP10 | Generate concise test feedback (for student, no greetings) |
+| recommendation | EP6 | Generate concise teaching recommendations (factual, no greetings) |
 
 ### Test Gen Graph Input
 

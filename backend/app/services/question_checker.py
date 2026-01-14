@@ -2,18 +2,12 @@
 Question Checker Service.
 
 Validates generated questions by checking if they have correct answers.
-- MC questions: Uses solver V2 with option-wise retrieval and support scoring
+- MC questions: Uses support scoring to validate answer correctness
 - Open questions: Checks if question has a definite, evaluable answer
 
-V2: Integrated with new solver that has:
-- Option-wise retrieval
-- Support scoring
-- Verify loop
-
-V3: Three validation levels for MC questions:
+V3: Two validation levels for MC questions:
 - Lightweight (1 LLM call): Fast, single prompt validation
 - Support Scoring (1 LLM call): Scores each option's support from context
-- Full Solver V2 (3-4 LLM calls): Complete solver with all features
 """
 
 import logging
@@ -82,16 +76,14 @@ async def check_mc_question(
     context: str,
     subject: str,
     grade: int,
-    use_full_solver: bool = False,
     use_support_scoring: bool = False,
 ) -> CheckResult:
     """
-    Check if MC question has the correct answer using solver logic.
+    Check if MC question has the correct answer.
 
-    V3: Three validation levels (from slowest/most accurate to fastest):
-    1. use_full_solver=True: Full solver V2 with all features (3-4 LLM calls)
-    2. use_support_scoring=True: Support scoring only (1 LLM call, medium accuracy)
-    3. Both False: Single lightweight LLM call (fastest, least accurate)
+    V3: Two validation levels:
+    1. use_support_scoring=True: Support scoring (1 LLM call, medium accuracy)
+    2. use_support_scoring=False: Single lightweight LLM call (fastest)
 
     Args:
         question_text: The question text
@@ -100,45 +92,12 @@ async def check_mc_question(
         context: RAG context for solving
         subject: Subject name
         grade: Grade level
-        use_full_solver: If True, uses full solver V2 with all features
         use_support_scoring: If True, uses support scoring (middle-ground)
 
     Returns:
         CheckResult with is_valid, reason, and additional fields (solver_answer,
         confidence, option_scores)
     """
-    if use_full_solver:
-        # Use full solver V2 with option-wise retrieval and support scoring
-        from app.graph.flows.solver import solve_question
-
-        result = await solve_question(
-            question_id="checker",
-            question_text=question_text,
-            subject=subject,
-            grade=grade,
-            answers=options,
-            max_iterations=1,  # Quick check, don't loop too much
-        )
-
-        solver_answer = result.answer_index
-
-        if solver_answer == expected_index:
-            return CheckResult(
-                is_valid=True,
-                reason=f"Solver V2 agreed (answer={solver_answer}, confidence={result.confidence:.2f})",
-                solver_answer=solver_answer,
-                confidence=result.confidence,
-                option_scores=result.option_scores,
-            )
-        else:
-            return CheckResult(
-                is_valid=False,
-                reason=f"Solver V2 chose {solver_answer}, expected {expected_index}",
-                solver_answer=solver_answer,
-                confidence=result.confidence,
-                option_scores=result.option_scores,
-            )
-
     if use_support_scoring:
         # V3: Support scoring - middle-ground validation (1 LLM call)
         # Scores how well each option is supported by context

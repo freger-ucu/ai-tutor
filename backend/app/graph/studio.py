@@ -36,24 +36,6 @@ def notes_graph():
     return workflow
 
 
-def solver_graph():
-    """Build solver graph."""
-    from langgraph.graph import StateGraph, END
-    from app.graph.flows.solver import (
-        SolverState,
-        retrieve_rag_node,
-        solve_question_node,
-    )
-
-    workflow = StateGraph(SolverState)
-    workflow.add_node("retrieve_rag", retrieve_rag_node)
-    workflow.add_node("solve_question", solve_question_node)
-    workflow.set_entry_point("retrieve_rag")
-    workflow.add_edge("retrieve_rag", "solve_question")
-    workflow.add_edge("solve_question", END)
-    return workflow
-
-
 def test_gen_graph():
     """Build test generation graph (parallel architecture with planning).
 
@@ -140,36 +122,36 @@ def check_answer_graph():
 
 
 def feedback_graph():
-    """Build feedback graph."""
+    """Build feedback graph (EP10 - no RAG)."""
     from langgraph.graph import StateGraph, END
     from app.graph.flows.feedback import (
         FeedbackState,
-        retrieve_rag_node,
+        aggregate_topics_node,
         generate_feedback_node,
     )
 
     workflow = StateGraph(FeedbackState)
-    workflow.add_node("retrieve_rag", retrieve_rag_node)
+    workflow.add_node("aggregate_topics", aggregate_topics_node)
     workflow.add_node("generate_feedback", generate_feedback_node)
-    workflow.set_entry_point("retrieve_rag")
-    workflow.add_edge("retrieve_rag", "generate_feedback")
+    workflow.set_entry_point("aggregate_topics")
+    workflow.add_edge("aggregate_topics", "generate_feedback")
     workflow.add_edge("generate_feedback", END)
     return workflow
 
 
 def recommendation_graph():
-    """Build recommendation graph."""
+    """Build recommendation graph (EP6 - no RAG)."""
     from langgraph.graph import StateGraph, END
     from app.graph.flows.recommendation import (
         RecommendationState,
-        analyze_performance_node,
+        prepare_data_node,
         generate_recommendation_node,
     )
 
     workflow = StateGraph(RecommendationState)
-    workflow.add_node("analyze_performance", analyze_performance_node)
+    workflow.add_node("prepare_data", prepare_data_node)
     workflow.add_node("generate_recommendation", generate_recommendation_node)
-    workflow.set_entry_point("analyze_performance")
-    workflow.add_edge("analyze_performance", "generate_recommendation")
+    workflow.set_entry_point("prepare_data")
+    workflow.add_edge("prepare_data", "generate_recommendation")
     workflow.add_edge("generate_recommendation", END)
     return workflow

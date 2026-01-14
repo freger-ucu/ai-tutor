@@ -11,10 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.models.domain import (
-    Question,
-    Solution,
-)
+from app.models.domain import Question
 from app.models.enums import Level
 
 
@@ -47,6 +44,12 @@ class ProblematicTopicResponse(BaseModel):
     """Problematic topic for API response."""
     topic: str
     average_score: float
+
+
+class SubjectLevelResponse(BaseModel):
+    """Subject with performance level."""
+    subject: str
+    level: Literal["weak", "medium", "strong"]
 
 
 # =============================================================================
@@ -118,12 +121,6 @@ class RecommendationResponse(BaseModel):
     feedback: str
 
 
-class SolverResponse(BaseModel):
-    """EP7: Solved single question with explanation."""
-    question: str
-    answer_explained: str
-
-
 # =============================================================================
 # STUDENT RESPONSES
 # =============================================================================
@@ -133,7 +130,9 @@ class StudentDataResponse(BaseModel):
     """EP8: Student's class and subjects."""
     class_id: int
     class_number: int
-    subjects: list[str] = Field(..., description="Subject names in Ukrainian")
+    subjects: list[SubjectLevelResponse] = Field(
+        ..., description="Subjects with performance levels"
+    )
 
 
 class OpenQuestionResultResponse(BaseModel):
@@ -169,13 +168,7 @@ class ErrorResponse(BaseModel):
 # =============================================================================
 
 
-class AnswerKeyResponse(BaseModel):
-    """Answer key with solutions for generated questions."""
-    solutions: list[Solution]
-
-
 class FullPipelineResponse(BaseModel):
     """Internal: Full pipeline integration test response."""
     notes: NotesResponse
     test: TestResponse
-    answer_key: AnswerKeyResponse

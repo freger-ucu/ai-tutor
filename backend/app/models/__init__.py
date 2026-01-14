@@ -31,7 +31,6 @@ from app.models.domain import (
     Question,
     QuestionResult,
     SkippedLesson,
-    Solution,
     StudentSummary,
 )
 
@@ -45,7 +44,6 @@ from app.models.requests import (
     GenerateLevelNotesRequest,
     GenerateTestRequest,
     GetStudentListRequest,
-    SolverRequest,
     StudentDetailsRequest,
     StudentRecommendationRequest,
     TestFeedbackRequest,
@@ -55,7 +53,6 @@ from app.models.requests import (
 # RESPONSE MODELS
 # =============================================================================
 from app.models.responses import (
-    AnswerKeyResponse,
     ClassInfoResponse,
     ErrorResponse,
     FullPipelineResponse,
@@ -65,7 +62,6 @@ from app.models.responses import (
     ProblematicTopicResponse,
     RecommendationResponse,
     SkippedLessonResponse,
-    SolverResponse,
     StudentDataResponse,
     StudentDetailsResponse,
     StudentListResponse,
@@ -95,7 +91,6 @@ __all__ = [
     "Question",
     "SkippedLesson",
     "ProblematicTopic",
-    "Solution",
     "QuestionResult",
     # Requests
     "GetStudentListRequest",
@@ -104,7 +99,6 @@ __all__ = [
     "GenerateTestRequest",
     "StudentDetailsRequest",
     "StudentRecommendationRequest",
-    "SolverRequest",
     "CheckOpenQuestionRequest",
     "TestFeedbackRequest",
     "FullPipelineRequest",
@@ -119,12 +113,10 @@ __all__ = [
     "TestResponse",
     "StudentDetailsResponse",
     "RecommendationResponse",
-    "SolverResponse",
     "StudentDataResponse",
     "OpenQuestionResultResponse",
     "TestFeedbackResponse",
     "HealthResponse",
     "ErrorResponse",
-    "AnswerKeyResponse",
     "FullPipelineResponse",
 ]

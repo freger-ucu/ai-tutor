@@ -44,6 +44,9 @@ class CheckAnswerState(TypedDict, total=False):
     question: str
     student_answer: str
 
+    # Built query for RAG
+    query: str
+
     # RAG output
     rag_context: str
     rag_references: List[Dict[str, Any]]
@@ -79,14 +82,28 @@ async def build_query_node(state: CheckAnswerState) -> Dict[str, Any]:
     """Build RAG query from topic and question."""
     topic = state.get("topic", "")
     question = state.get("question", "")
-    query = f"{topic} {question}"
+    query = f"{topic} {question}".strip()
+    logger.info(f"Built query: '{query}' from topic='{topic}', question='{question}'")
+    if not query:
+        logger.warning(f"Empty query built. Full state keys: {list(state.keys())}")
     return {"query": query}
 
 
 async def retrieve_rag_node(state: CheckAnswerState) -> Dict[str, Any]:
     """Retrieve RAG context for the question."""
-    logger.info(f"Retrieving context for: {state.get('topic', '')}")
-    return await _check_rag_node(state)
+    # Build query from topic + question if not already set
+    query = state.get("query", "")
+    if not query:
+        topic = state.get("topic", "")
+        question = state.get("question", "")
+        query = f"{topic} {question}".strip()
+        logger.info(f"Built query in retrieve_rag_node: '{query}'")
+
+    # Create modified state with query for RAG node
+    state_with_query = dict(state)
+    state_with_query["query"] = query
+
+    return await _check_rag_node(state_with_query)
 
 
 @trace_chain(name="evaluate_answer")
@@ -259,6 +276,7 @@ async def check_open_answer(
         "subtopics": subtopics,
         "question": question,
         "student_answer": student_answer,
+        "query": "",
         "rag_context": "",
         "rag_references": [],
         "retrieved_docs": [],

@@ -14,12 +14,11 @@ from fastapi import APIRouter, HTTPException
 
 from app.models.requests import FullPipelineRequest
 from app.models.responses import (
-    AnswerKeyResponse,
     FullPipelineResponse,
     NotesResponse,
     TestResponse,
 )
-from app.models.domain import AnswerOption, Question, Solution
+from app.models.domain import AnswerOption, Question
 from app.models.enums import QuestionType, Difficulty
 from app.services.data_loader import DataLoader
 from app.rag.utils.hybrid_retriever import HybridRetriever
@@ -32,7 +31,6 @@ from app.prompts.test_generator import (
     TEST_GENERATOR_SYSTEM_PROMPT,
     build_test_generator_prompt,
 )
-from app.prompts.solver import SOLVER_SYSTEM_PROMPT, build_solver_prompt
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -167,34 +165,6 @@ async def generate_test(
     }
 
 
-async def solve_question(
-    subject: str,
-    grade: int,
-    question: str,
-    context: str,
-) -> dict[str, str]:
-    """Solve a single question using LLM (EP7 logic)."""
-    prompt = build_solver_prompt(
-        subject=subject,
-        grade=grade,
-        question=question,
-        context=context,
-    )
-
-    full_prompt = f"{SOLVER_SYSTEM_PROMPT}\n\n{prompt}"
-    llm_client = get_llm_client()
-    response = await llm_client.generate(
-        prompt=full_prompt,
-        temperature=0.3,
-        max_tokens=1000,
-    )
-
-    return {
-        "question": question,
-        "answer_explained": response,
-    }
-
-
 @router.post("/full-pipeline", response_model=FullPipelineResponse)
 async def full_pipeline_endpoint(request: FullPipelineRequest) -> FullPipelineResponse:
     """
@@ -205,7 +175,6 @@ async def full_pipeline_endpoint(request: FullPipelineRequest) -> FullPipelineRe
     2. Retrieves content via RAG
     3. Generates notes (EP3 logic)
     4. Generates test pool (EP4 logic)
-    5. Solves each question (EP7 logic, called N times)
 
     WARNING: This is a testing-only endpoint.
     Should be excluded from production or protected.
@@ -286,24 +255,7 @@ async def full_pipeline_endpoint(request: FullPipelineRequest) -> FullPipelineRe
         questions=questions,
     )
 
-    # 6. Solve each question (EP7 logic, called N times)
-    solutions = []
-    for q in questions:
-        solution_result = await solve_question(
-            subject=request.subject,
-            grade=grade,
-            question=q.question,
-            context=context,
-        )
-        solutions.append(Solution(
-            question=solution_result["question"],
-            answer_explained=solution_result["answer_explained"],
-        ))
-
-    answer_key = AnswerKeyResponse(solutions=solutions)
-
     return FullPipelineResponse(
         notes=notes,
         test=test,
-        answer_key=answer_key,
     )

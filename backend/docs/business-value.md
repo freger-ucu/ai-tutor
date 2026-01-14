@@ -88,8 +88,8 @@ The AI Tutor backend serves two primary user personas:
 **Problem Solved:** Creating quality tests is time-consuming and error-prone.
 
 **Business Value:**
-- Generates 30 validated questions (10 easy, 10 medium, 10 hard)
-- Each question is validated for correctness using a solver
+- Generates validated questions at configurable difficulty levels
+- Each question is validated for correctness using support scoring
 - Questions are grounded in textbook content
 - Saves teachers hours of test creation work
 - Ensures fair difficulty distribution
@@ -98,7 +98,7 @@ The AI Tutor backend serves two primary user personas:
 
 **Quality Assurance:**
 - CPU validation: format, structure, duplicates
-- LLM validation: 3 random questions per batch verified by solver
+- LLM validation: Support scoring verifies answer correctness against context
 - Auto-retry failed batches up to 2 times
 
 ---
@@ -131,22 +131,6 @@ The AI Tutor backend serves two primary user personas:
 - Written in teacher-appropriate language
 
 **User Story:** *"As a teacher, I want AI-generated advice on how to help a specific student improve."*
-
----
-
-### EP7: Solve Question
-**`POST /api/v1/solver`**
-
-**Problem Solved:** Teachers need help preparing answer keys or understanding complex problems.
-
-**Business Value:**
-- Solves any question using textbook knowledge
-- Provides step-by-step explanations
-- Cites relevant textbook pages
-- Useful for answer key preparation
-- Subject-specific reasoning (Algebra vs Ukrainian vs History)
-
-**User Story:** *"As a teacher, I want to see the correct solution and explanation for a difficult problem."*
 
 ---
 
