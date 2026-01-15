@@ -1,3 +1,5 @@
+import type { TestAnswer } from "../types/testTypes";
+
 export interface StudentTestCompletion {
   studentId: string;
   testId: string;
@@ -5,6 +7,8 @@ export interface StudentTestCompletion {
   correctAnswers: number;
   totalQuestions: number;
   percent: number;
+  answers?: TestAnswer[];
+  feedback?: string;
 }
 
 const STORAGE_KEY = "student_test_completions_v1";
@@ -47,6 +51,8 @@ export const markStudentTestCompleted = (input: {
   testId: string;
   correctAnswers: number;
   totalQuestions: number;
+  answers?: TestAnswer[];
+  feedback?: string;
 }) => {
   const items = readCompletions();
   const existingIndex = items.findIndex(
@@ -65,6 +71,8 @@ export const markStudentTestCompleted = (input: {
       correctAnswers: input.correctAnswers,
       totalQuestions: input.totalQuestions,
       percent,
+      answers: input.answers ?? existing.answers,
+      feedback: input.feedback ?? existing.feedback,
     };
     const nextItems = [...items];
     nextItems[existingIndex] = updatedItem;
@@ -83,6 +91,8 @@ export const markStudentTestCompleted = (input: {
     correctAnswers: input.correctAnswers,
     totalQuestions: input.totalQuestions,
     percent,
+    answers: input.answers,
+    feedback: input.feedback,
   };
   const updated = [...items, nextItem];
   writeCompletions(updated);
