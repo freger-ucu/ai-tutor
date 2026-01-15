@@ -4,10 +4,35 @@ Application Configuration
 Loads and validates environment variables using pydantic-settings.
 """
 
+from enum import Enum
 from pathlib import Path
 from typing import Literal, Optional
 
 from pydantic_settings import BaseSettings
+
+
+class LLMProvider(str, Enum):
+    """Supported LLM providers."""
+    LAPA = "lapa"
+    OPENAI = "openai"
+    GEMINI = "gemini"
+
+
+# Provider-specific configurations
+PROVIDER_CONFIGS = {
+    LLMProvider.LAPA: {
+        "base_url": "http://146.59.127.106:4000",
+        "default_model": "mamay",
+    },
+    LLMProvider.OPENAI: {
+        "base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-4o-mini",
+    },
+    LLMProvider.GEMINI: {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "default_model": "gemini-2.0-flash",
+    },
+}
 
 
 class Settings(BaseSettings):
@@ -50,14 +75,55 @@ class Settings(BaseSettings):
         """Path to embeddings directory."""
         return self.data_dir / "embeddings"
 
-    # LLM Configuration
-    llm_provider: str = "lapa"
-    llm_api_key: str = ""
-    llm_base_url: str = "http://146.59.127.106:4000"
-    llm_model: str = "mamay"
+    # LLM Provider Selection
+    llm_provider: LLMProvider = LLMProvider.LAPA
+
+    # Provider-specific API keys
+    lapa_api_key: str = ""
+    lapa_base_url: str = "http://146.59.127.106:4000"
+    lapa_model: str = "mamay"
+
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
+
+    # Embedding (stays on Lapa for now)
     llm_embedding_model: str = "text-embedding-qwen"
+
+    # Generation defaults
     llm_temperature: float = 0.0
     llm_max_tokens: int = 500
+
+    @property
+    def llm_api_key(self) -> str:
+        """Get API key for current provider."""
+        if self.llm_provider == LLMProvider.LAPA:
+            return self.lapa_api_key
+        elif self.llm_provider == LLMProvider.OPENAI:
+            return self.openai_api_key
+        elif self.llm_provider == LLMProvider.GEMINI:
+            return self.gemini_api_key
+        return ""
+
+    @property
+    def llm_base_url(self) -> str:
+        """Get base URL for current provider."""
+        if self.llm_provider == LLMProvider.LAPA:
+            return self.lapa_base_url
+        return PROVIDER_CONFIGS[self.llm_provider]["base_url"]
+
+    @property
+    def llm_model(self) -> str:
+        """Get model name for current provider."""
+        if self.llm_provider == LLMProvider.LAPA:
+            return self.lapa_model
+        elif self.llm_provider == LLMProvider.OPENAI:
+            return self.openai_model
+        elif self.llm_provider == LLMProvider.GEMINI:
+            return self.gemini_model
+        return PROVIDER_CONFIGS[self.llm_provider]["default_model"]
 
     # RAG Configuration
     rag_embedding_type: str = "qwen"  # "qwen" or "gemini"

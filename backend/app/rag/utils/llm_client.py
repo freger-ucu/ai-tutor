@@ -1,6 +1,7 @@
 """
-LLM Client for Agentic RAG - simplified wrapper for LapaLLM.
+LLM Client for Agentic RAG - multi-provider support.
 
+Supports: Lapa (Mamay), OpenAI, Gemini via OpenAI-compatible API.
 Includes LangSmith tracing for observability.
 """
 
@@ -11,6 +12,7 @@ from typing import Dict, Any, List, Optional
 from openai import AsyncOpenAI
 
 from ..config import get_settings
+from app.config import settings as app_settings
 from app.services.tracing import trace_llm, is_tracing_enabled
 from app.utils.json_parser import parse_json_response
 
@@ -19,9 +21,10 @@ logger = logging.getLogger(__name__)
 
 class LLMClient:
     """
-    Simplified LLM client for Agentic RAG.
+    Multi-provider LLM client for Agentic RAG.
 
-    Uses LapaLLM via OpenAI-compatible API.
+    Provider is configured via LLM_PROVIDER env var.
+    Supports: lapa (mamay), openai, gemini.
     """
 
     def __init__(self):
@@ -32,6 +35,8 @@ class LLMClient:
         )
         self.model = settings.model
         self.embedding_model = settings.embedding_model
+        self.provider = app_settings.llm_provider.value
+        logger.info(f"LLMClient initialized: provider={self.provider}, model={self.model}")
 
     @trace_llm(name="llm_generate")
     async def generate(
