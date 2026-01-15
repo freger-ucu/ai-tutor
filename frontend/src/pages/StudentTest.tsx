@@ -165,9 +165,16 @@ const StudentTest = () => {
       : "";
   const sidebarClassName = classLabel || testData?.className || "";
   const sidebarTopicName = testData?.topicName ?? "";
-  const availableSubjects = apiSubjects.length
-    ? subjects.filter((subject) => apiSubjects.includes(subject.label))
-    : subjects;
+  const availableSubjects = useMemo(() => {
+    if (!apiSubjects.length) {
+      return subjects;
+    }
+    const matches = subjects.filter(
+      (subject) =>
+        apiSubjects.includes(subject.label) || apiSubjects.includes(subject.id)
+    );
+    return matches.length ? matches : subjects;
+  }, [apiSubjects]);
   const sidebarMaterials = useMemo(() => {
     if (!sidebarClassName || !sidebarTopicName) {
       return [];

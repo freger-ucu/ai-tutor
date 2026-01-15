@@ -56,9 +56,16 @@ const Student = () => {
       });
   }, [studentId]);
 
-  const availableSubjects = apiSubjects.length
-    ? Subjects.filter((subject) => apiSubjects.includes(subject.label))
-    : Subjects;
+  const availableSubjects = useMemo(() => {
+    if (!apiSubjects.length) {
+      return Subjects;
+    }
+    const matches = Subjects.filter(
+      (subject) =>
+        apiSubjects.includes(subject.label) || apiSubjects.includes(subject.id)
+    );
+    return matches.length ? matches : Subjects;
+  }, [apiSubjects]);
 
   useEffect(() => {
     if (!availableSubjects.length) {

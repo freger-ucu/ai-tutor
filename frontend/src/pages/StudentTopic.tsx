@@ -123,9 +123,16 @@ const StudentTopic = () => {
       });
   }, [studentId, studentClassId, subjectName]);
 
-  const availableSubjects = apiSubjects.length
-    ? subjects.filter((subject) => apiSubjects.includes(subject.label))
-    : subjects;
+  const availableSubjects = useMemo(() => {
+    if (!apiSubjects.length) {
+      return subjects;
+    }
+    const matches = subjects.filter(
+      (subject) =>
+        apiSubjects.includes(subject.label) || apiSubjects.includes(subject.id)
+    );
+    return matches.length ? matches : subjects;
+  }, [apiSubjects]);
 
   useEffect(() => {
     if (studentError) return;
