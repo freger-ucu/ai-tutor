@@ -27,12 +27,20 @@ class Settings:
         return settings.llm_base_url
 
     @property
+    def embedding_api_key(self) -> str:
+        return settings.embedding_api_key
+
+    @property
+    def embedding_base_url(self) -> str:
+        return settings.embedding_base_url
+
+    @property
     def model(self) -> str:
         return settings.llm_model
 
     @property
     def embedding_model(self) -> str:
-        return settings.llm_embedding_model
+        return settings.embedding_model
 
     @property
     def data_dir(self) -> str:
