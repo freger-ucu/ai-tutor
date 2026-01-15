@@ -1,15 +1,12 @@
 
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { addTopic, getTopics } from "../data/materialsStorage";
-import {
-  getTeacherData,
-  getTeacherStudents,
-} from "../api/teacher";
-import type { TeacherClassItem, TeacherStudentItem } from "../api/teacher";
+import { getTeacherData } from "../api/teacher";
+import type { TeacherClassItem } from "../api/teacher";
 import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
 
@@ -42,9 +39,20 @@ const subjectFromCourseId = (courseId: string) => {
 const Teacher = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const apiTeacherId = toNumericId(id) ?? 0;
   const [teacherClasses, setTeacherClasses] = useState<TeacherClassItem[]>([]);
-  const [teacherStudents, setTeacherStudents] = useState<TeacherStudentItem[]>([]);
+
+  const viewParam = searchParams.get("view");
+  const activeView: "materials" | "students" = viewParam === "students" ? "students" : "materials";
+
+  const setActiveView = (view: "materials" | "students") => {
+    if (view === "students") {
+      setSearchParams({ view: "students" });
+    } else {
+      setSearchParams({});
+    }
+  };
 
   useEffect(() => {
     if (!apiTeacherId) {
@@ -162,26 +170,6 @@ const Teacher = () => {
     setTopicsByClass(nextTopicsByClass);
   }, [id, selectedCourseId, selectedClassId, selectedClassLabel, courseSubjectMap]);
 
-  useEffect(() => {
-    if (!apiTeacherId || !selectedClassId) {
-      return;
-    }
-    const subject =
-      courseSubjectMap[selectedCourseId] ?? subjectFromCourseId(selectedCourseId);
-    getTeacherStudents({
-      class_id: selectedClassId,
-      teacher_id: apiTeacherId,
-      subject,
-    })
-      .then((response) => {
-        setTeacherStudents(response.students);
-      })
-      .catch((error) => {
-        console.error(error);
-        setTeacherStudents([]);
-      });
-  }, [apiTeacherId, selectedClassId, selectedCourseId, courseSubjectMap]);
-
   const handleAddTopic = () => {
     const trimmedTopic = newTopic.trim();
     if (!trimmedTopic || !selectedClassLabel) {
@@ -236,96 +224,182 @@ const Teacher = () => {
           teacherName={
             id ? `Вчитель ${id}` : "Вчитель"
           }
-          activeItem="materials"
+          activeItem={activeView}
+          onMaterialsClick={() => setActiveView("materials")}
+          onStudentsClick={() => setActiveView("students")}
         />
         <main className="flex-1 px-8 py-10">
           <div className="relative min-h-[calc(100vh-5rem)]">
-            <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
-              <Panel title="Курси">
-                <div className="space-y-6">
-                  {filteredCourses.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                      Немає доступних курсів. Перевірте ID вчителя або дані в
-                      бекенді.
+            {activeView === "materials" ? (
+              <>
+                <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+                  <Panel title="Курси">
+                    <div className="space-y-6">
+                      {filteredCourses.length === 0 && (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                          Немає доступних курсів. Перевірте ID вчителя або дані в
+                          бекенді.
+                        </div>
+                      )}
+                      {filteredCourses.map((group) => (
+                        <div key={group.grade}>
+                          <div className="text-sm font-semibold text-slate-700">
+                            {group.grade}
+                          </div>
+                          <div className="mt-3 space-y-3">
+                            {group.items.map((course) => (
+                              <button
+                                key={course.id}
+                                type="button"
+                                onClick={() => handleCourseSelect(course.id)}
+                                className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
+                                  selectedCourseId === course.id
+                                    ? "border-[#BFD6FF] bg-[#E9F1FF] text-slate-900"
+                                    : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+                                } cursor-pointer`}
+                              >
+                                <span>{course.name}</span>
+                                <span className="text-lg text-slate-500">›</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {currentClasses.length > 0 && (
+                        <div className="border-t border-slate-200 pt-4">
+                          <div className="text-sm font-semibold text-slate-700">
+                            Клас
+                          </div>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            {currentClasses.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => setSelectedClassId(item.id)}
+                                className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
+                                  selectedClassId === item.id
+                                    ? "border-[#BFD6FF] bg-[#E9F1FF] text-slate-900"
+                                    : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+                                } cursor-pointer`}
+                              >
+                                <span>{item.label}</span>
+                                <span className="text-xs text-slate-500">
+                                  ID {item.id}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {filteredCourses.map((group) => (
-                    <div key={group.grade}>
-                      <div className="text-sm font-semibold text-slate-700">
-                        {group.grade}
-                      </div>
-                      <div className="mt-3 space-y-3">
-                        {group.items.map((course) => (
-                          <button
-                            key={course.id}
-                            type="button"
-                            onClick={() => handleCourseSelect(course.id)}
-                            className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
-                              selectedCourseId === course.id
-                                ? "border-[#BFD6FF] bg-[#E9F1FF] text-slate-900"
-                                : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
-                            } cursor-pointer`}
-                          >
-                            <span>{course.name}</span>
-                            <span className="text-lg text-slate-500">›</span>
-                          </button>
-                        ))}
-                      </div>
+                  </Panel>
+                  <Panel title="Теми">
+                    <div className="space-y-3">
+                      {currentTopics.map((topic) => (
+                        <button
+                          key={topic}
+                          type="button"
+                          onClick={() => handleTopicOpen(topic)}
+                          className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50 cursor-pointer"
+                        >
+                          <span>{topic}</span>
+                          <span className="text-lg text-slate-400">›</span>
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                  {currentClasses.length > 0 && (
-                    <div className="border-t border-slate-200 pt-4">
-                      <div className="text-sm font-semibold text-slate-700">
-                        Клас
-                      </div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                        {currentClasses.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => setSelectedClassId(item.id)}
-                            className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
-                              selectedClassId === item.id
-                                ? "border-[#BFD6FF] bg-[#E9F1FF] text-slate-900"
-                                : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
-                            } cursor-pointer`}
-                          >
-                            <span>{item.label}</span>
-                            <span className="text-xs text-slate-500">
-                              ID {item.id}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  </Panel>
                 </div>
-              </Panel>
-              <Panel title="Теми">
-                <div className="space-y-3">
-                  {currentTopics.map((topic) => (
-                    <button
-                      key={topic}
-                      type="button"
-                      onClick={() => handleTopicOpen(topic)}
-                      className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50 cursor-pointer"
-                    >
-                      <span>{topic}</span>
-                      <span className="text-lg text-slate-400">›</span>
-                    </button>
-                  ))}
+                <button
+                  type="button"
+                  disabled={!selectedClassId}
+                  className="absolute bottom-0 right-0 flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#1E73F7] shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => setIsTopicModalOpen(true)}
+                >
+                  <span className="text-lg">＋</span>
+                  Додати тему
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="flex flex-col h-full">
+                  <Panel title="Курси" className="flex-1">
+                    <div className="space-y-6">
+                      {filteredCourses.length === 0 && (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                          Немає доступних курсів. Перевірте ID вчителя або дані в
+                          бекенді.
+                        </div>
+                      )}
+                      {filteredCourses.map((group) => (
+                        <div key={group.grade}>
+                          <div className="text-sm font-semibold text-slate-700">
+                            {group.grade}
+                          </div>
+                          <div className="mt-3 space-y-3">
+                            {group.items.map((course) => (
+                              <button
+                                key={course.id}
+                                type="button"
+                                onClick={() => handleCourseSelect(course.id)}
+                                className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
+                                  selectedCourseId === course.id
+                                    ? "border-[#BFD6FF] bg-[#E9F1FF] text-slate-900"
+                                    : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+                                } cursor-pointer`}
+                              >
+                                <span>{course.name}</span>
+                                <span className="text-lg text-slate-500">›</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {currentClasses.length > 0 && (
+                        <div className="border-t border-slate-200 pt-4">
+                          <div className="text-sm font-semibold text-slate-700">
+                            Клас
+                          </div>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            {currentClasses.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => setSelectedClassId(item.id)}
+                                className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
+                                  selectedClassId === item.id
+                                    ? "border-[#BFD6FF] bg-[#E9F1FF] text-slate-900"
+                                    : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+                                } cursor-pointer`}
+                              >
+                                <span>{item.label}</span>
+                                <span className="text-xs text-slate-500">
+                                  ID {item.id}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </Panel>
                 </div>
-              </Panel>
-            </div>
-            <button
-              type="button"
-              disabled={!selectedClassId}
-              className="absolute bottom-0 right-0 flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#1E73F7] shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={() => setIsTopicModalOpen(true)}
-            >
-              <span className="text-lg">＋</span>
-              Додати тему
-            </button>
+                <button
+                  type="button"
+                  disabled={!selectedClassId}
+                  className="absolute bottom-0 right-0 flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#1E73F7] shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => {
+                    if (id && selectedClassId) {
+                      const encodedCourse = encodeURIComponent(selectedCourseId);
+                      const encodedClass = encodeURIComponent(String(selectedClassId));
+                      navigate(`/teacher/${id}/class/${encodedCourse}/${encodedClass}`);
+                    }
+                  }}
+                >
+                  <span className="text-lg">→</span>
+                  Переглянути клас
+                </button>
+              </>
+            )}
           </div>
         </main>
       </div>

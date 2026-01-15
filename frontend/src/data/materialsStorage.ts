@@ -176,6 +176,17 @@ export const updateMaterial = (
   return updated;
 };
 
+export const deleteMaterial = (id: string): boolean => {
+  const items = readMaterials();
+  const index = items.findIndex((item) => item.id === id);
+  if (index === -1) {
+    return false;
+  }
+  items.splice(index, 1);
+  writeMaterials(items);
+  return true;
+};
+
 export const getTopics = (filters?: {
   teacherId?: string;
   courseId?: string;

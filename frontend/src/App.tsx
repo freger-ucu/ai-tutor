@@ -1,6 +1,8 @@
 import "./App.css";
 import Home from "./pages/Home";
 import Teacher from "./pages/Teacher";
+import TeacherClass from "./pages/TeacherClass";
+import TeacherStudentDetail from "./pages/TeacherStudentDetail";
 import TeacherTopic from "./pages/TeacherTopic";
 import TeacherTest from "./pages/TeacherTest";
 import Student from "./pages/Student";
@@ -21,6 +23,14 @@ function App() {
         element={<TeacherNote />}
       />
       <Route path="/teacher/:id" element={<Teacher />} />
+      <Route
+        path="/teacher/:id/class/:courseId/:classId"
+        element={<TeacherClass />}
+      />
+      <Route
+        path="/teacher/:id/class/:courseId/:classId/student/:studentId"
+        element={<TeacherStudentDetail />}
+      />
       <Route
         path="/teacher/:id/topic/:courseId/:classId/:topicId"
         element={<TeacherTopic />}

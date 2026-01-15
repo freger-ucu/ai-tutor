@@ -108,6 +108,21 @@ export interface SolverResponse {
   solutions: { question: string; answer_explained: string }[];
 }
 
+export interface GenerateClassRecommendationRequest {
+  class_id: number;
+  teacher_id: number;
+  subject: string;
+  statistics: {
+    strong: number;
+    medium: number;
+    weak: number;
+  };
+}
+
+export interface GenerateClassRecommendationResponse {
+  recommendation: string;
+}
+
 export const getTeacherData = (teacherId: number) =>
   apiGet<TeacherDataResponse>(`/teacher/${teacherId}`);
 
@@ -146,3 +161,9 @@ export const getStudentRecommendation = (payload: StudentRecommendationRequest) 
 
 export const solveQuestions = (payload: SolverRequest) =>
   apiPost<SolverResponse, SolverRequest>("/solver", payload);
+
+export const generateClassRecommendation = (payload: GenerateClassRecommendationRequest) =>
+  apiPost<GenerateClassRecommendationResponse, GenerateClassRecommendationRequest>(
+    "/teacher/class/recommendation",
+    payload
+  );

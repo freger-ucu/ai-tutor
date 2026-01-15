@@ -6,6 +6,8 @@ interface TeacherSidebarProps {
   children?: ReactNode;
   showPrimaryNav?: boolean;
   afterPrimaryNav?: ReactNode;
+  onMaterialsClick?: () => void;
+  onStudentsClick?: () => void;
 }
 
 const MaterialsIcon = () => (
@@ -26,6 +28,8 @@ const TeacherSidebar = ({
   children,
   showPrimaryNav = true,
   afterPrimaryNav,
+  onMaterialsClick,
+  onStudentsClick,
 }: TeacherSidebarProps) => {
   const baseClass =
     "flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-sm";
@@ -57,6 +61,7 @@ const TeacherSidebar = ({
         <div className="mt-10 space-y-3">
           <button
             type="button"
+            onClick={onMaterialsClick}
             className={`${baseClass} ${
               activeItem === "materials" ? activeClass : inactiveClass
             } cursor-pointer`}
@@ -68,6 +73,7 @@ const TeacherSidebar = ({
           </button>
           <button
             type="button"
+            onClick={onStudentsClick}
             className={`${baseClass} ${
               activeItem === "students" ? activeClass : inactiveClass
             } cursor-pointer`}

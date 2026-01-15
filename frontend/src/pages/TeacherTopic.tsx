@@ -4,13 +4,14 @@ import AddMaterialsCard from "../components/AddMaterialsCard";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Card from "../components/Card";
+import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import GenerateModalContent from "../components/GenerateModalContent";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import PillButton from "../components/PillButton";
 import SelectStudentsModal from "../components/SelectStudentsModal";
 import TeacherSidebar from "../components/TeacherSidebar";
-import { addMaterial, getMaterials } from "../data/materialsStorage";
+import { addMaterial, deleteMaterial, getMaterials } from "../data/materialsStorage";
 import {
   generateNotesByLevel,
   generateNotesIndividual,
@@ -73,9 +74,15 @@ const TeacherTopic = () => {
 
   const [notes, setNotes] = useState<{ id: string; title: string }[]>([]);
   const [tests, setTests] = useState<{ id: string; title: string }[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    title: string;
+    type: "conspect" | "test";
+  } | null>(null);
   const isMaterialModalOpen = activeModal === "material";
   const isTestModalOpen = activeModal === "test";
   const isAudienceModalOpen = activeModal === "audience";
+  const isDeleteModalOpen = deleteTarget !== null;
 
   useEffect(() => {
     const storedNotes = getMaterials({
@@ -149,6 +156,19 @@ const TeacherTopic = () => {
     }
   };
 
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    const success = deleteMaterial(deleteTarget.id);
+    if (success) {
+      if (deleteTarget.type === "conspect") {
+        setNotes((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+      } else {
+        setTests((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+      }
+    }
+    setDeleteTarget(null);
+  };
+
   const buildFallbackTest = (topicDefinition: string) => {
     const fallbackTitle =
       topicDefinition.trim() || decodedTopic || "Тест";
@@ -182,6 +202,8 @@ const TeacherTopic = () => {
             id ? `Вчитель ${id}` : "Вчитель"
           }
           activeItem="materials"
+          onMaterialsClick={() => navigate(`/teacher/${id}`)}
+          onStudentsClick={() => navigate(`/teacher/${id}?view=students`)}
         >
           <div className="space-y-4">
             {notes.map((item) => (
@@ -268,12 +290,25 @@ const TeacherTopic = () => {
                       </span>
                       {item.title}
                     </div>
-                    {/* Link to Note View */}
-                    <Link
-                      to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
-                    >
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
+                      >
                         <PillButton label="Переглянути" />
-                    </Link>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "conspect" })}
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                        title="Видалити"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18" />
+                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </div>
                   </Card>
                 ))}
               </div>
@@ -297,9 +332,23 @@ const TeacherTopic = () => {
                       <div className="text-sm font-semibold text-slate-900">
                         {item.title}
                       </div>
-                      <Link to={`/teacher/${id}/test/${item.id}`}>
-                        <PillButton label="Переглянути" />
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link to={`/teacher/${id}/test/${item.id}`}>
+                          <PillButton label="Переглянути" />
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "test" })}
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                          title="Видалити"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 6h18" />
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                     <div className="mt-4 text-sm text-slate-700">Учнів 20</div>
                     <div className="mt-3 flex -space-x-2">
@@ -585,6 +634,14 @@ const TeacherTopic = () => {
         }}
         students={classStudents.map((studentId) => ({ id: studentId }))}
         onSave={handleAudienceSave}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title={deleteTarget?.title ?? ""}
+        itemType={deleteTarget?.type ?? "conspect"}
       />
     </div>
   );

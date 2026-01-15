@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
+import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import MarkdownContent from "../components/MarkdownContent";
 import SelectStudentsModal from "../components/SelectStudentsModal";
-import { getMaterials, updateMaterial } from "../data/materialsStorage";
+import { deleteMaterial, getMaterials, updateMaterial } from "../data/materialsStorage";
 import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
 import { getTeacherStudents } from "../api/teacher";
@@ -27,12 +28,14 @@ const PencilIcon = () => (
 
 const TeacherNote = () => {
   const { teacherId, courseId, classId, topicId, noteId } = useParams();
+  const navigate = useNavigate();
 
   const [isAudienceModalOpen, setIsAudienceModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [editTeacherNotes, setEditTeacherNotes] = useState("");
   const [materialVersion, setMaterialVersion] = useState(0);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const decodedClassId = classId ? Number(decodeURIComponent(classId)) : null;
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
@@ -150,6 +153,15 @@ const TeacherNote = () => {
     setMaterialVersion((v) => v + 1);
     setIsEditMode(false);
   }, [noteId, editContent, editTeacherNotes]);
+
+  const handleDelete = useCallback(() => {
+    if (!noteId) return;
+    const success = deleteMaterial(noteId);
+    if (success) {
+      navigate(backToTopicHref);
+    }
+    setIsDeleteModalOpen(false);
+  }, [noteId, navigate, backToTopicHref]);
 
   return (
     <div className="min-h-screen bg-[#1E73F7] text-slate-900">
@@ -296,14 +308,28 @@ const TeacherNote = () => {
                       </button>
                     </div>
                   ) : noteMaterial ? (
-                    <button
-                      type="button"
-                      onClick={handleStartEdit}
-                      className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:border-[#1E73F7] hover:text-[#1E73F7]"
-                    >
-                      <PencilIcon />
-                      Редагувати конспект
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleStartEdit}
+                        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:border-[#1E73F7] hover:text-[#1E73F7]"
+                      >
+                        <PencilIcon />
+                        Редагувати конспект
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsDeleteModalOpen(true)}
+                        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-red-50 hover:border-red-300 hover:text-red-600"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18" />
+                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                        </svg>
+                        Видалити
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -342,6 +368,14 @@ const TeacherNote = () => {
             console.log("Saved selection", selection);
             setIsAudienceModalOpen(false);
         }}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleDelete}
+        title={noteTitle}
+        itemType="conspect"
       />
     </div>
   );

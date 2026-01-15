@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
+import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import { getTestById, getTestStatistics, mockTestData } from "../data/mockTests";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { TestContainer } from "../components/test";
 import SelectStudentsModal from "../components/SelectStudentsModal";
-import { getMaterials } from "../data/materialsStorage";
+import { deleteMaterial, getMaterials } from "../data/materialsStorage";
 import { withGeneratedQuestions } from "../data/testMapper";
 import { classLabelToId } from "../data/classUtils";
 import { getTeacherStudents } from "../api/teacher";
@@ -14,6 +15,9 @@ import { toNumericId } from "../api/idUtils";
 
 const TeacherTest = () => {
   const { id, testId } = useParams();
+  const navigate = useNavigate();
+
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const storedTest = useMemo(
     () => getMaterials({ type: "test" }).find((item) => item.id === testId),
@@ -133,6 +137,15 @@ const TeacherTest = () => {
       });
   }, [id, classId, subjectName]);
 
+  const handleDelete = useCallback(() => {
+    if (!testId) return;
+    const success = deleteMaterial(testId);
+    if (success) {
+      navigate(backToTopicHref);
+    }
+    setIsDeleteModalOpen(false);
+  }, [testId, navigate, backToTopicHref]);
+
   if (!testData) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#1E73F7]">
@@ -148,6 +161,8 @@ const TeacherTest = () => {
           id ? `Вчитель ${id}` : "Вчитель"
         }
         activeItem="materials"
+        onMaterialsClick={() => navigate(`/teacher/${id}`)}
+        onStudentsClick={() => navigate(`/teacher/${id}?view=students`)}
       >
         <div className="space-y-4">
           {sidebarNotes.map((item) => (
@@ -194,9 +209,23 @@ const TeacherTest = () => {
               ]}
             />
           </div>
-          <h1 className="text-2xl font-bold text-white shrink-0">
-             {testData.title}
-          </h1>
+          <div className="flex items-center gap-4 shrink-0">
+            <h1 className="text-2xl font-bold text-white">
+              {testData.title}
+            </h1>
+            <button
+              type="button"
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 hover:border-red-500"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18" />
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              </svg>
+              Видалити
+            </button>
+          </div>
 
           {/* Main Card */}
           <div className="mt-4 flex-1 rounded-[32px] bg-white p-8 shadow-xl overflow-y-auto min-h-0">
@@ -218,6 +247,14 @@ const TeacherTest = () => {
             console.log("Saved selection", selection);
             setIsAudienceModalOpen(false);
         }}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleDelete}
+        title={testData.title}
+        itemType="test"
       />
     </div>
   );
