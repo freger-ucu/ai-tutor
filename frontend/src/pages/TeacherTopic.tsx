@@ -135,15 +135,12 @@ const TeacherTopic = () => {
     levels: string[];
     students: string[];
   }) => {
-    const levelMap: Record<string, "weak" | "medium" | "strong"> = {
-      Високий: "strong",
-      Середній: "medium",
-      Низький: "weak",
-    };
+    // SelectStudentsModal now returns stable identifiers directly ("weak", "medium", "strong")
+    const validLevels: ("weak" | "medium" | "strong")[] = ["weak", "medium", "strong"];
     setAudienceSelection({
-      levels: selection.levels
-        .map((level) => levelMap[level])
-        .filter(Boolean),
+      levels: selection.levels.filter(
+        (level): level is "weak" | "medium" | "strong" => validLevels.includes(level as "weak" | "medium" | "strong")
+      ),
       students: selection.students
         .map((studentId) => toNumericId(studentId))
         .filter((value): value is number => value !== null),
@@ -327,44 +324,30 @@ const TeacherTopic = () => {
               <h2 className="text-xl font-semibold text-white">Тести</h2>
               <div className="mt-4 space-y-4">
                 {tests.map((item) => (
-                  <Card key={item.id} className="px-5 py-5">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold text-slate-900">
-                        {item.title}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Link to={`/teacher/${id}/test/${item.id}`}>
-                          <PillButton label="Переглянути" />
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "test" })}
-                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-500"
-                          title="Видалити"
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M3 6h18" />
-                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                          </svg>
-                        </button>
-                      </div>
+                  <Card
+                    key={item.id}
+                    className="flex items-center justify-between px-5 py-4"
+                  >
+                    <div className="flex items-center gap-3 text-sm font-semibold text-slate-900">
+                      <img src="/src/assets/Group.svg" alt="" className="h-6 w-6" />
+                      {item.title}
                     </div>
-                    <div className="mt-4 text-sm text-slate-700">Учнів 20</div>
-                    <div className="mt-3 flex -space-x-2">
-                      {[
-                        "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR7bjVWye1D9XdNJzLXjVI84qCNzt77U0uCxQ&s",
-                        "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR5yYM7PLjs7AXxqJg_RSgtk2qVFdgnHP7k-1xfXoYiFA&s",
-                        "https://thumbs.dreamstime.com/b/high-school-boy-handsome-writing-class-work-31576857.jpg",
-                        "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTYrDIbET-W6GdhKsrq_n6bNnY86FDX8N_6uA&s",
-                      ].map((url, idx) => (
-                        <img
-                          key={idx}
-                          src={url}
-                          alt=""
-                          className="h-8 w-8 rounded-full border-2 border-white object-cover"
-                        />
-                      ))}
+                    <div className="flex items-center gap-2">
+                      <Link to={`/teacher/${id}/test/${item.id}`}>
+                        <PillButton label="Переглянути" />
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "test" })}
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                        title="Видалити"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18" />
+                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                        </svg>
+                      </button>
                     </div>
                   </Card>
                 ))}

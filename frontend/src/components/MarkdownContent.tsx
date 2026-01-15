@@ -220,11 +220,35 @@ const renderMarkdown = (markdown: string): string => {
 interface MarkdownContentProps {
   content: string;
   className?: string;
+  skipFirstHeading?: boolean;
 }
 
-const MarkdownContent = ({ content, className = "" }: MarkdownContentProps) => {
+const removeFirstHeading = (markdown: string): string => {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  let foundFirstHeading = false;
+  const filteredLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!foundFirstHeading && (trimmed.startsWith("# ") || trimmed.startsWith("## ") || trimmed.startsWith("### "))) {
+      foundFirstHeading = true;
+      continue;
+    }
+    filteredLines.push(line);
+  }
+
+  // Remove leading empty lines after removing the heading
+  while (filteredLines.length > 0 && filteredLines[0].trim() === "") {
+    filteredLines.shift();
+  }
+
+  return filteredLines.join("\n");
+};
+
+const MarkdownContent = ({ content, className = "", skipFirstHeading = false }: MarkdownContentProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const html = renderMarkdown(content);
+  const processedContent = skipFirstHeading ? removeFirstHeading(content) : content;
+  const html = renderMarkdown(processedContent);
 
   useEffect(() => {
     // Re-render KaTeX if needed after mount

@@ -5,6 +5,7 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import MarkdownContent from "../components/MarkdownContent";
 import SelectStudentsModal from "../components/SelectStudentsModal";
+import TeacherSidebar from "../components/TeacherSidebar";
 import { deleteMaterial, getMaterials, updateMaterial } from "../data/materialsStorage";
 import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
@@ -164,58 +165,47 @@ const TeacherNote = () => {
   }, [noteId, navigate, backToTopicHref]);
 
   return (
-    <div className="min-h-screen bg-[#1E73F7] text-slate-900">
-      <div className="flex min-h-screen">
-        {/* Fixed Sidebar - matching student layout */}
-        <aside className="fixed left-0 top-0 h-screen w-64 bg-white px-6 py-8 flex flex-col z-10 overflow-y-auto">
-          <div className="flex items-center gap-3">
-            <div
-              className="h-12 w-12 overflow-hidden rounded-full bg-slate-200"
-              style={{
-                backgroundImage: "url('https://i1.poltava.to/uploads/2017/09/2017-09-19/best.jpg')",
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }}
-            />
-            <div className="text-base font-semibold text-slate-900">
-              {teacherId ? `Вчитель ${teacherId}` : "Вчитель"}
-            </div>
-          </div>
+    <div className="min-h-screen bg-[#1E73F7] text-slate-900 flex">
+      <TeacherSidebar
+        teacherName={teacherId ? `Вчитель ${teacherId}` : "Вчитель"}
+        activeItem="materials"
+        onMaterialsClick={() => navigate(`/teacher/${teacherId}`)}
+        onStudentsClick={() => navigate(`/teacher/${teacherId}?view=students`)}
+      >
+        <div className="space-y-4">
+          {sidebarNotes.map((item) => (
+            <Link
+              key={item.id}
+              to={`/teacher/${teacherId}/note/${sidebarCourseId}/${classId}/${encodedTopic}/${item.id}`}
+              className={`flex items-center gap-3 rounded-xl px-4 py-3 font-semibold transition ${
+                item.id === noteId
+                  ? "bg-[#E9F1FF] text-[#1E73F7]"
+                  : "text-slate-800 hover:bg-slate-50"
+              }`}
+            >
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
+                <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
+                  <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
+                  <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
+                </svg>
+              </span>
+              {item.title}
+            </Link>
+          ))}
+          {sidebarTests.map((item) => (
+            <Link
+              key={item.id}
+              to={`/teacher/${teacherId}/test/${item.id}`}
+              className="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50"
+            >
+              <img src="/src/assets/Group.svg" alt="" className="h-4 w-4" />
+              Тест. {item.title}
+            </Link>
+          ))}
+        </div>
+      </TeacherSidebar>
 
-          <div className="mt-6 border-t border-slate-200 pt-6 space-y-4 text-sm">
-            {sidebarNotes.map((item) => (
-              <Link
-                key={item.id}
-                to={`/teacher/${teacherId}/note/${sidebarCourseId}/${classId}/${encodedTopic}/${item.id}`}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 font-semibold transition ${
-                  item.id === noteId
-                    ? "bg-[#E9F1FF] text-[#1E73F7]"
-                    : "text-slate-800 hover:bg-slate-50"
-                }`}
-              >
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
-                  <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
-                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
-                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
-                  </svg>
-                </span>
-                {item.title}
-              </Link>
-            ))}
-            {sidebarTests.map((item) => (
-              <Link
-                key={item.id}
-                to={`/teacher/${teacherId}/test/${item.id}`}
-                className="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50"
-              >
-                <img src="/src/assets/Group.svg" alt="" className="h-4 w-4" />
-                Тест. {item.title}
-              </Link>
-            ))}
-          </div>
-        </aside>
-
-        <main className="ml-64 flex-1 px-10 py-6 w-full">
+      <main className="flex-1 px-10 py-6 w-full">
           <div className="flex items-center gap-4 mb-4">
             <BackButton fallbackPath={backToTopicHref} />
             <Breadcrumbs
@@ -358,7 +348,6 @@ const TeacherNote = () => {
             </div>
           </div>
         </main>
-      </div>
 
       <SelectStudentsModal
         isOpen={isAudienceModalOpen}
