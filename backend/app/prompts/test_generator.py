@@ -5,7 +5,7 @@ Generates test questions based on a topic.
 Uses planning + parallel batch generation for speed and coherence.
 """
 
-from typing import Optional
+from typing import Optional, Dict, Any
 from app.rag.prompts import ALGEBRA_RULES, UKRAINIAN_RULES, HISTORY_RULES
 
 
@@ -56,7 +56,18 @@ DIFFICULTY_DESCRIPTIONS = {
 
 
 # =============================================================================
-# Test Planner Prompt
+# Level Guidance for Test Generation
+# =============================================================================
+
+LEVEL_GUIDANCE = {
+    "weak": "Створюй питання з простішими формулюваннями. Уникай багатокрокових задач. Фокусуйся на базових поняттях.",
+    "medium": "Збалансуй прості та складніші питання. Включай типові задачі на застосування знань.",
+    "strong": "Включай питання, що вимагають глибшого розуміння та аналізу. Додавай нестандартні формулювання.",
+}
+
+
+# =============================================================================
+# Test Planner Prompt (Level-Aware, No Difficulty Counts)
 # =============================================================================
 
 TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{subject}" для учнів {grade} класу.
@@ -67,11 +78,14 @@ TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{
 ## МАТЕРІАЛ З ПІДРУЧНИКА:
 {context}
 
+## РІВЕНЬ УЧНІВ: {level}
+{level_guidance}
+
 ## ВИМОГИ ДО ТЕСТУ:
-- Легких питань: {easy_count}
-- Середніх питань: {medium_count}
-- Складних питань: {hard_count}
-- Всього: {total_count} питань
+- Створи рівно 12 специфікацій питань
+- Покрий 3-5 ключових концепцій теми
+- Розподіли питання рівномірно по концепціях
+- ~50% single_choice, ~20% multiple_choice, ~30% open
 
 ## ПРАВИЛА ПЛАНУВАННЯ:
 
@@ -79,19 +93,14 @@ TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{
 Проаналізуй тему та визнач основні концепції/підтеми, які потрібно перевірити.
 
 ### 2. Розподіли питання по концепціях
-Кожна концепція має бути покрита 2-4 питаннями різної складності.
+Кожна концепція має бути покрита 2-4 питаннями.
 
 ### 3. Обери типи питань для кожної позиції:
 - **single_choice**: для перевірки фактів, визначень, простих правил
 - **multiple_choice**: для перевірки розуміння зв'язків, вибору кількох правильних варіантів
 - **open**: для перевірки вміння пояснювати, обчислювати, формулювати
 
-### 4. Принципи розподілу типів по складності:
-- **Легкі**: 60% single_choice, 40% open (прості визначення, базові факти)
-- **Середні**: рівномірно всі типи (застосування знань)
-- **Складні**: 50% open, 30% multiple_choice, 20% single_choice (аналіз, синтез)
-
-### 5. Уникай:
+### 4. Уникай:
 - Однотипних питань підряд на ту саму концепцію
 - Питань, що перевіряють абсолютно те саме
 - Занадто схожих формулювань
@@ -103,14 +112,12 @@ TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{
     "question_specs": [
         {{
             "spec_id": 1,
-            "difficulty": "easy",
             "question_type": "single_choice",
             "concept": "концепція1",
             "focus": "конкретний аспект для перевірки цим питанням"
         }},
         {{
             "spec_id": 2,
-            "difficulty": "medium",
             "question_type": "open",
             "concept": "концепція2",
             "focus": "інший аспект"
@@ -121,9 +128,9 @@ TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{
 ```
 
 ВАЖЛИВО:
-- Створи рівно {total_count} специфікацій питань
-- Дотримуйся вказаного розподілу: {easy_count} легких, {medium_count} середніх, {hard_count} складних
-- Кожна специфікація має унікальний spec_id (від 1 до {total_count})
+- Створи рівно 12 специфікацій питань
+- Кожна специфікація має унікальний spec_id (від 1 до 12)
+- НЕ вказуй difficulty - складність визначається автоматично після генерації
 - Надай ТІЛЬКИ JSON, без додаткового тексту."""
 
 
@@ -132,9 +139,7 @@ def build_planner_prompt(
     grade: int,
     topic_definition: str,
     context: str,
-    easy_count: int,
-    medium_count: int,
-    hard_count: int,
+    level: str = "medium",
 ) -> str:
     """
     Build the test planning prompt.
@@ -144,24 +149,20 @@ def build_planner_prompt(
         grade: Grade level (8 or 9)
         topic_definition: Topic description
         context: Retrieved textbook context
-        easy_count: Number of easy questions
-        medium_count: Number of medium questions
-        hard_count: Number of hard questions
+        level: Student level for guidance ("weak", "medium", "strong")
 
     Returns:
         Formatted prompt string for test planning
     """
-    total_count = easy_count + medium_count + hard_count
+    level_guidance = LEVEL_GUIDANCE.get(level, LEVEL_GUIDANCE["medium"])
 
     return TEST_PLANNER_PROMPT.format(
         subject=subject,
         grade=grade,
         topic_definition=topic_definition,
         context=context if context else "Контекст не знайдено. Використовуй власні знання про тему.",
-        easy_count=easy_count,
-        medium_count=medium_count,
-        hard_count=hard_count,
-        total_count=total_count,
+        level=level,
+        level_guidance=level_guidance,
     )
 
 
@@ -247,10 +248,10 @@ def build_single_question_prompt(
     grade: int,
     topic: str,
     context: str,
-    difficulty: str,
     question_type: str,
     concept: Optional[str] = None,
     focus: Optional[str] = None,
+    level: str = "medium",
 ) -> str:
     """
     Build prompt for generating exactly ONE question.
@@ -260,16 +261,16 @@ def build_single_question_prompt(
         grade: Grade level (8 or 9)
         topic: Topic description
         context: Retrieved textbook context
-        difficulty: "easy", "medium", or "hard"
-        question_type: "multiple_choice" or "open"
+        question_type: "multiple_choice", "single_choice", or "open"
         concept: Specific concept to assess (from planner)
         focus: Specific aspect to test (from planner)
+        level: Student level for subtle guidance ("weak", "medium", "strong")
 
     Returns:
         Formatted prompt string for single question generation
     """
     subject_rules = SUBJECT_RULES_MAP.get(subject, "")
-    diff_info = DIFFICULTY_DESCRIPTIONS.get(difficulty, DIFFICULTY_DESCRIPTIONS["medium"])
+    level_guidance = LEVEL_GUIDANCE.get(level, LEVEL_GUIDANCE["medium"])
 
     # Build concept-focused instruction if provided
     concept_instruction = ""
@@ -287,7 +288,7 @@ def build_single_question_prompt(
 - Питання має перевіряти розуміння цієї концепції.
 """
 
-    if question_type in {"multiple_choice", "single_choice"}:
+    if question_type == "single_choice":
         format_instructions = """## ПРОЦЕС СТВОРЕННЯ ПИТАННЯ:
 
 КРОК 1: Спочатку продумай питання та ПРАВИЛЬНУ ВІДПОВІДЬ
@@ -340,6 +341,59 @@ def build_single_question_prompt(
     "topic": "Квадратні рівняння"
 }
 ```"""
+    elif question_type == "multiple_choice":
+        format_instructions = """## ПРОЦЕС СТВОРЕННЯ ПИТАННЯ:
+
+КРОК 1: Спочатку продумай питання з КІЛЬКОМА ПРАВИЛЬНИМИ ВІДПОВІДЯМИ
+- Яке конкретне знання перевіряємо?
+- Які відповіді правильні і ЧОМУ? (мінімум 2, максимум 3)
+
+КРОК 2: Створи неправильні варіанти (щоб було рівно 4)
+- Типові помилки учнів
+- Схожі але неправильні відповіді
+
+КРОК 3: Визнач позиції ВСІХ правильних відповідей (масив чисел 0-3)
+
+## ОБОВ'ЯЗКОВИЙ JSON ФОРМАТ:
+```json
+{
+    "reasoning": "Коротко: правильні відповіді X і Y тому що Z",
+    "question": "Текст питання? (Оберіть кілька правильних відповідей)",
+    "options": [
+        "Варіант 0",
+        "Варіант 1",
+        "Варіант 2",
+        "Варіант 3"
+    ],
+    "correct_answer_indices": [0, 2],
+    "explanation": "Пояснення для учня",
+    "topic": "Підтема"
+}
+```
+
+⚠️ КРИТИЧНІ ВИМОГИ:
+1. "reasoning" — ОБОВ'ЯЗКОВО спочатку напиши які відповіді правильні і чому!
+2. "options" ОБОВ'ЯЗКОВО містить РІВНО 4 елементи
+3. "correct_answer_indices" — МАСИВ з 2-3 числами 0-3 (кілька правильних!)
+4. Всі 4 варіанти різні та правдоподібні
+5. МІНІМУМ 2 правильні відповіді, МАКСИМУМ 3
+
+ПРИКЛАД:
+```json
+{
+    "reasoning": "Властивості квадратного кореня: √(ab) = √a·√b, √(a/b) = √a/√b. Правильні індекси 0 і 2.",
+    "question": "Які з наступних тверджень про квадратні корені є правильними? (Оберіть кілька)",
+    "options": [
+        "√(ab) = √a · √b для a,b ≥ 0",
+        "√(a+b) = √a + √b для a,b ≥ 0",
+        "√(a/b) = √a / √b для a ≥ 0, b > 0",
+        "√(a-b) = √a - √b для a ≥ b ≥ 0"
+    ],
+    "correct_answer_indices": [0, 2],
+    "explanation": "Корінь добутку/частки дорівнює добутку/частці коренів, але корінь суми/різниці НЕ дорівнює сумі/різниці коренів",
+    "topic": "Властивості квадратних коренів"
+}
+```"""
     else:
         format_instructions = """## ПРОЦЕС СТВОРЕННЯ ПИТАННЯ:
 
@@ -375,16 +429,20 @@ def build_single_question_prompt(
 }
 ```"""
 
-    type_name = "з вибором відповіді" if question_type in {"multiple_choice", "single_choice"} else "відкритого типу"
+    if question_type == "single_choice":
+        type_name = "з однією правильною відповіддю"
+    elif question_type == "multiple_choice":
+        type_name = "з КІЛЬКОМА правильними відповідями"
+    else:
+        type_name = "відкритого типу"
 
-    prompt = f"""Створи ОДНЕ тестове питання {type_name} рівня "{diff_info['name'].upper()}" для учнів {grade} класу з предмету "{subject}".
+    prompt = f"""Створи ОДНЕ тестове питання {type_name} для учнів {grade} класу з предмету "{subject}".
 
 ## ТЕМА (питання ТІЛЬКИ по цій темі!):
 {topic}
 {concept_instruction}
-## РІВЕНЬ СКЛАДНОСТІ: {diff_info['name'].upper()}
-- {diff_info['description']}
-- Приклади: {diff_info['examples']}
+## РЕКОМЕНДАЦІЇ ДО СТИЛЮ:
+{level_guidance}
 
 ## ПРАВИЛА ТА ФОРМУЛИ:
 {subject_rules if subject_rules else "Використовуй стандартні правила для цього предмету."}
@@ -419,4 +477,228 @@ def build_test_generator_prompt(
         context=context,
         difficulty="medium",
         num_questions=num_questions
+    )
+
+
+# =============================================================================
+# Difficulty Classifier Prompt (Batch Classification)
+# =============================================================================
+
+DIFFICULTY_CLASSIFIER_BATCH_PROMPT = """Ти — експерт з оцінювання складності тестових завдань для {grade} класу з предмету "{subject}".
+
+## ЗАВДАННЯ:
+Класифікуй складність КОЖНОГО з {num_questions} питань нижче.
+
+ВАЖЛИВО: Використовуй ВСІ три рівні! Розподіл має бути приблизно:
+- ~25-35% питань = EASY
+- ~35-45% питань = MEDIUM
+- ~25-35% питань = HARD
+
+НЕ бійся ставити "hard" — якщо питання вимагає кількох кроків або глибокого аналізу, це HARD!
+
+## КРИТЕРІЇ КЛАСИФІКАЦІЇ ДЛЯ {subject}:
+
+{subject_criteria}
+
+## ПИТАННЯ ДЛЯ КЛАСИФІКАЦІЇ:
+
+{questions_text}
+
+## ФОРМАТ ВІДПОВІДІ (JSON):
+```json
+{{
+    "classifications": [
+        {{"spec_id": 1, "difficulty": "easy|medium|hard", "reasoning": "1 речення"}},
+        {{"spec_id": 2, "difficulty": "easy|medium|hard", "reasoning": "1 речення"}},
+        ...
+    ]
+}}
+```
+
+ВАЖЛИВО:
+1. Класифікуй ВСІ {num_questions} питань
+2. Використай ВСІ три рівні складності (easy, medium, hard)
+3. Якщо сумніваєшся між medium і hard — обери HARD
+4. Надай ТІЛЬКИ JSON, без додаткового тексту"""
+
+
+ALGEBRA_DIFFICULTY_CRITERIA = """### Алгебра {grade} клас:
+
+**EASY** (базовий рівень):
+- Пряма підстановка у формулу (наприклад, знайти значення виразу при x=2)
+- Визначення терміну (що таке дискримінант?)
+- Одна проста операція (спростити 2x + 3x)
+- Впізнавання формули чи графіка
+
+**MEDIUM** (достатній рівень):
+- Розв'язування типового рівняння за алгоритмом
+- Застосування 2-3 формул послідовно
+- Побудова графіка за формулою
+- Стандартні текстові задачі
+
+**HARD** (високий рівень):
+- Рівняння/нерівності з параметром
+- Нестандартні формулювання (задачі "навпаки")
+- Доведення властивостей чи тверджень
+- Комбінування тем (наприклад, системи + квадратні рівняння)
+- Дослідження функцій (область визначення + множина значень + монотонність)
+- Текстові задачі з кількома невідомими"""
+
+
+UKRAINIAN_DIFFICULTY_CRITERIA = """### Українська мова {grade} клас:
+
+**EASY** (базовий рівень):
+- Визначення частини мови, члена речення
+- Базове правило (ненаголошене е/и)
+- Впізнавання мовного явища
+- Просте визначення терміну
+
+**MEDIUM** (достатній рівень):
+- Застосування правила до конкретного випадку
+- Виправлення помилки з поясненням
+- Визначення синтаксичної ролі слова в контексті
+- Трансформація речення (активне ↔ пасивне)
+
+**HARD** (високий рівень):
+- Правопис складних випадків (апостроф + м'який знак)
+- Пунктуація у складних реченнях з різними видами зв'язку
+- Стилістичний аналіз тексту
+- Винятки з правил та їх застосування
+- Розрізнення омонімічних форм (однакові слова — різні частини мови)
+- Комплексний аналіз речення"""
+
+
+HISTORY_DIFFICULTY_CRITERIA = """### Історія України {grade} клас:
+
+**EASY** (базовий рівень):
+- Відома дата або подія (коли була Переяславська рада?)
+- Впізнавання історичної постаті за описом
+- Прості факти з підручника
+- Хронологічне впорядкування 2-3 подій
+
+**MEDIUM** (достатній рівень):
+- Причинно-наслідкові зв'язки (чому сталося X?)
+- Порівняння двох подій/періодів
+- Наслідки події для України
+- Роль особи в історичному процесі
+
+**HARD** (високий рівень):
+- Аналіз історичного джерела (документу, карти)
+- Оцінка значення події для подальшої історії
+- Альтернативні точки зору на подію
+- Маловідомі факти та деталі
+- Зв'язок подій з ширшим європейським контекстом
+- Порівняння оцінок істориків"""
+
+
+def get_subject_difficulty_criteria(subject: str, grade: int) -> str:
+    """Get subject-specific difficulty criteria."""
+    if "Алгебра" in subject or "алгебра" in subject:
+        return ALGEBRA_DIFFICULTY_CRITERIA.format(grade=grade)
+    elif "Українська" in subject or "українська" in subject:
+        return UKRAINIAN_DIFFICULTY_CRITERIA.format(grade=grade)
+    elif "Історія" in subject or "історія" in subject:
+        return HISTORY_DIFFICULTY_CRITERIA.format(grade=grade)
+    else:
+        # Generic criteria
+        return f"""### {subject} {grade} клас:
+
+**EASY**: Базові визначення, прості факти, пряме застосування правил
+**MEDIUM**: Типові задачі, застосування знань, порівняння
+**HARD**: Аналіз, синтез, нестандартні формулювання, комбінування тем"""
+
+
+def build_difficulty_classifier_prompt(
+    subject: str,
+    grade: int,
+    question: Dict[str, Any],
+) -> str:
+    """
+    Build prompt for classifying a single question's difficulty.
+
+    DEPRECATED: Use build_batch_difficulty_classifier_prompt for better results.
+
+    Args:
+        subject: Subject name in Ukrainian
+        grade: Grade level (8 or 9)
+        question: Question dict with at least "question" field
+
+    Returns:
+        Formatted prompt string for difficulty classification
+    """
+    question_text = question.get("question", "")
+
+    # Include options if it's a multiple choice question
+    if question.get("options"):
+        options_text = "\n".join(f"  {i}) {opt}" for i, opt in enumerate(question["options"]))
+        question_text = f"{question_text}\n\nВаріанти відповідей:\n{options_text}"
+
+    subject_criteria = get_subject_difficulty_criteria(subject, grade)
+
+    # Single question version of the prompt
+    single_prompt = f"""Визнач рівень складності цього питання для учня {grade} класу з предмету "{subject}".
+
+## ПИТАННЯ:
+{question_text}
+
+## КРИТЕРІЇ КЛАСИФІКАЦІЇ:
+
+{subject_criteria}
+
+## ВАЖЛИВО:
+- Якщо питання вимагає кількох кроків або глибокого розуміння — це HARD
+- Не бійся ставити "hard" для справді складних питань!
+- "medium" — тільки для типових задач на застосування
+
+## ФОРМАТ ВІДПОВІДІ (JSON):
+{{"difficulty": "easy|medium|hard", "reasoning": "коротке пояснення (1 речення)"}}
+
+Надай ТІЛЬКИ JSON, без додаткового тексту."""
+
+    return single_prompt
+
+
+def build_batch_difficulty_classifier_prompt(
+    subject: str,
+    grade: int,
+    questions: list[Dict[str, Any]],
+) -> str:
+    """
+    Build prompt for batch classification of multiple questions.
+
+    This produces better difficulty distribution than single-question classification.
+
+    Args:
+        subject: Subject name in Ukrainian
+        grade: Grade level (8 or 9)
+        questions: List of question dicts with "question" and "spec_id" fields
+
+    Returns:
+        Formatted prompt string for batch difficulty classification
+    """
+    # Format questions for the prompt
+    questions_parts = []
+    for q in questions:
+        spec_id = q.get("spec_id", 0)
+        q_text = q.get("question", "")
+        q_type = q.get("type", "open")
+
+        part = f"### Питання {spec_id} ({q_type}):\n{q_text}"
+
+        # Include options for choice questions
+        if q.get("options"):
+            options_text = "\n".join(f"   {chr(65+i)}) {opt}" for i, opt in enumerate(q["options"]))
+            part += f"\nВаріанти:\n{options_text}"
+
+        questions_parts.append(part)
+
+    questions_text = "\n\n".join(questions_parts)
+    subject_criteria = get_subject_difficulty_criteria(subject, grade)
+
+    return DIFFICULTY_CLASSIFIER_BATCH_PROMPT.format(
+        subject=subject,
+        grade=grade,
+        num_questions=len(questions),
+        subject_criteria=subject_criteria,
+        questions_text=questions_text,
     )

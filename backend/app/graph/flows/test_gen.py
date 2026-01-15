@@ -47,7 +47,8 @@ logger = logging.getLogger(__name__)
 # Constants
 # =============================================================================
 
-MAX_RETRY_ITERATIONS = 2
+TARGET_QUESTION_COUNT = 12
+MAX_RETRY_ITERATIONS = 1  # Reduced from 2
 MAX_CONCURRENT_LLM = 10
 MAX_CONCURRENT_RAG = 5
 
@@ -60,7 +61,6 @@ MAX_CONCURRENT_RAG = 5
 class QuestionSpec(TypedDict):
     """Specification for a question from planner."""
     spec_id: int
-    difficulty: Literal["easy", "medium", "hard"]
     question_type: Literal["single_choice", "multiple_choice", "open"]
     concept: str  # What concept to assess
     focus: str    # Specific aspect to test
@@ -99,9 +99,7 @@ class TestGenState(TypedDict, total=False):
     subject: str
     grade: int
     topic_definition: str
-    easy_count: int
-    medium_count: int
-    hard_count: int
+    level: str  # "weak" | "medium" | "strong" - for prompt guidance
 
     # === TOPIC RAG (retrieved once at start) ===
     rag_context: str
@@ -197,8 +195,8 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     """
     Plan test structure using LLM.
 
-    Identifies key concepts and creates question specifications
-    with intelligent type/difficulty distribution.
+    Identifies key concepts and creates question specifications.
+    Difficulty is NOT determined here - it's classified post-factum.
     """
     start_time = time.time()
 
@@ -206,12 +204,9 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     grade = state.get("grade", 9)
     topic = state.get("topic_definition", "")
     context = state.get("rag_context", "")
-    easy_count = state.get("easy_count", 1)
-    medium_count = state.get("medium_count", 1)
-    hard_count = state.get("hard_count", 1)
-    total_count = easy_count + medium_count + hard_count
+    level = state.get("level", "medium")
 
-    logger.info(f"Planning test: {easy_count} easy, {medium_count} medium, {hard_count} hard")
+    logger.info(f"Planning test: {TARGET_QUESTION_COUNT} questions, level={level}")
 
     client = get_llm_client()
 
@@ -220,9 +215,7 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
         grade=grade,
         topic_definition=topic,
         context=context,
-        easy_count=easy_count,
-        medium_count=medium_count,
-        hard_count=hard_count,
+        level=level,
     )
 
     response = await client.generate(
@@ -233,7 +226,7 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
 
     parsed = parse_json_response(
         response,
-        fallback=_generate_fallback_plan(topic, easy_count, medium_count, hard_count),
+        fallback=_generate_fallback_plan(topic),
         context="TestPlanner",
     )
 
@@ -245,23 +238,19 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     for i, spec in enumerate(question_specs):
         normalized_specs.append({
             "spec_id": spec.get("spec_id", i + 1),
-            "difficulty": spec.get("difficulty", "medium"),
             "question_type": spec.get("question_type", "single_choice"),
             "concept": spec.get("concept", topic),
             "focus": spec.get("focus", ""),
         })
 
     # If planner didn't produce enough specs, add fallback
-    if len(normalized_specs) < total_count:
-        logger.warning(f"Planner produced {len(normalized_specs)} specs, need {total_count}")
+    if len(normalized_specs) < TARGET_QUESTION_COUNT:
+        logger.warning(f"Planner produced {len(normalized_specs)} specs, need {TARGET_QUESTION_COUNT}")
         normalized_specs.extend(
             _generate_fallback_specs(
                 topic=topic,
-                count=total_count - len(normalized_specs),
+                count=TARGET_QUESTION_COUNT - len(normalized_specs),
                 start_id=len(normalized_specs) + 1,
-                easy_count=max(0, easy_count - sum(1 for s in normalized_specs if s["difficulty"] == "easy")),
-                medium_count=max(0, medium_count - sum(1 for s in normalized_specs if s["difficulty"] == "medium")),
-                hard_count=max(0, hard_count - sum(1 for s in normalized_specs if s["difficulty"] == "hard")),
             )
         )
 
@@ -283,9 +272,9 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     }
 
 
-def _generate_fallback_plan(topic: str, easy: int, medium: int, hard: int) -> Dict[str, Any]:
+def _generate_fallback_plan(topic: str) -> Dict[str, Any]:
     """Generate fallback plan if LLM fails."""
-    specs = _generate_fallback_specs(topic, easy + medium + hard, 1, easy, medium, hard)
+    specs = _generate_fallback_specs(topic, TARGET_QUESTION_COUNT, 1)
     return {
         "concepts": [topic],
         "question_specs": specs,
@@ -297,34 +286,23 @@ def _generate_fallback_specs(
     topic: str,
     count: int,
     start_id: int,
-    easy_count: int,
-    medium_count: int,
-    hard_count: int,
 ) -> List[QuestionSpec]:
-    """Generate fallback specs with proper distribution."""
+    """Generate fallback specs with balanced type distribution."""
     import random
     specs: List[QuestionSpec] = []
-    spec_id = start_id
 
-    difficulties = (
-        ["easy"] * easy_count +
-        ["medium"] * medium_count +
-        ["hard"] * hard_count
+    # Target distribution: ~50% single_choice, ~20% multiple_choice, ~30% open
+    types = (
+        ["single_choice"] * 6 +
+        ["multiple_choice"] * 2 +
+        ["open"] * 4
     )
-    random.shuffle(difficulties)
+    random.shuffle(types)
 
-    for i, diff in enumerate(difficulties[:count]):
-        # Type distribution based on difficulty
-        if diff == "easy":
-            q_type = random.choice(["single_choice", "single_choice", "open"])
-        elif diff == "hard":
-            q_type = random.choice(["open", "open", "multiple_choice"])
-        else:
-            q_type = random.choice(["single_choice", "multiple_choice", "open"])
-
+    for i in range(count):
+        q_type = types[i % len(types)]
         specs.append({
-            "spec_id": spec_id + i,
-            "difficulty": diff,
+            "spec_id": start_id + i,
             "question_type": q_type,
             "concept": topic,
             "focus": "",
@@ -397,6 +375,7 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
     Generate all pending questions in parallel.
 
     Uses concept-specific context for each question.
+    Difficulty is NOT set here - classified post-factum.
     """
     start_time = time.time()
 
@@ -406,6 +385,7 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
     subject = state.get("subject", "")
     grade = state.get("grade", 9)
     topic = state.get("topic_definition", "")
+    level = state.get("level", "medium")
 
     if not pending_specs:
         logger.warning("No pending specs to generate")
@@ -422,18 +402,19 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
                 # Get concept-specific context
                 context = concept_contexts.get(spec["concept"], base_context)
 
-                # Map internal type to prompt type
-                prompt_type = "multiple_choice" if spec["question_type"] in {"single_choice", "multiple_choice"} else "open"
-
+                # Pass actual question type for differentiated prompts
+                # single_choice: 4 options, 1 correct (correct_answer_index)
+                # multiple_choice: 4 options, 2-3 correct (correct_answer_indices)
+                # open: no options, free text answer
                 prompt = build_single_question_prompt(
                     subject=subject,
                     grade=grade,
                     topic=topic,
                     context=context,
-                    difficulty=spec["difficulty"],
-                    question_type=prompt_type,
+                    question_type=spec["question_type"],
                     concept=spec["concept"],
                     focus=spec["focus"],
+                    level=level,
                 )
 
                 # Open questions need more tokens for explanations
@@ -485,39 +466,38 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
                     if isinstance(answer_opts, list) and answer_opts:
                         # Convert answer_options format to options format
                         parsed["options"] = [opt.get("answer", str(opt)) for opt in answer_opts]
-                        # Find correct answer index
-                        found_correct = False
-                        for i, opt in enumerate(answer_opts):
-                            if opt.get("correct", False):
-                                parsed["correct_answer_index"] = i
-                                found_correct = True
-                                break
-                        if not found_correct:
+                        # Find correct answer indices
+                        correct_indices = [i for i, opt in enumerate(answer_opts) if opt.get("correct", False)]
+
+                        if not correct_indices:
                             logger.warning(
                                 f"[GEN] spec_id={spec['spec_id']} - answer_options has NO correct answer! "
                                 f"All options marked correct=false"
                             )
                             # Don't default - let CPU validation catch this
-                        else:
-                            logger.info(f"[GEN] spec_id={spec['spec_id']} - Converted answer_options to options")
+                        elif spec["question_type"] == "single_choice":
+                            # Single choice: use first correct answer
+                            parsed["correct_answer_index"] = correct_indices[0]
+                            logger.info(f"[GEN] spec_id={spec['spec_id']} - Converted answer_options to single_choice")
+                        elif spec["question_type"] == "multiple_choice":
+                            # Multiple choice: use all correct answers
+                            parsed["correct_answer_indices"] = correct_indices
+                            logger.info(f"[GEN] spec_id={spec['spec_id']} - Converted answer_options to multiple_choice with {len(correct_indices)} correct")
 
-                # Normalize the question
+                # Normalize the question (difficulty will be set by classify_difficulty_node)
                 question = parsed
-                question["difficulty"] = spec["difficulty"]
                 question["type"] = spec["question_type"]
                 question["spec_id"] = spec["spec_id"]
                 question["concept"] = spec["concept"]
 
-                # Ensure correct_answer_index for choice questions
-                if spec["question_type"] in {"single_choice", "multiple_choice"}:
-                    # If LLM provided correct_answer_index directly (new format), use it
+                # Ensure correct_answer_index(es) for choice questions
+                if spec["question_type"] == "single_choice":
+                    # Single choice: exactly 1 correct answer (correct_answer_index as int)
                     if "correct_answer_index" in question:
                         idx = question["correct_answer_index"]
                         if not isinstance(idx, int) or idx < 0 or idx > 3:
                             logger.warning(f"[GEN] spec_id={spec['spec_id']} - Invalid correct_answer_index: {idx}")
-                            # Don't default - let CPU validation catch this
                             del question["correct_answer_index"]
-                    # If LLM provided correct_answer as letter (old format), convert
                     elif "correct_answer" in question:
                         answer_letter = str(question["correct_answer"]).strip().upper()
                         letter_to_index = {"A": 0, "B": 1, "C": 2, "D": 3}
@@ -525,8 +505,26 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
                             question["correct_answer_index"] = letter_to_index[answer_letter]
                         else:
                             logger.warning(f"[GEN] spec_id={spec['spec_id']} - Invalid correct_answer letter: {answer_letter}")
-                            # Don't default - let CPU validation catch this
-                    # else: no correct answer - CPU validation will catch this
+
+                elif spec["question_type"] == "multiple_choice":
+                    # Multiple choice: 2-3 correct answers (correct_answer_indices as list)
+                    if "correct_answer_indices" in question:
+                        indices = question["correct_answer_indices"]
+                        if isinstance(indices, list) and len(indices) >= 2:
+                            valid_indices = [i for i in indices if isinstance(i, int) and 0 <= i <= 3]
+                            if len(valid_indices) >= 2:
+                                question["correct_answer_indices"] = valid_indices
+                            else:
+                                logger.warning(f"[GEN] spec_id={spec['spec_id']} - Invalid correct_answer_indices: {indices}")
+                                del question["correct_answer_indices"]
+                        else:
+                            logger.warning(f"[GEN] spec_id={spec['spec_id']} - Multiple choice needs 2+ answers: {indices}")
+                            del question["correct_answer_indices"]
+                    elif "correct_answer_index" in question:
+                        # LLM gave single index instead of list - convert but warn
+                        idx = question["correct_answer_index"]
+                        logger.warning(f"[GEN] spec_id={spec['spec_id']} - Multiple choice got single index {idx}, expected list")
+                        # Don't convert - let validation fail, this is a generation error
 
                 return {
                     "spec_id": spec["spec_id"],
@@ -756,7 +754,7 @@ def prepare_retry_node(state: TestGenState) -> Dict[str, Any]:
     Prepare failed specs for retry.
 
     Finds original specs for failed questions and queues them
-    for another generation attempt (max 2 iterations).
+    for another generation attempt (max 1 iteration).
     """
     retry_count = state.get("retry_count", 0)
     failed_specs = state.get("failed_specs", [])
@@ -786,7 +784,6 @@ def prepare_retry_node(state: TestGenState) -> Dict[str, Any]:
             original = original_specs[spec_id]
             retry_specs.append({
                 "spec_id": spec_id + 1000 * (retry_count + 1),
-                "difficulty": original["difficulty"],
                 "question_type": original["question_type"],
                 "concept": original["concept"],
                 "focus": f"{original.get('focus', '')} (retry {retry_count + 1})".strip(),
@@ -801,13 +798,116 @@ def prepare_retry_node(state: TestGenState) -> Dict[str, Any]:
     }
 
 
-def should_retry(state: TestGenState) -> Literal["batch_generate", "finalize"]:
-    """Decide whether to retry or finalize."""
+def should_retry(state: TestGenState) -> Literal["batch_generate", "classify_difficulty"]:
+    """Decide whether to retry or proceed to difficulty classification."""
     pending_specs = state.get("pending_specs", [])
 
     if pending_specs:
         return "batch_generate"
-    return "finalize"
+    return "classify_difficulty"
+
+
+# =============================================================================
+# Node: Classify Difficulty (Post-factum)
+# =============================================================================
+
+
+@trace_chain(name="classify_difficulty")
+async def classify_difficulty_node(state: TestGenState) -> Dict[str, Any]:
+    """
+    Classify difficulty for all validated questions using LLM.
+
+    Uses BATCH classification for better difficulty distribution.
+    The LLM sees all questions together and is instructed to use all three levels.
+    """
+    from app.prompts.test_generator import build_batch_difficulty_classifier_prompt
+
+    start_time = time.time()
+
+    questions = state.get("validated_questions", [])
+    subject = state.get("subject", "")
+    grade = state.get("grade", 9)
+
+    if not questions:
+        logger.warning("No questions to classify")
+        return {}
+
+    logger.info(f"Classifying difficulty for {len(questions)} questions (batch mode)")
+
+    client = get_llm_client()
+
+    # Build batch classification prompt
+    prompt = build_batch_difficulty_classifier_prompt(
+        subject=subject,
+        grade=grade,
+        questions=questions,
+    )
+
+    try:
+        response = await client.generate(
+            prompt=prompt,
+            temperature=0.1,  # Small temperature for variety
+            max_tokens=2000,  # Enough for all classifications
+        )
+
+        result = parse_json_response(
+            response,
+            fallback={"classifications": []},
+            context="BatchDifficultyClassifier",
+        )
+
+        classifications = result.get("classifications", [])
+
+        # Build a map of spec_id -> difficulty
+        difficulty_map: Dict[int, str] = {}
+        for c in classifications:
+            spec_id = c.get("spec_id")
+            difficulty = c.get("difficulty", "medium").lower()
+            if difficulty not in {"easy", "medium", "hard"}:
+                difficulty = "medium"
+            if spec_id is not None:
+                difficulty_map[spec_id] = difficulty
+                logger.debug(
+                    f"[CLASSIFY] spec_id={spec_id} - {difficulty} | "
+                    f"{c.get('reasoning', '')[:50]}"
+                )
+
+        # Apply classifications to questions
+        for q in questions:
+            spec_id = q.get("spec_id")
+            if spec_id in difficulty_map:
+                q["difficulty"] = difficulty_map[spec_id]
+            else:
+                # Fallback for unclassified questions
+                q["difficulty"] = "medium"
+                logger.warning(f"[CLASSIFY] spec_id={spec_id} not in batch result, defaulting to medium")
+
+    except Exception as e:
+        logger.error(f"Batch difficulty classification failed: {e}")
+        # Fallback: distribute difficulties evenly
+        logger.info("Using fallback distribution: ~33% each")
+        n = len(questions)
+        for i, q in enumerate(questions):
+            if i < n // 3:
+                q["difficulty"] = "easy"
+            elif i < 2 * n // 3:
+                q["difficulty"] = "medium"
+            else:
+                q["difficulty"] = "hard"
+
+    classification_time = int((time.time() - start_time) * 1000)
+    logger.info(f"Difficulty classification complete in {classification_time}ms")
+
+    # Log distribution
+    easy = sum(1 for q in questions if q.get("difficulty") == "easy")
+    medium = sum(1 for q in questions if q.get("difficulty") == "medium")
+    hard = sum(1 for q in questions if q.get("difficulty") == "hard")
+    logger.info(f"Difficulty distribution: easy={easy}, medium={medium}, hard={hard}")
+
+    return {
+        "validated_questions": questions,
+        "llm_calls_count": state.get("llm_calls_count", 0) + 1,  # Only 1 batch call now
+    }
 
 
 # =============================================================================
@@ -870,7 +970,9 @@ def build_test_gen_graph():
                                                                 ↓
                                                           prepare_retry ──┐
                                                                 ↓         │
-                                                            finalize ◄────┘
+                                                    classify_difficulty ◄─┘
+                                                                ↓
+                                                            finalize
     """
     from langgraph.graph import StateGraph, END
 
@@ -883,6 +985,7 @@ def build_test_gen_graph():
     workflow.add_node("batch_generate", batch_generate_node)
     workflow.add_node("batch_validate", batch_validate_node)
     workflow.add_node("prepare_retry", prepare_retry_node)
+    workflow.add_node("classify_difficulty", classify_difficulty_node)
     workflow.add_node("finalize", finalize_node)
 
     # Setup edges
@@ -893,16 +996,17 @@ def build_test_gen_graph():
     workflow.add_edge("batch_generate", "batch_validate")
     workflow.add_edge("batch_validate", "prepare_retry")
 
-    # Conditional retry loop
+    # Conditional retry loop - goes to classify_difficulty when done
     workflow.add_conditional_edges(
         "prepare_retry",
         should_retry,
         {
             "batch_generate": "batch_generate",
-            "finalize": "finalize",
+            "classify_difficulty": "classify_difficulty",
         },
     )
 
+    workflow.add_edge("classify_difficulty", "finalize")
     workflow.add_edge("finalize", END)
 
     return workflow.compile()
@@ -968,28 +1072,25 @@ async def generate_test_pool(
     subject: str,
     grade: int,
     topic_definition: str,
-    easy_count: int = 5,
-    medium_count: int = 10,
-    hard_count: int = 5,
+    level: str = "medium",
 ) -> tuple[List[Dict[str, Any]], GenerationStats]:
     """
     Generate a validated pool of test questions using parallel LangGraph workflow.
 
-    New architecture:
+    Architecture:
     1. Retrieve RAG context (1 call)
-    2. Plan test structure (1 LLM call)
+    2. Plan test structure (1 LLM call) - creates 12 question specs
     3. Retrieve per-concept context (N parallel RAG)
     4. Batch generate questions (N parallel LLM)
     5. Batch validate questions (hybrid: MC reuse context, Open fresh RAG)
-    6. Retry failed questions (up to 2 iterations)
+    6. Retry failed questions (max 1 iteration)
+    7. Classify difficulty post-factum (N parallel LLM)
 
     Args:
         subject: Subject name (Алгебра, Українська мова, etc.)
         grade: Grade level (8 or 9)
         topic_definition: Topic description
-        easy_count: Number of easy questions (default 5)
-        medium_count: Number of medium questions (default 10)
-        hard_count: Number of hard questions (default 5)
+        level: Student level for prompt guidance ("weak", "medium", "strong")
 
     Returns:
         Tuple of (list of validated question dicts, GenerationStats)
@@ -998,9 +1099,7 @@ async def generate_test_pool(
         "subject": subject,
         "grade": grade,
         "topic_definition": topic_definition,
-        "easy_count": easy_count,
-        "medium_count": medium_count,
-        "hard_count": hard_count,
+        "level": level,
         "rag_context": "",
         "rag_references": [],
         "test_plan": None,

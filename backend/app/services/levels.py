@@ -93,6 +93,37 @@ def compute_level(score: float, all_scores: Sequence[float]) -> Level:
     return assign_level(score, q1, q3)
 
 
+def compute_median_level(selected_scores: Sequence[float], all_scores: Sequence[float]) -> str:
+    """
+    Compute median level for selected students relative to class.
+
+    Takes the median score of selected students and compares it to
+    class quartiles to determine level.
+
+    Args:
+        selected_scores: Scores of selected students
+        all_scores: All scores in the class (for quartile computation)
+
+    Returns:
+        Level string: "weak" | "medium" | "strong"
+    """
+    if not selected_scores:
+        return "medium"
+
+    # Get median score of selected students
+    sorted_selected = sorted(selected_scores)
+    n = len(sorted_selected)
+    if n % 2 == 0:
+        median = (sorted_selected[n // 2 - 1] + sorted_selected[n // 2]) / 2
+    else:
+        median = sorted_selected[n // 2]
+
+    # Compare to class quartiles
+    q1, q3 = compute_quartiles(all_scores)
+
+    return assign_level(median, q1, q3).value
+
+
 def calculate_percentile(score: float, sorted_scores: Sequence[float]) -> float:
     """
     Calculate percentile rank of a score.

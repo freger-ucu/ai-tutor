@@ -49,9 +49,10 @@ class GenerateTestRequest(BaseModel):
     teacher_id: int
     subject: str
     topic_definition: str = Field(..., description="Topic description text")
-    easy_count: int = Field(default=1, ge=0, le=20, description="Number of easy questions")
-    medium_count: int = Field(default=1, ge=0, le=20, description="Number of medium questions")
-    hard_count: int = Field(default=1, ge=0, le=20, description="Number of hard questions")
+    # Optional: filter by levels (empty = all students)
+    level_list: list[Level] = Field(default_factory=list, description="Filter students by levels")
+    # Optional: specific students (overrides level_list if provided)
+    student_list: list[int] = Field(default_factory=list, description="Specific student IDs")
 
 
 class StudentDetailsRequest(BaseModel):
