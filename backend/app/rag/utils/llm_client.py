@@ -5,8 +5,10 @@ Supports: Lapa (Mamay), OpenAI, Gemini via OpenAI-compatible API.
 Includes LangSmith tracing for observability.
 """
 
+import asyncio
 import logging
 import re
+import time
 from typing import Dict, Any, List, Optional
 
 from openai import AsyncOpenAI
@@ -33,10 +35,36 @@ class LLMClient:
             api_key=settings.api_key,
             base_url=settings.api_base_url
         )
+        self.embedding_client = AsyncOpenAI(
+            api_key=settings.embedding_api_key,
+            base_url=settings.embedding_base_url
+        )
         self.model = settings.model
         self.embedding_model = settings.embedding_model
         self.provider = app_settings.llm_provider.value
-        logger.info(f"LLMClient initialized: provider={self.provider}, model={self.model}")
+        self.embedding_provider = app_settings.llm_embedding_provider.value
+        self._min_request_interval = 12.0 if self.provider == "gemini" else 0.0
+        self._rate_limit_lock = asyncio.Lock()
+        self._last_request_ts = 0.0
+        self._supports_response_format = True
+        logger.info(
+            "LLMClient initialized: provider=%s, model=%s, embedding_provider=%s, embedding_model=%s",
+            self.provider,
+            self.model,
+            self.embedding_provider,
+            self.embedding_model,
+        )
+
+    async def _throttle(self) -> None:
+        """Throttle requests for providers with strict RPM limits (e.g., Gemini free tier)."""
+        if self._min_request_interval <= 0:
+            return
+        async with self._rate_limit_lock:
+            now = time.monotonic()
+            wait_s = self._min_request_interval - (now - self._last_request_ts)
+            if wait_s > 0:
+                await asyncio.sleep(wait_s)
+            self._last_request_ts = time.monotonic()
 
     @trace_llm(name="llm_generate")
     async def generate(
@@ -47,17 +75,31 @@ class LLMClient:
         json_mode: bool = False
     ) -> str:
         """Generate text from LLM."""
+        await self._throttle()
         kwargs = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
         }
+        if "gpt-5" in self.model:
+            # GPT-5 models only support default temperature (1).
+            kwargs["temperature"] = 1
+            kwargs["max_completion_tokens"] = max_tokens
+        else:
+            kwargs["temperature"] = temperature
+            kwargs["max_tokens"] = max_tokens
 
-        if json_mode:
+        if json_mode and self._supports_response_format:
             kwargs["response_format"] = {"type": "json_object"}
 
-        response = await self.client.chat.completions.create(**kwargs)
+        try:
+            response = await self.client.chat.completions.create(**kwargs)
+        except Exception as e:
+            if json_mode and "response_format" in kwargs and "response_format" in str(e):
+                self._supports_response_format = False
+                kwargs.pop("response_format", None)
+                response = await self.client.chat.completions.create(**kwargs)
+            else:
+                raise
         return response.choices[0].message.content
 
     async def generate_json(
@@ -76,7 +118,7 @@ class LLMClient:
 
     async def embed(self, text: str) -> List[float]:
         """Generate embedding vector."""
-        response = await self.client.embeddings.create(
+        response = await self.embedding_client.embeddings.create(
             input=text,
             model=self.embedding_model,
             encoding_format="float"

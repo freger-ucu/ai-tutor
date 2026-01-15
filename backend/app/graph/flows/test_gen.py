@@ -17,7 +17,7 @@ Key Design:
 - Planning phase: 1 LLM call to design entire test structure
 - Per-concept RAG: Parallel retrieval for each identified concept
 - Batch generation: All questions generated in parallel
-- Hybrid validation: MC reuses concept context, Open gets fresh RAG
+- Solver-based validation: Independent solver validates each question (like agent.py)
 - Smart retry: Up to 2 retry iterations for failed questions
 """
 
@@ -30,13 +30,14 @@ from app.services.tracing import trace_chain
 from app.rag.utils.llm_client import get_llm_client
 from app.rag.utils.hybrid_retriever import get_retriever, format_context
 from app.utils.json_parser import parse_json_response
+from app.config import settings, LLMProvider
 from app.prompts.test_generator import (
     build_single_question_prompt,
     build_planner_prompt,
     TEST_GENERATOR_SYSTEM_PROMPT,
     TEST_PLANNER_SYSTEM_PROMPT,
 )
-from app.services.question_checker import check_mc_question, check_open_question
+from app.services.solver import validate_question
 from ..shared.rag_node import create_rag_node, RAGConfig
 from ..shared.cpu_validators import validate_single_question
 
@@ -49,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 TARGET_QUESTION_COUNT = 12
 MAX_RETRY_ITERATIONS = 1  # Reduced from 2
-MAX_CONCURRENT_LLM = 10
+MAX_CONCURRENT_LLM = 1 if settings.llm_provider == LLMProvider.GEMINI else 10
 MAX_CONCURRENT_RAG = 5
 
 
@@ -222,6 +223,7 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
         prompt=f"{TEST_PLANNER_SYSTEM_PROMPT}\n\n{prompt}",
         temperature=0.3,
         max_tokens=3000,
+        json_mode=True,
     )
 
     parsed = parse_json_response(
@@ -424,6 +426,7 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
                     prompt=f"{TEST_GENERATOR_SYSTEM_PROMPT}\n\n{prompt}",
                     temperature=0.7,
                     max_tokens=max_tokens,
+                    json_mode=True,
                 )
 
                 parsed = parse_json_response(
@@ -628,77 +631,43 @@ async def batch_validate_node(state: TestGenState) -> Dict[str, Any]:
     # ═══════════════════════════════════════════════════════
     # Phase 2: LLM Validation (parallel, type-specific)
     # ═══════════════════════════════════════════════════════
-    retriever = get_retriever()
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM)
 
-    async def validate_mc(question: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        MC validation with support scoring.
-
-        Uses support scoring (V3) to:
-        - Score how well each option is supported by context
-        - Detect ambiguous questions with multiple high-scoring options
-        - Return confidence score based on support level
-        """
-        concept = question.get("concept", "")
-        context = concept_contexts.get(concept, base_context)
-
-        result = await check_mc_question(
-            question_text=question.get("question", ""),
-            options=question.get("options", []),
-            expected_index=question.get("correct_answer_index", 0),
-            context=context,
-            subject=subject,
-            grade=grade,
-            use_support_scoring=True,  # V3: Enable support scoring for better validation
-        )
-
-        # Log validation details for debugging
-        if result.option_scores:
-            logger.debug(
-                f"[LLM-MC] spec_id={question.get('spec_id')} - "
-                f"scores={result.option_scores}, confidence={result.confidence:.2f}"
-            )
-
-        return {
-            "question": question,
-            "is_valid": result.is_valid,
-            "reason": result.reason,
-            "confidence": result.confidence,
-            "option_scores": result.option_scores,
-        }
-
-    async def validate_open(question: Dict[str, Any]) -> Dict[str, Any]:
-        """Open: Retrieve fresh context for answerability check."""
-        try:
-            docs = await retriever.retrieve(
-                query=question.get("question", ""),
-                subject=subject,
-                grade=grade,
-                top_k=3,
-            )
-            context, _ = format_context(docs, max_chars=4000, subject=subject)
-        except Exception as e:
-            logger.error(f"Validation RAG failed: {e}")
-            context = base_context
-
-        result = await check_open_question(
-            question_text=question.get("question", ""),
-            expected_answer=question.get("explanation", ""),
-            context=context,
-            subject=subject,
-            grade=grade,
-        )
-        return {"question": question, "is_valid": result.is_valid, "reason": result.reason}
-
     async def validate_one(question: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Unified validation using solver-based approach.
+
+        Solver independently solves the question, then compares with expected answer.
+        Same flow for MC and Open questions.
+        """
         async with semaphore:
             try:
                 q_type = question.get("type", "open")
-                if q_type in {"single_choice", "multiple_choice"}:
-                    return await validate_mc(question)
-                else:
-                    return await validate_open(question)
+
+                # Unified validation (self-contained RAG, like agent.py)
+                result = await validate_question(
+                    question_text=question.get("question", ""),
+                    question_type=q_type,
+                    subject=subject,
+                    grade=grade,
+                    options=question.get("options"),
+                    expected_index=question.get("correct_answer_index"),
+                    expected_indices=question.get("correct_answer_indices"),
+                    expected_answer=question.get("explanation"),
+                )
+
+                logger.debug(
+                    f"[Validate] spec_id={question.get('spec_id')} type={q_type} - "
+                    f"valid={result.is_valid}, solver={result.solver_answer}, "
+                    f"expected={result.expected_answer}"
+                )
+
+                return {
+                    "question": question,
+                    "is_valid": result.is_valid,
+                    "reason": result.reason,
+                    "confidence": result.confidence,
+                }
             except Exception as e:
                 logger.error(f"Validation failed for question: {e}")
                 return {"question": question, "is_valid": False, "reason": str(e)}
@@ -848,6 +817,7 @@ async def classify_difficulty_node(state: TestGenState) -> Dict[str, Any]:
             prompt=prompt,
             temperature=0.1,  # Small temperature for variety
             max_tokens=2000,  # Enough for all classifications
+            json_mode=True,
         )
 
         result = parse_json_response(

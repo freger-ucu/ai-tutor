@@ -14,6 +14,7 @@ from pydantic_settings import BaseSettings
 class LLMProvider(str, Enum):
     """Supported LLM providers."""
     LAPA = "lapa"
+    MAMAY = "mamay"  # Alias for lapa with mamay model
     OPENAI = "openai"
     GEMINI = "gemini"
 
@@ -21,6 +22,10 @@ class LLMProvider(str, Enum):
 # Provider-specific configurations
 PROVIDER_CONFIGS = {
     LLMProvider.LAPA: {
+        "base_url": "http://146.59.127.106:4000",
+        "default_model": "mamay",
+    },
+    LLMProvider.MAMAY: {
         "base_url": "http://146.59.127.106:4000",
         "default_model": "mamay",
     },
@@ -89,7 +94,8 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
 
-    # Embedding (stays on Lapa for now)
+    # Embeddings (can be pinned to a provider)
+    llm_embedding_provider: LLMProvider = LLMProvider.LAPA
     llm_embedding_model: str = "text-embedding-qwen"
 
     # Generation defaults
@@ -99,7 +105,7 @@ class Settings(BaseSettings):
     @property
     def llm_api_key(self) -> str:
         """Get API key for current provider."""
-        if self.llm_provider == LLMProvider.LAPA:
+        if self.llm_provider in (LLMProvider.LAPA, LLMProvider.MAMAY):
             return self.lapa_api_key
         elif self.llm_provider == LLMProvider.OPENAI:
             return self.openai_api_key
@@ -110,20 +116,43 @@ class Settings(BaseSettings):
     @property
     def llm_base_url(self) -> str:
         """Get base URL for current provider."""
-        if self.llm_provider == LLMProvider.LAPA:
+        if self.llm_provider in (LLMProvider.LAPA, LLMProvider.MAMAY):
             return self.lapa_base_url
         return PROVIDER_CONFIGS[self.llm_provider]["base_url"]
 
     @property
     def llm_model(self) -> str:
         """Get model name for current provider."""
-        if self.llm_provider == LLMProvider.LAPA:
+        if self.llm_provider in (LLMProvider.LAPA, LLMProvider.MAMAY):
             return self.lapa_model
         elif self.llm_provider == LLMProvider.OPENAI:
             return self.openai_model
         elif self.llm_provider == LLMProvider.GEMINI:
             return self.gemini_model
         return PROVIDER_CONFIGS[self.llm_provider]["default_model"]
+
+    @property
+    def embedding_api_key(self) -> str:
+        """Get API key for embedding provider."""
+        if self.llm_embedding_provider in (LLMProvider.LAPA, LLMProvider.MAMAY):
+            return self.lapa_api_key
+        elif self.llm_embedding_provider == LLMProvider.OPENAI:
+            return self.openai_api_key
+        elif self.llm_embedding_provider == LLMProvider.GEMINI:
+            return self.gemini_api_key
+        return ""
+
+    @property
+    def embedding_base_url(self) -> str:
+        """Get base URL for embedding provider."""
+        if self.llm_embedding_provider in (LLMProvider.LAPA, LLMProvider.MAMAY):
+            return self.lapa_base_url
+        return PROVIDER_CONFIGS[self.llm_embedding_provider]["base_url"]
+
+    @property
+    def embedding_model(self) -> str:
+        """Get embedding model name."""
+        return self.llm_embedding_model
 
     # RAG Configuration
     rag_embedding_type: str = "qwen"  # "qwen" or "gemini"
@@ -147,7 +176,10 @@ class Settings(BaseSettings):
     langsmith_endpoint: str = "https://api.smith.langchain.com"
 
     class Config:
-        env_file = ".env"
+        env_file = [
+            ".env",
+            Path(__file__).resolve().parents[1] / ".env",
+        ]
         env_file_encoding = "utf-8"
         extra = "ignore"  # Ignore extra environment variables
 
