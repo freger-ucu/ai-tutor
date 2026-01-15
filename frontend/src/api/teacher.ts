@@ -94,6 +94,7 @@ export interface StudentDetailsResponse {
 
 export interface StudentRecommendationRequest {
   student_id: number;
+  subject: string;
 }
 
 export interface StudentRecommendationResponse {

@@ -4,6 +4,7 @@ import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Panel from "../components/Panel";
 import TeacherSidebar from "../components/TeacherSidebar";
+import MarkdownContent from "../components/MarkdownContent";
 import { getStudentDetails, getStudentRecommendation } from "../api/teacher";
 import type { StudentDetailsResponse } from "../api/teacher";
 import { classIdToLabel } from "../data/classUtils";
@@ -38,6 +39,9 @@ const TeacherStudentDetail = () => {
 
   const [studentDetails, setStudentDetails] =
     useState<StudentDetailsResponse | null>(null);
+  const [recommendation, setRecommendation] = useState("");
+  const [recommendationError, setRecommendationError] = useState<string | null>(null);
+  const [isRecommendationLoading, setIsRecommendationLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -62,6 +66,10 @@ const TeacherStudentDetail = () => {
     setIsLoading(true);
     setFetchError(null);
 
+    setIsRecommendationLoading(true);
+    setRecommendationError(null);
+    setRecommendation("");
+
     getStudentDetails({
       class_id: decodedClassId,
       subject: subjectName,
@@ -83,6 +91,20 @@ const TeacherStudentDetail = () => {
       })
       .finally(() => {
         setIsLoading(false);
+      });
+
+    getStudentRecommendation({ student_id: apiStudentId, subject: subjectName })
+      .then((rec) => {
+        setRecommendation(rec.feedback ?? "");
+        setRecommendationError(null);
+      })
+      .catch((error) => {
+        console.error(error);
+        setRecommendation("");
+        setRecommendationError("Рекомендації недоступні.");
+      })
+      .finally(() => {
+        setIsRecommendationLoading(false);
       });
   }, [apiTeacherId, decodedClassId, subjectName, apiStudentId]);
 
@@ -183,42 +205,67 @@ const TeacherStudentDetail = () => {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2 items-stretch">
-            <Panel
-              title="Проблемні теми"
-              className="h-[460px] flex flex-col min-h-0 overflow-hidden"
-              contentClassName="flex-1 min-h-0"
-            >
-              <div className="h-[360px] overflow-y-auto pr-1">
-                {studentDetails.problematic_topics.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    Немає проблемних тем.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {studentDetails.problematic_topics.map((topic, index) => (
-                      <div
-                        key={index}
-                        className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                      >
-                        <span className="text-sm font-medium text-slate-800">
-                          {topic.topic}
-                        </span>
-                        <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">
-                          {topic.average_score.toFixed(1)} балів
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </Panel>
+            <div className="flex flex-col gap-6 lg:h-[760px] min-h-0">
+              <Panel
+                title="Рекомендації"
+                className="flex-1 min-h-0 overflow-hidden"
+                contentClassName="flex flex-col flex-1 min-h-0"
+              >
+                <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                  {isRecommendationLoading ? (
+                    <p className="text-sm text-slate-500">Завантаження рекомендацій...</p>
+                  ) : recommendation ? (
+                    <MarkdownContent content={recommendation} className="text-sm text-slate-600" />
+                  ) : (
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      Рекомендації для цього учня ще не сформовані.
+                    </p>
+                  )}
+                  {recommendationError && (
+                    <p className="mt-3 text-xs text-rose-500">
+                      {recommendationError}
+                    </p>
+                  )}
+                </div>
+              </Panel>
+
+              <Panel
+                title="Проблемні теми"
+                className="h-[460px] flex flex-col min-h-0 overflow-hidden"
+                contentClassName="flex flex-col flex-1 min-h-0"
+              >
+                <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                  {studentDetails.problematic_topics.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                      Немає проблемних тем.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {studentDetails.problematic_topics.map((topic, index) => (
+                        <div
+                          key={index}
+                          className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                        >
+                          <span className="text-sm font-medium text-slate-800">
+                            {topic.topic}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">
+                            {topic.average_score.toFixed(1)} балів
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Panel>
+            </div>
 
             <Panel
               title="Пропущені теми"
-              className="h-[460px] flex flex-col min-h-0 overflow-hidden"
-              contentClassName="flex-1 min-h-0"
+              className="lg:h-[760px] flex flex-col min-h-0 overflow-hidden"
+              contentClassName="flex flex-col flex-1 min-h-0"
             >
-              <div className="h-[360px] overflow-y-auto pr-1">
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
                 {studentDetails.skipped_lessons.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                     Немає пропущених тем.
