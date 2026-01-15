@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, type ReactNode } from "react";
 import type {
   TestData,
   TestStatistics,
@@ -7,7 +7,6 @@ import type {
 } from "../../types/testTypes";
 import TestNavigation from "./TestNavigation";
 import TestQuestionCard from "./TestQuestionCard";
-import TestProgressCard from "./TestProgressCard";
 import TestStatisticsCard from "./TestStatisticsCard";
 import TestExplanation from "./TestExplanation";
 
@@ -17,10 +16,14 @@ interface TestContainerProps {
   showStatistics?: boolean;
   /** 'teacher' shows pre-answered test results, 'student' lets user answer */
   viewMode?: "teacher" | "student";
+  initialAnswers?: TestAnswer[];
+  forceFinished?: boolean;
   onEvaluateOpen?: (payload: {
     question: TestQuestion;
     answer: string;
   }) => Promise<{ correct: boolean; feedback?: string }>;
+  onExit?: () => void;
+  feedbackNode?: ReactNode;
   onFinish?: (result: {
     correctAnswers: number;
     totalQuestions: number;
@@ -33,13 +36,19 @@ const TestContainer = ({
   statistics,
   showStatistics = false,
   viewMode = "student",
+  initialAnswers,
+  forceFinished = false,
   onEvaluateOpen,
+  onExit,
+  feedbackNode,
   onFinish,
 }: TestContainerProps) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Map<string, TestAnswer>>(new Map());
   const [isFinished, setIsFinished] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedbackMaxHeight, setFeedbackMaxHeight] = useState<number | null>(null);
+  const leftColumnRef = useRef<HTMLDivElement | null>(null);
 
   const areSetsEqual = (a: string[], b: string[]) => {
     if (a.length !== b.length) return false;
@@ -119,15 +128,52 @@ const TestContainer = ({
 
   useEffect(() => {
     if (viewMode === "student") {
+      if (forceFinished) {
+        return;
+      }
       setAnswers(new Map());
       setIsFinished(false);
       setIsSubmitting(false);
     }
-  }, [viewMode, testData.id]);
+  }, [viewMode, testData.id, forceFinished]);
+
+  useEffect(() => {
+    if (viewMode !== "student" || !forceFinished) {
+      return;
+    }
+    const nextAnswers = new Map<string, TestAnswer>();
+    (initialAnswers ?? []).forEach((answer) => {
+      nextAnswers.set(answer.questionId, answer);
+    });
+    setAnswers(nextAnswers);
+    setIsFinished(true);
+    setIsSubmitting(false);
+  }, [viewMode, forceFinished, initialAnswers, testData.id]);
 
   useEffect(() => {
     setCurrentQuestionIndex(0);
   }, [testData.id]);
+
+  useEffect(() => {
+    const node = leftColumnRef.current;
+    if (!node) {
+      return;
+    }
+    const syncHeight = () => {
+      const nextHeight = Math.round(node.getBoundingClientRect().height);
+      setFeedbackMaxHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+    syncHeight();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(syncHeight);
+      observer.observe(node);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener("resize", syncHeight);
+    return () => window.removeEventListener("resize", syncHeight);
+  }, [currentQuestionIndex, isFinished, testData.id]);
 
   const currentQuestion = testData.questions[currentQuestionIndex];
   const currentAnswer = answers.get(currentQuestion.id);
@@ -306,23 +352,48 @@ const TestContainer = ({
 
   return (
     <div className="space-y-6">
-      {/* Title */}
-      <h1 className="text-2xl font-bold text-white">{testData.title}</h1>
+      {/* Title + Actions */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <h1 className="text-2xl font-bold text-white">{testData.title}</h1>
+      </div>
 
       {/* Navigation */}
-      <TestNavigation
-        totalQuestions={testData.questions.length}
-        currentQuestionIndex={currentQuestionIndex}
-        answeredQuestions={answeredQuestionIndices}
-        onQuestionSelect={handleQuestionSelect}
-        showResult={viewMode === "student" && isFinished}
-        resultMap={resultMap}
-      />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <TestNavigation
+          totalQuestions={testData.questions.length}
+          currentQuestionIndex={currentQuestionIndex}
+          answeredQuestions={answeredQuestionIndices}
+          onQuestionSelect={handleQuestionSelect}
+          showResult={viewMode === "student" && isFinished}
+          resultMap={resultMap}
+        />
+        {viewMode === "student" && !isFinished && (
+          <button
+            type="button"
+            onClick={isFinished ? onExit : handleFinish}
+            disabled={(!isReadyToFinish && !isFinished) || isSubmitting}
+            className={`w-full rounded-2xl px-6 py-3 text-sm font-semibold text-white transition-all lg:w-[280px] ${
+              (isReadyToFinish || isFinished) && !isSubmitting
+                ? "cursor-pointer bg-[#E63C3C] hover:-translate-y-0.5 hover:shadow-lg"
+                : "cursor-not-allowed bg-[#E63C3C]/60"
+            }`}
+          >
+            {isSubmitting ? "Перевіряємо..." : "Завершити тест"}
+          </button>
+        )}
+        {viewMode === "student" && isFinished && (
+          <div className="w-full rounded-2xl bg-[#6FDB9B] px-6 py-3 text-center text-sm font-semibold text-white lg:w-[280px]">
+            {totalCount > 0
+              ? `${Math.round((correctAnswersCount / totalCount) * 100)}% правильних відповідей`
+              : "0% правильних відповідей"}
+          </div>
+        )}
+      </div>
 
       {/* Main content grid */}
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
         {/* Left column - Question and Explanation */}
-        <div className="flex flex-col gap-6">
+        <div ref={leftColumnRef} className="flex flex-col gap-6">
           <TestQuestionCard
             question={currentQuestion}
             selectedOptionIds={currentAnswer?.selectedOptionIds ?? []}
@@ -369,7 +440,10 @@ const TestContainer = ({
         </div>
 
         {/* Right column - Progress/Explanation */}
-        <div className="flex flex-col gap-4">
+        <div
+          className="flex h-full flex-col gap-4 min-h-0 overflow-hidden"
+          style={feedbackMaxHeight ? { height: feedbackMaxHeight } : undefined}
+        >
           {viewMode === "teacher" ? (
             currentQuestion.explanation ? (
               <TestExplanation explanation={currentQuestion.explanation} />
@@ -380,28 +454,14 @@ const TestContainer = ({
             )
           ) : (
             <>
-              <TestProgressCard
-                correctAnswers={progressCount}
-                totalQuestions={totalCount}
-                label={progressLabel}
-              />
-
+              {isFinished && feedbackNode && (
+                <div className="h-full min-h-0 overflow-hidden">
+                  {feedbackNode}
+                </div>
+              )}
               {showStatistics && statistics && (
                 <TestStatisticsCard statistics={statistics} />
               )}
-
-              <button
-                type="button"
-                onClick={handleFinish}
-                disabled={!isReadyToFinish || isFinished || isSubmitting}
-                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
-                  isReadyToFinish && !isFinished && !isSubmitting
-                    ? "cursor-pointer bg-slate-700 text-white hover:-translate-y-0.5 hover:shadow-lg"
-                    : "cursor-not-allowed bg-slate-500 text-white"
-                }`}
-              >
-                {isSubmitting ? "Перевіряємо..." : "Завершити тест"}
-              </button>
             </>
           )}
         </div>

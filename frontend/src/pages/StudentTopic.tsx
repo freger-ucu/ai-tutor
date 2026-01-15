@@ -79,6 +79,7 @@ const StudentTopic = () => {
       title: string;
       scoreText: string;
       percent: number;
+      isCompleted: boolean;
     }[]
   >([]);
 
@@ -171,7 +172,13 @@ const StudentTopic = () => {
                   (completion.correctAnswers / completion.totalQuestions) * 100
                 )
               : 0);
-          return { id: m.id, title: m.title, scoreText, percent };
+          return {
+            id: m.id,
+            title: m.title,
+            scoreText,
+            percent,
+            isCompleted: Boolean(completion),
+          };
         });
 
     setNotes(storedNotes);
@@ -341,7 +348,9 @@ const StudentTopic = () => {
                           {item.title}
                         </div>
                         <Link to={`/student/${studentId}/test/${item.id}`}>
-                          <PillButton label="Пройти" />
+                          <PillButton
+                            label={item.isCompleted ? "Переглянути" : "Пройти"}
+                          />
                         </Link>
                       </div>
                       <div className="mt-4 flex items-center justify-between">

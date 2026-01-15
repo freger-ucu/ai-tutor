@@ -7,7 +7,10 @@ import { getMaterials, isVisibleToStudent } from "../data/materialsStorage";
 import { getTestById, mockTestData } from "../data/mockTests";
 import { TestContainer } from "../components/test";
 import { withGeneratedQuestions } from "../data/testMapper";
-import { markStudentTestCompleted } from "../data/studentProgress";
+import {
+  getStudentTestCompletionMap,
+  markStudentTestCompleted,
+} from "../data/studentProgress";
 import { checkOpenQuestion, getStudentData, getTestFeedback } from "../api/student";
 import { getStudentDetails } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
@@ -51,6 +54,7 @@ const StudentTest = () => {
   const [testFeedback, setTestFeedback] = useState<string | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
+  const [hasJustCompleted, setHasJustCompleted] = useState(false);
 
   const storedTest = useMemo(
     () => getMaterials({ type: "test" }).find((item) => item.id === testId),
@@ -79,7 +83,16 @@ const StudentTest = () => {
     setTestFeedback(null);
     setFeedbackError(null);
     setIsFeedbackLoading(false);
+    setHasJustCompleted(false);
   }, [testId]);
+
+  const completionMap = useMemo(
+    () => getStudentTestCompletionMap(studentId),
+    [studentId]
+  );
+  const completion = testId ? completionMap.get(testId) : undefined;
+  const alreadyCompleted = Boolean(completion);
+  const isViewingCompleted = alreadyCompleted && !hasJustCompleted;
 
   const testData = useMemo(() => {
     if (!testId) return undefined;
@@ -317,6 +330,35 @@ const StudentTest = () => {
               testData={testData}
               showStatistics={false}
               viewMode="student"
+              initialAnswers={isViewingCompleted ? completion?.answers : undefined}
+              forceFinished={isViewingCompleted}
+              onExit={() => {
+                navigate(backToTopicHref);
+              }}
+              feedbackNode={
+                (isViewingCompleted && completion?.feedback) ||
+                isFeedbackLoading ||
+                testFeedback ||
+                feedbackError ? (
+                  <div className="h-full w-full overflow-y-auto rounded-2xl bg-white p-6 text-sm text-slate-700 shadow-sm">
+                    <div className="text-base font-semibold text-slate-900">
+                      Підсумковий фідбек
+                    </div>
+                    {isViewingCompleted && completion?.feedback && (
+                      <MarkdownContent content={completion.feedback} className="mt-3" />
+                    )}
+                    {!isViewingCompleted && isFeedbackLoading && (
+                      <div className="mt-3 text-slate-500">Формуємо фідбек...</div>
+                    )}
+                    {!isViewingCompleted && feedbackError && (
+                      <div className="mt-3 text-rose-500">{feedbackError}</div>
+                    )}
+                    {!isViewingCompleted && testFeedback && (
+                      <MarkdownContent content={testFeedback} className="mt-3" />
+                    )}
+                  </div>
+                ) : null
+              }
               onEvaluateOpen={async ({ question, answer }) => {
                 const apiStudentId = toNumericId(studentId);
                 if (!apiStudentId || !subjectName) {
@@ -334,12 +376,14 @@ const StudentTest = () => {
                 });
               }}
               onFinish={async (result) => {
+                setHasJustCompleted(true);
                 if (studentId && testId) {
                   markStudentTestCompleted({
                     studentId,
                     testId,
                     correctAnswers: result.correctAnswers,
                     totalQuestions: result.totalQuestions,
+                    answers: result.answers,
                   });
                 }
 
@@ -390,6 +434,16 @@ const StudentTest = () => {
                     questions,
                   });
                   setTestFeedback(feedback.feedback);
+                  if (studentId && testId) {
+                    markStudentTestCompleted({
+                      studentId,
+                      testId,
+                      correctAnswers: result.correctAnswers,
+                      totalQuestions: result.totalQuestions,
+                      answers: result.answers,
+                      feedback: feedback.feedback,
+                    });
+                  }
                 } catch (error) {
                   console.error(error);
                   setFeedbackError("Не вдалося отримати фідбек по тесту.");
@@ -398,22 +452,6 @@ const StudentTest = () => {
                 }
               }}
             />
-            {(isFeedbackLoading || testFeedback || feedbackError) && (
-              <div className="mt-6 rounded-2xl bg-white p-6 text-sm text-slate-700 shadow-sm">
-                <div className="text-base font-semibold text-slate-900">
-                  Підсумковий фідбек
-                </div>
-                {isFeedbackLoading && (
-                  <div className="mt-3 text-slate-500">Формуємо фідбек...</div>
-                )}
-                {feedbackError && (
-                  <div className="mt-3 text-rose-500">{feedbackError}</div>
-                )}
-                {testFeedback && (
-                  <MarkdownContent content={testFeedback} className="mt-3" />
-                )}
-              </div>
-            )}
           </div>
         </main>
       </div>
