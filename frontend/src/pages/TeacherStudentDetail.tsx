@@ -187,25 +187,28 @@ const TeacherStudentDetail = () => {
                 {subjectName} — {classLabel}
               </p>
             </div>
-            <div className="ml-auto flex items-center gap-4">
-              <span
-                className={`rounded-full px-4 py-2 text-sm font-medium ${
-                  levelColors[studentDetails.level] ?? "bg-slate-100 text-slate-700"
-                }`}
-              >
-                {levelLabels[studentDetails.level] ?? studentDetails.level}
-              </span>
-              <div className="rounded-2xl bg-white px-5 py-3">
-                <span className="text-sm text-slate-500">Середній бал</span>
-                <p className="text-xl font-bold text-[#1E73F7]">
-                  {studentDetails.average_subject_grade.toFixed(1)}
-                </p>
-              </div>
-            </div>
+            <div className="ml-auto" />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2 items-stretch">
             <div className="flex flex-col gap-6 lg:h-[760px] min-h-0">
+              <div
+                className={`rounded-[22px] px-6 py-5 text-slate-900 shadow-sm ${
+                  studentDetails.level === "strong"
+                    ? "bg-green-100"
+                    : studentDetails.level === "medium"
+                      ? "bg-yellow-100"
+                      : "bg-pink-100"
+                }`}
+              >
+                <div className="text-sm font-semibold text-slate-700">
+                  {levelLabels[studentDetails.level] ?? studentDetails.level}
+                </div>
+                <div className="mt-2 text-2xl font-bold">
+                  {studentDetails.average_subject_grade.toFixed(1)} бал з предмету
+                </div>
+              </div>
+
               <Panel
                 title="Рекомендації"
                 className="flex-1 min-h-0 overflow-hidden"
@@ -228,10 +231,12 @@ const TeacherStudentDetail = () => {
                   )}
                 </div>
               </Panel>
+            </div>
 
+            <div className="flex flex-col gap-6 lg:h-[760px] min-h-0">
               <Panel
                 title="Проблемні теми"
-                className="h-[460px] flex flex-col min-h-0 overflow-hidden"
+                className="h-[360px] flex flex-col min-h-0 overflow-hidden"
                 contentClassName="flex flex-col flex-1 min-h-0"
               >
                 <div className="flex-1 min-h-0 overflow-y-auto pr-1">
@@ -258,37 +263,37 @@ const TeacherStudentDetail = () => {
                   )}
                 </div>
               </Panel>
-            </div>
 
-            <Panel
-              title="Пропущені теми"
-              className="lg:h-[760px] flex flex-col min-h-0 overflow-hidden"
-              contentClassName="flex flex-col flex-1 min-h-0"
-            >
-              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-                {studentDetails.skipped_lessons.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    Немає пропущених тем.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {studentDetails.skipped_lessons.map((lesson, index) => (
-                      <div
-                        key={index}
-                        className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                      >
-                        <span className="text-sm font-medium text-slate-800">
-                          {lesson.topic}
-                        </span>
-                        <span className="text-xs text-slate-500 text-right whitespace-nowrap">
-                          {lesson.date}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </Panel>
+              <Panel
+                title="Пропущені теми"
+                className="h-[360px] flex flex-col min-h-0 overflow-hidden"
+                contentClassName="flex flex-col flex-1 min-h-0"
+              >
+                <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                  {studentDetails.skipped_lessons.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                      Немає пропущених тем.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {studentDetails.skipped_lessons.map((lesson, index) => (
+                        <div
+                          key={index}
+                          className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                        >
+                          <span className="text-sm font-medium text-slate-800">
+                            {lesson.topic}
+                          </span>
+                          <span className="text-xs text-slate-500 text-right whitespace-nowrap">
+                            {lesson.date}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Panel>
+            </div>
           </div>
         </main>
       </div>
