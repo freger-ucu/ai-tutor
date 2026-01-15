@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
+import MarkdownContent from "../components/MarkdownContent";
 import { getMaterials } from "../data/materialsStorage";
 import { getStudentData } from "../api/student";
 import { toNumericId } from "../api/idUtils";
@@ -229,9 +230,9 @@ const StudentNote = () => {
                 <h2 className="text-lg font-semibold text-slate-900">
                   {decodedTopic || noteTitle}
                 </h2>
-                <div className="mt-4 text-sm leading-relaxed text-slate-800 whitespace-pre-wrap">
+                <div className="mt-4">
                   {noteMaterial?.content ? (
-                    noteMaterial.content
+                    <MarkdownContent content={noteMaterial.content} />
                   ) : (
                     <div className="space-y-6">
                       <p>

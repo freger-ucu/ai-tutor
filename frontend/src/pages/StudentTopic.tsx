@@ -266,7 +266,12 @@ const StudentTopic = () => {
                     className="flex items-center justify-between px-5 py-4"
                   >
                     <div className="flex items-center gap-3 text-sm font-semibold text-slate-900">
-                      <span className="inline-block h-6 w-6 rounded-md bg-slate-200" />
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
+                        <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
+                          <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
+                          <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
+                        </svg>
+                      </span>
                       {item.title}
                     </div>
                     <Link to={`/student/${studentId}/note/${courseId}/${topicId}/${item.id}`}>

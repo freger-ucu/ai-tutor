@@ -50,6 +50,8 @@ const TeacherTopic = () => {
   const [testName, setTestName] = useState("");
   const [isGeneratingMaterial, setIsGeneratingMaterial] = useState(false);
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
+  const [materialGenerationStarted, setMaterialGenerationStarted] = useState(false);
+  const [testGenerationStarted, setTestGenerationStarted] = useState(false);
   const [materialError, setMaterialError] = useState<string | null>(null);
   const [classStudents, setClassStudents] = useState<number[]>([]);
   const decodedClassId = classId ? Number(decodeURIComponent(classId)) : null;
@@ -186,20 +188,25 @@ const TeacherTopic = () => {
               <Link
                 key={item.id}
                 to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
-                className="flex w-full items-start justify-start gap-3 rounded-2xl px-4 py-3 text-slate-700 hover:bg-slate-100"
+                className="flex items-center gap-3 rounded-xl px-4 py-3 font-semibold text-slate-800 hover:bg-slate-50"
               >
-                <span className="mt-0.5 inline-block h-5 w-5 rounded-md bg-slate-200" />
-                <span>{item.title}</span>
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
+                  <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
+                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
+                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
+                  </svg>
+                </span>
+                {item.title}
               </Link>
             ))}
             {tests.map((item) => (
               <Link
                 key={item.id}
                 to={`/teacher/${id}/test/${item.id}`}
-                className="flex w-full items-start justify-start gap-3 rounded-2xl px-4 py-3 text-slate-700 hover:bg-slate-100"
+                className="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50"
               >
-                <span className="mt-0.5 inline-block h-5 w-5 rounded-md bg-slate-200" />
-                <span>{item.title}</span>
+                <img src="/src/assets/Group.svg" alt="" className="h-4 w-4" />
+                Тест. {item.title}
               </Link>
             ))}
           </div>
@@ -210,7 +217,7 @@ const TeacherTopic = () => {
             <Breadcrumbs
               items={[
                 { label: "Матеріали", href: `/teacher/${id}` },
-                { label: classLabel || "Клас" },
+                { label: classLabel || "Клас", href: `/teacher/${id}` },
                 { label: decodedTopic || "Тема" },
               ]}
             />
@@ -253,7 +260,12 @@ const TeacherTopic = () => {
                     className="flex items-center justify-between px-5 py-4"
                   >
                     <div className="flex items-center gap-3 text-sm font-semibold text-slate-900">
-                      <span className="inline-block h-6 w-6 rounded-md bg-slate-200" />
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
+                        <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
+                          <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
+                          <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
+                        </svg>
+                      </span>
                       {item.title}
                     </div>
                     {/* Link to Note View */}
@@ -290,10 +302,17 @@ const TeacherTopic = () => {
                     </div>
                     <div className="mt-4 text-sm text-slate-700">Учнів 20</div>
                     <div className="mt-3 flex -space-x-2">
-                      {[0, 1, 2, 3].map((idx) => (
-                        <div
+                      {[
+                        "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR7bjVWye1D9XdNJzLXjVI84qCNzt77U0uCxQ&s",
+                        "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR5yYM7PLjs7AXxqJg_RSgtk2qVFdgnHP7k-1xfXoYiFA&s",
+                        "https://thumbs.dreamstime.com/b/high-school-boy-handsome-writing-class-work-31576857.jpg",
+                        "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTYrDIbET-W6GdhKsrq_n6bNnY86FDX8N_6uA&s",
+                      ].map((url, idx) => (
+                        <img
                           key={idx}
-                          className="h-8 w-8 rounded-full border-2 border-white bg-slate-200"
+                          src={url}
+                          alt=""
+                          className="h-8 w-8 rounded-full border-2 border-white object-cover"
                         />
                       ))}
                     </div>
@@ -312,7 +331,10 @@ const TeacherTopic = () => {
       </div>
       <Modal
         isOpen={isMaterialModalOpen}
-        onClose={() => setActiveModal(null)}
+        onClose={() => {
+          setActiveModal(null);
+          setMaterialGenerationStarted(false);
+        }}
         size="xl"
         title="Опишіть тему"
       >
@@ -334,11 +356,13 @@ const TeacherTopic = () => {
             primaryLabel={isGeneratingMaterial ? "Генерується..." : "Згенерувати"}
             isLoading={isGeneratingMaterial}
             onSecondaryClick={() => handleOpenAudience("material")}
+            secondaryDisabled={materialGenerationStarted || isGeneratingMaterial}
             onPrimaryClick={async () => {
               if (!materialName.trim() || isGeneratingMaterial) {
                 return;
               }
               setMaterialError(null);
+              setMaterialGenerationStarted(true);
               setIsGeneratingMaterial(true);
               try {
                 const topicDefinition = materialName.trim();
@@ -403,7 +427,10 @@ const TeacherTopic = () => {
       </Modal>
       <Modal
         isOpen={isTestModalOpen}
-        onClose={() => setActiveModal(null)}
+        onClose={() => {
+          setActiveModal(null);
+          setTestGenerationStarted(false);
+        }}
         size="xl"
         title="Опишіть тему"
       >
@@ -414,10 +441,12 @@ const TeacherTopic = () => {
           primaryLabel={isGeneratingTest ? "Генерується..." : "Згенерувати"}
           isLoading={isGeneratingTest}
           onSecondaryClick={() => handleOpenAudience("test")}
+          secondaryDisabled={testGenerationStarted || isGeneratingTest}
           onPrimaryClick={async () => {
             if (!testName.trim() || isGeneratingTest) {
               return;
             }
+            setTestGenerationStarted(true);
             setIsGeneratingTest(true);
             try {
               const topicDefinition = testName.trim();

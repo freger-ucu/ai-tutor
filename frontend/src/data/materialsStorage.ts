@@ -1,3 +1,5 @@
+import { fixLatexEscapes } from "../api/client";
+
 export type MaterialType = "note" | "test";
 
 export interface MaterialItem {
@@ -49,7 +51,9 @@ const readMaterials = (): MaterialItem[] => {
 
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const items = Array.isArray(parsed) ? parsed : [];
+    // Fix any corrupted LaTeX escape sequences in stored content
+    return items.map((item) => fixLatexEscapes(item) as MaterialItem);
   } catch {
     return [];
   }

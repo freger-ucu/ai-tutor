@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
+import MarkdownContent from "../components/MarkdownContent";
 import { getMaterials } from "../data/materialsStorage";
 import { getTestById, mockTestData } from "../data/mockTests";
 import { TestContainer } from "../components/test";
@@ -36,100 +37,6 @@ const subjectLabelMap: Record<string, string> = {
   algebra: "Алгебра",
   history: "Історія України",
   "ukr-lang": "Українська мова",
-};
-
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-
-const formatInline = (value: string) => {
-  const withCode = value.replace(
-    /`([^`]+)`/g,
-    "<code class=\"rounded bg-slate-100 px-1 py-0.5 text-xs font-semibold text-slate-900\">$1</code>"
-  );
-  const withBold = withCode.replace(
-    /\*\*([^*]+)\*\*/g,
-    "<strong class=\"font-semibold text-slate-900\">$1</strong>"
-  );
-  return withBold.replace(
-    /\*([^*]+)\*/g,
-    "<em class=\"italic text-slate-800\">$1</em>"
-  );
-};
-
-const renderMarkdown = (markdown: string) => {
-  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
-  let html = "";
-  let inUl = false;
-  let inOl = false;
-
-  const closeLists = () => {
-    if (inUl) {
-      html += "</ul>";
-      inUl = false;
-    }
-    if (inOl) {
-      html += "</ol>";
-      inOl = false;
-    }
-  };
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      closeLists();
-      html += "<br />";
-      continue;
-    }
-
-    const safe = formatInline(escapeHtml(trimmed));
-
-    if (trimmed.startsWith("### ")) {
-      closeLists();
-      html += `<h3 class="mt-6 text-base font-semibold text-slate-900">${safe.slice(4)}</h3>`;
-      continue;
-    }
-    if (trimmed.startsWith("## ")) {
-      closeLists();
-      html += `<h2 class="mt-6 text-lg font-semibold text-slate-900">${safe.slice(3)}</h2>`;
-      continue;
-    }
-    if (trimmed.startsWith("# ")) {
-      closeLists();
-      html += `<h1 class="mt-6 text-xl font-bold text-slate-900">${safe.slice(2)}</h1>`;
-      continue;
-    }
-
-    if (trimmed.startsWith("- ")) {
-      if (!inUl) {
-        closeLists();
-        html += "<ul class=\"mt-3 list-disc space-y-1 pl-5\">";
-        inUl = true;
-      }
-      html += `<li>${safe.slice(2)}</li>`;
-      continue;
-    }
-
-    const orderedMatch = trimmed.match(/^(\d+)\.\s+/);
-    if (orderedMatch) {
-      if (!inOl) {
-        closeLists();
-        html += "<ol class=\"mt-3 list-decimal space-y-1 pl-5\">";
-        inOl = true;
-      }
-      html += `<li>${safe.slice(orderedMatch[0].length)}</li>`;
-      continue;
-    }
-
-    closeLists();
-    html += `<p class="mt-3">${safe}</p>`;
-  }
-
-  closeLists();
-  return html;
 };
 
 const StudentTest = () => {
@@ -467,12 +374,7 @@ const StudentTest = () => {
                   <div className="mt-3 text-rose-500">{feedbackError}</div>
                 )}
                 {testFeedback && (
-                  <div
-                    className="mt-3"
-                    dangerouslySetInnerHTML={{
-                      __html: renderMarkdown(testFeedback),
-                    }}
-                  />
+                  <MarkdownContent content={testFeedback} className="mt-3" />
                 )}
               </div>
             )}

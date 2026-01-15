@@ -154,28 +154,29 @@ const TeacherTest = () => {
             <Link
               key={item.id}
               to={`/teacher/${id}/note/${courseId}/${classId}/${encodedTopic}/${item.id}`}
-              className="flex w-full items-start justify-start gap-3 rounded-2xl px-4 py-3 text-slate-700 hover:bg-slate-100"
+              className="flex items-center gap-3 rounded-xl px-4 py-3 font-semibold text-slate-800 hover:bg-slate-50"
             >
-              <span className="mt-0.5 inline-block h-5 w-5 rounded-md bg-slate-200" />
-              <span>{item.title}</span>
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
+                <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
+                  <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
+                  <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
+                </svg>
+              </span>
+              {item.title}
             </Link>
           ))}
           {sidebarTests.map((item) => (
             <Link
               key={item.id}
               to={`/teacher/${id}/test/${item.id}`}
-              className={`flex w-full items-start justify-start gap-3 rounded-2xl px-4 py-3 ${
+              className={`flex items-center gap-3 rounded-xl px-4 py-3 font-semibold transition ${
                 item.id === testId
-                  ? "text-[#1E73F7]"
-                  : "text-slate-700 hover:bg-slate-100"
+                  ? "bg-[#E9F1FF] text-[#1E73F7]"
+                  : "text-slate-700 hover:bg-slate-50"
               }`}
             >
-              <span
-                className={`mt-0.5 inline-block h-5 w-5 rounded-md ${
-                  item.id === testId ? "bg-[#1E73F7]/20" : "bg-slate-200"
-                }`}
-              />
-              <span>{item.title}</span>
+              <img src="/src/assets/Group.svg" alt="" className="h-4 w-4" />
+              Тест. {item.title}
             </Link>
           ))}
         </div>
@@ -187,7 +188,7 @@ const TeacherTest = () => {
             <Breadcrumbs
               items={[
                 { label: "Матеріали", href: backToClassHref },
-                { label: testData.className || "Клас", href: backToTopicHref },
+                { label: testData.className || "Клас", href: backToClassHref },
                 { label: testData.topicName || "Тема", href: backToTopicHref },
                 { label: testData.title },
               ]}

@@ -7,6 +7,7 @@ interface GenerateModalContentProps {
   onPrimaryClick: () => void;
   onSecondaryClick?: () => void;
   secondaryLabel?: string;
+  secondaryDisabled?: boolean;
 }
 
 const GenerateModalContent = ({
@@ -18,6 +19,7 @@ const GenerateModalContent = ({
   onPrimaryClick,
   onSecondaryClick,
   secondaryLabel = "Змінити цільову аудиторію",
+  secondaryDisabled = false,
 }: GenerateModalContentProps) => {
   return (
     <div className="flex flex-col gap-8">
@@ -38,8 +40,14 @@ const GenerateModalContent = ({
         {onSecondaryClick && (
           <button
             type="button"
-            onClick={onSecondaryClick}
-            className="flex items-center justify-center gap-2 rounded-full border-2 border-[#1E73F7] bg-white px-6 py-2.5 text-sm font-semibold text-[#1E73F7] transition hover:bg-[#E9F1FF]"
+            onClick={secondaryDisabled ? undefined : onSecondaryClick}
+            disabled={secondaryDisabled}
+            aria-disabled={secondaryDisabled}
+            className={`flex items-center justify-center gap-2 rounded-full border-2 px-6 py-2.5 text-sm font-semibold transition ${
+              secondaryDisabled
+                ? "cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400"
+                : "border-[#1E73F7] bg-white text-[#1E73F7] hover:bg-[#E9F1FF]"
+            }`}
           >
             {secondaryLabel}
           </button>
