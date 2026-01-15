@@ -64,8 +64,8 @@ def validate_question_format(
     errors = []
     warnings = []
 
-    # Required fields for all questions
-    required_fields = ["question", "type", "difficulty"]
+    # Required fields for all questions (difficulty is assigned post-factum)
+    required_fields = ["question", "type"]
     for field in required_fields:
         if field not in question:
             errors.append(ValidationError(field, f"Missing required field: {field}"))
@@ -77,14 +77,15 @@ def validate_question_format(
     question_type = question.get("type", "")
     difficulty = question.get("difficulty", "")
 
-    # Validate difficulty
-    valid_difficulties = {"easy", "medium", "hard"}
-    if difficulty not in valid_difficulties:
-        errors.append(
-            ValidationError(
-                "difficulty", f"Invalid difficulty: {difficulty}. Must be one of {valid_difficulties}"
+    # Validate difficulty (optional - assigned post-factum by classify_difficulty_node)
+    if difficulty:
+        valid_difficulties = {"easy", "medium", "hard"}
+        if difficulty not in valid_difficulties:
+            warnings.append(
+                ValidationError(
+                    "difficulty", f"Invalid difficulty: {difficulty}. Must be one of {valid_difficulties}", "warning"
+                )
             )
-        )
 
     # Validate question type
     valid_types = {"multiple_choice", "single_choice", "open"}
@@ -167,17 +168,19 @@ def _validate_mc_question(question: Dict[str, Any]) -> ValidationResult:
                 ValidationError("correct_answer_index", f"correct_answer_index {correct_index} out of range [0, {len(options)-1}]")
             )
     elif question_type == "multiple_choice":
-        # multiple_choice: at least 1 correct answer
-        # Can use either correct_answer_indices (list) or correct_answer_index (single)
+        # multiple_choice: 2-3 correct answers via correct_answer_indices (list)
         if correct_indices is not None:
-            # Using list format
             if not isinstance(correct_indices, list):
                 errors.append(
                     ValidationError("correct_answer_indices", f"correct_answer_indices must be list, got {type(correct_indices)}")
                 )
-            elif len(correct_indices) < 1:
+            elif len(correct_indices) < 2:
                 errors.append(
-                    ValidationError("correct_answer_indices", "multiple_choice must have at least 1 correct answer")
+                    ValidationError("correct_answer_indices", f"multiple_choice must have 2-3 correct answers, got {len(correct_indices)}")
+                )
+            elif len(correct_indices) > 3:
+                errors.append(
+                    ValidationError("correct_answer_indices", f"multiple_choice should have at most 3 correct answers, got {len(correct_indices)}")
                 )
             else:
                 # Validate each index
@@ -187,19 +190,9 @@ def _validate_mc_question(question: Dict[str, Any]) -> ValidationResult:
                             ValidationError("correct_answer_indices", f"Invalid index {idx} in correct_answer_indices")
                         )
                         break
-        elif correct_index is not None:
-            # Fallback to single index format (at least 1 satisfied)
-            if not isinstance(correct_index, int):
-                errors.append(
-                    ValidationError("correct_answer_index", f"correct_answer_index must be int, got {type(correct_index)}")
-                )
-            elif correct_index < 0 or correct_index >= len(options):
-                errors.append(
-                    ValidationError("correct_answer_index", f"correct_answer_index {correct_index} out of range [0, {len(options)-1}]")
-                )
         else:
             errors.append(
-                ValidationError("correct_answer", "multiple_choice must have correct_answer_index or correct_answer_indices")
+                ValidationError("correct_answer_indices", "multiple_choice must have correct_answer_indices (list with 2-3 indices)")
             )
 
     # Check option quality

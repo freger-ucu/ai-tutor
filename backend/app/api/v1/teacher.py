@@ -498,23 +498,17 @@ async def generate_test_endpoint(
     """
     EP4: Generate a pool of test questions using agentic workflow.
 
-    Uses per-question generation and validation:
-    1. Prepares queue of questions to generate (with random MC/open type)
-    2. Each question is generated individually
-    3. Each MC question is validated by solver
-    4. Open questions validated by answerability check
+    Always generates 12 questions with difficulty determined post-factum.
+    Uses level-aware generation based on selected students.
 
-    Configurable question counts: easy_count, medium_count, hard_count.
-    Default: 1 easy, 1 medium, 1 hard = 3 questions.
+    Student selection (priority):
+    1. student_list - specific students if provided
+    2. level_list - students at specified levels if provided
+    3. all students in class if neither provided
+
+    The median level of selected students influences question style.
     """
     data_loader = get_data_loader()
-
-    logger.info(f"EP4 received: easy_count={request.easy_count}, medium_count={request.medium_count}, hard_count={request.hard_count}")
-
-    # Validate that at least one question is requested
-    total_count = request.easy_count + request.medium_count + request.hard_count
-    if total_count == 0:
-        raise HTTPException(status_code=400, detail="At least one question must be requested")
 
     # Determine grade from class
     class_info = data_loader.get_class_info(request.class_id)
@@ -522,6 +516,40 @@ async def generate_test_endpoint(
         raise HTTPException(status_code=404, detail="Class not found")
 
     grade = class_info["class_number"]
+
+    # Get all students in class
+    all_students = data_loader.get_class_students(
+        class_id=request.class_id,
+        subject=request.subject,
+        teacher_id=request.teacher_id
+    )
+
+    if not all_students:
+        raise HTTPException(
+            status_code=404,
+            detail="No students found for this class/subject combination"
+        )
+
+    # Select students (priority: student_list > level_list > all)
+    if request.student_list:
+        student_id_set = set(request.student_list)
+        selected_students = [s for s in all_students if s.student_id in student_id_set]
+    elif request.level_list:
+        target_levels = {lv.value for lv in request.level_list}
+        selected_students = [s for s in all_students if s.subject_level.value in target_levels]
+    else:
+        selected_students = all_students
+
+    if not selected_students:
+        raise HTTPException(status_code=404, detail="No matching students found")
+
+    # Compute median level for prompt adjustment
+    from app.services.levels import compute_median_level
+    selected_scores = [s.average_subject_grade for s in selected_students]
+    all_scores = [s.average_subject_grade for s in all_students]
+    median_level = compute_median_level(selected_scores, all_scores)
+
+    logger.info(f"EP4: {len(selected_students)} students selected, median_level={median_level}")
 
     # Lazy import to avoid grpcio/langsmith loading at startup (macOS mutex.cc issue)
     from app.graph.flows.test_gen import generate_test_pool
@@ -531,9 +559,7 @@ async def generate_test_endpoint(
         subject=request.subject,
         grade=grade,
         topic_definition=request.topic_definition,
-        easy_count=request.easy_count,
-        medium_count=request.medium_count,
-        hard_count=request.hard_count,
+        level=median_level,
     )
 
     logger.info(
@@ -566,17 +592,28 @@ async def generate_test_endpoint(
             # Build answer options for multiple choice
             answer_options = None
             if q_type != QuestionType.OPEN and q.get("options"):
-                # Support both new format (correct_answer_index: int) and old format (correct_answer: letter)
-                correct_index = q.get("correct_answer_index")
-                if correct_index is None:
-                    # Fallback to old letter format
-                    correct_letter = q.get("correct_answer", "").upper()
-                    letter_to_index = {"A": 0, "B": 1, "C": 2, "D": 3}
-                    correct_index = letter_to_index.get(correct_letter, -1)
+                # Determine correct answers based on question type
+                correct_indices_set: set[int] = set()
+
+                if q_type == QuestionType.MULTIPLE_CHOICE:
+                    # Multiple choice: uses correct_answer_indices (list of ints)
+                    correct_indices = q.get("correct_answer_indices", [])
+                    if isinstance(correct_indices, list):
+                        correct_indices_set = {i for i in correct_indices if isinstance(i, int)}
+                else:
+                    # Single choice: uses correct_answer_index (int) or correct_answer (letter)
+                    correct_index = q.get("correct_answer_index")
+                    if correct_index is None:
+                        # Fallback to old letter format
+                        correct_letter = q.get("correct_answer", "").upper()
+                        letter_to_index = {"A": 0, "B": 1, "C": 2, "D": 3}
+                        correct_index = letter_to_index.get(correct_letter, -1)
+                    if isinstance(correct_index, int) and correct_index >= 0:
+                        correct_indices_set = {correct_index}
 
                 answer_options = []
                 for i, opt in enumerate(q.get("options", [])):
-                    is_correct = (i == correct_index)
+                    is_correct = (i in correct_indices_set)
                     answer_options.append(AnswerOption(answer=opt, correct=is_correct))
 
             question = Question(

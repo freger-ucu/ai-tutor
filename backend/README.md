@@ -197,20 +197,24 @@ langgraph dev
 
 ### Test Gen Graph Input
 
-The test_gen graph uses a planning-based architecture with 7 nodes:
+The test_gen graph uses a planning-based architecture with 8 nodes:
 1. **retrieve_context** - Get base topic context from RAG
-2. **plan_test** - LLM plans test structure (concepts, question specs)
+2. **plan_test** - LLM plans test structure (12 question specs, no difficulty at this stage)
 3. **retrieve_concepts** - Parallel RAG retrieval for each concept
 4. **batch_generate** - Parallel question generation (10 concurrent)
 5. **batch_validate** - CPU + LLM validation (format checks, then content validation)
-6. **prepare_retry** - Queue failed specs for retry (max 2 iterations)
-7. **finalize** - Log stats and return validated questions
+6. **prepare_retry** - Queue failed specs for retry (max 1 iteration)
+7. **classify_difficulty** - Batch LLM classification of all questions (post-factum)
+8. **finalize** - Log stats and return validated questions
 
 Input fields:
 - `subject`: Subject name (`Алгебра`, `Українська мова`, `Історія України`)
 - `grade`: Grade level (`8` or `9`)
 - `topic_definition`: Topic for the test
-- `easy_count`, `medium_count`, `hard_count`: Number of questions per difficulty
+- `level`: Student level for prompt guidance (`weak`, `medium`, `strong`) - optional, defaults to `medium`
+
+Note: Always generates 12 questions. Difficulty is classified post-factum using subject-specific criteria.
+Question types: `single_choice` (1 correct), `multiple_choice` (2-3 correct), `open`.
 
 ### Notes Graph Input
 
