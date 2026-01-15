@@ -3,8 +3,9 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import MarkdownContent from "../components/MarkdownContent";
-import { getMaterials } from "../data/materialsStorage";
+import { getMaterials, isVisibleToStudent } from "../data/materialsStorage";
 import { getStudentData } from "../api/student";
+import { getStudentDetails } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
 import { classIdToLabel } from "../data/classUtils";
 
@@ -35,23 +36,6 @@ const subjectLabelMap: Record<string, string> = {
   "ukr-lang": "Українська мова",
 };
 
-const noteOutline = [
-  "Самостійна частина мови",
-  "Питання хто? що?",
-  "Лексичне значення",
-  "Назви істот / неістот",
-  "Абстрактні іменники",
-  "Конкретні іменники",
-  "Власні іменники",
-  "Загальні іменники",
-  "Число іменника (однина, множина)",
-  "Відмінок",
-  "Відмінювання",
-  "Відміни іменників (I–IV)",
-  "Синтаксична роль (підмет, додаток)",
-  "Правопис іменників",
-  "Велика літера в іменниках",
-];
 
 const StudentNote = () => {
   const { studentId, courseId, topicId, noteId } = useParams();
@@ -60,6 +44,7 @@ const StudentNote = () => {
   const [studentGrade, setStudentGrade] = useState<number | null>(null);
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
   const [studentError, setStudentError] = useState<string | null>(null);
+  const [studentLevel, setStudentLevel] = useState<"weak" | "medium" | "strong" | null>(null);
 
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
@@ -103,18 +88,45 @@ const StudentNote = () => {
         setStudentError("Учня не знайдено");
       });
   }, [studentId]);
+
+  // Fetch student level for visibility filtering
+  useEffect(() => {
+    const apiId = toNumericId(studentId);
+    if (!apiId || !studentClassId || !subjectName) {
+      setStudentLevel(null);
+      return;
+    }
+    getStudentDetails({
+      class_id: studentClassId,
+      subject: subjectName,
+      teacher_id: 1,
+      student_id: apiId,
+    })
+      .then((response) => {
+        setStudentLevel(response.level);
+      })
+      .catch(() => {
+        setStudentLevel(null);
+      });
+  }, [studentId, studentClassId, subjectName]);
+
   const materials = useMemo(() => {
     if (studentError) {
       return [];
     }
-    return getMaterials({
+    const apiId = toNumericId(studentId);
+    const allMaterials = getMaterials({
       courseId: decodedCourse,
       subject: subjectName,
       classId: studentClassId ?? undefined,
       className: classLabel,
       topicName: decodedTopic,
     });
-  }, [studentError, classLabel, studentClassId, decodedCourse, decodedTopic, subjectName]);
+    // Filter by visibility - STRICT assignment targeting
+    return apiId
+      ? allMaterials.filter((m) => isVisibleToStudent(m, apiId, studentLevel ?? undefined))
+      : allMaterials;
+  }, [studentError, classLabel, studentClassId, studentLevel, decodedCourse, decodedTopic, subjectName, studentId]);
   const sidebarNotes = materials.filter((item) => item.type === "note");
   const sidebarTests = materials.filter((item) => item.type === "test");
 
@@ -225,87 +237,76 @@ const StudentNote = () => {
           </h1>
 
           <div className="mt-5 rounded-[28px] bg-white p-6 shadow-sm min-h-[70vh]">
-            <div className="grid gap-6 lg:grid-cols-[1fr_260px]">
-              <div className="rounded-[20px] bg-white">
-                <h2 className="text-lg font-semibold text-slate-900">
-                  {decodedTopic || noteTitle}
-                </h2>
-                <div className="mt-4">
-                  {noteMaterial?.content ? (
-                    <MarkdownContent content={noteMaterial.content} />
-                  ) : (
-                    <div className="space-y-6">
-                      <p>
-                        <strong>Іменник</strong> — самостійна частина мови, що
-                        називає предмети, істот, явища, поняття і відповідає на
-                        питання хто? що?
-                      </p>
+            <div className="rounded-[20px] bg-white">
+              <h2 className="text-lg font-semibold text-slate-900">
+                {decodedTopic || noteTitle}
+              </h2>
+              <div className="mt-4">
+                {noteMaterial?.content ? (
+                  <MarkdownContent content={noteMaterial.content} />
+                ) : (
+                  <div className="space-y-6">
+                    <p>
+                      <strong>Іменник</strong> — самостійна частина мови, що
+                      називає предмети, істот, явища, поняття і відповідає на
+                      питання хто? що?
+                    </p>
 
-                      <div>
-                        <strong>Значення іменників:</strong>
-                        <ul className="list-disc pl-5 mt-1 space-y-1">
-                          <li>істоти: учень, кіт</li>
-                          <li>неістоти: стіл, дощ</li>
-                          <li>абстрактні поняття: дружба, сміливість</li>
-                        </ul>
-                      </div>
-
-                      <div>
-                        <strong>Граматичні ознаки:</strong>
-                        <ul className="list-disc pl-5 mt-1 space-y-1">
-                          <li>Рід: чоловічий (день), жіночий (ніч), середній (вікно)</li>
-                          <li>Число: однина (книга), множина (книги)</li>
-                          <li>
-                            Відмінки (7): називний, родовий, давальний,
-                            знахідний, орудний, місцевий, кличний
-                          </li>
-                          <li>Відміни: I, II, III, IV</li>
-                        </ul>
-                      </div>
-
-                      <div>
-                        <strong>Власні й загальні іменники:</strong>
-                        <ul className="list-disc pl-5 mt-1 space-y-1">
-                          <li>власні: Київ, Марія (пишуться з великої літери)</li>
-                          <li>загальні: місто, дівчина</li>
-                        </ul>
-                      </div>
-
-                      <div>
-                        <strong>Конкретні й абстрактні:</strong>
-                        <ul className="list-disc pl-5 mt-1 space-y-1">
-                          <li>конкретні: олівець, дерево</li>
-                          <li>абстрактні: радість, знання</li>
-                        </ul>
-                      </div>
-
-                      <div>
-                        <strong>Синтаксична роль у реченні:</strong>
-                        <ul className="list-disc pl-5 mt-1 space-y-1">
-                          <li>підмет: Книга лежить на столі.</li>
-                          <li>додаток: Я читаю книгу.</li>
-                        </ul>
-                      </div>
-
-                      <div>
-                        <strong>Правопис:</strong>
-                        <ul className="list-disc pl-5 mt-1 space-y-1">
-                          <li>з великої літери — власні назви</li>
-                          <li>не з іменниками: не друг, неспокій</li>
-                        </ul>
-                      </div>
+                    <div>
+                      <strong>Значення іменників:</strong>
+                      <ul className="list-disc pl-5 mt-1 space-y-1">
+                        <li>істоти: учень, кіт</li>
+                        <li>неістоти: стіл, дощ</li>
+                        <li>абстрактні поняття: дружба, сміливість</li>
+                      </ul>
                     </div>
-                  )}
-                </div>
-              </div>
 
-              <div className="rounded-[20px] bg-[#E9F1FF] p-6 min-h-[520px]">
-                <h3 className="text-sm font-bold text-slate-900">Нотатки</h3>
-                <ul className="mt-3 space-y-1 text-xs font-medium text-slate-700">
-                  {noteOutline.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
+                    <div>
+                      <strong>Граматичні ознаки:</strong>
+                      <ul className="list-disc pl-5 mt-1 space-y-1">
+                        <li>Рід: чоловічий (день), жіночий (ніч), середній (вікно)</li>
+                        <li>Число: однина (книга), множина (книги)</li>
+                        <li>
+                          Відмінки (7): називний, родовий, давальний,
+                          знахідний, орудний, місцевий, кличний
+                        </li>
+                        <li>Відміни: I, II, III, IV</li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <strong>Власні й загальні іменники:</strong>
+                      <ul className="list-disc pl-5 mt-1 space-y-1">
+                        <li>власні: Київ, Марія (пишуться з великої літери)</li>
+                        <li>загальні: місто, дівчина</li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <strong>Конкретні й абстрактні:</strong>
+                      <ul className="list-disc pl-5 mt-1 space-y-1">
+                        <li>конкретні: олівець, дерево</li>
+                        <li>абстрактні: радість, знання</li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <strong>Синтаксична роль у реченні:</strong>
+                      <ul className="list-disc pl-5 mt-1 space-y-1">
+                        <li>підмет: Книга лежить на столі.</li>
+                        <li>додаток: Я читаю книгу.</li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <strong>Правопис:</strong>
+                      <ul className="list-disc pl-5 mt-1 space-y-1">
+                        <li>з великої літери — власні назви</li>
+                        <li>не з іменниками: не друг, неспокій</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

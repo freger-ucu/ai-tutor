@@ -3,12 +3,13 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import MarkdownContent from "../components/MarkdownContent";
-import { getMaterials } from "../data/materialsStorage";
+import { getMaterials, isVisibleToStudent } from "../data/materialsStorage";
 import { getTestById, mockTestData } from "../data/mockTests";
 import { TestContainer } from "../components/test";
 import { withGeneratedQuestions } from "../data/testMapper";
 import { markStudentTestCompleted } from "../data/studentProgress";
 import { checkOpenQuestion, getStudentData, getTestFeedback } from "../api/student";
+import { getStudentDetails } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
 import { classIdToLabel } from "../data/classUtils";
 
@@ -46,6 +47,7 @@ const StudentTest = () => {
   const [studentGrade, setStudentGrade] = useState<number | null>(null);
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
   const [studentError, setStudentError] = useState<string | null>(null);
+  const [studentLevel, setStudentLevel] = useState<"weak" | "medium" | "strong" | null>(null);
   const [testFeedback, setTestFeedback] = useState<string | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
@@ -133,6 +135,28 @@ const StudentTest = () => {
     courseId.split("-").slice(0, -1).join("-") || courseId;
   const subjectName =
     testData?.subject ?? subjectLabelMap[subjectSlug] ?? "";
+
+  // Fetch student level for visibility filtering
+  useEffect(() => {
+    const apiId = toNumericId(studentId);
+    if (!apiId || !studentClassId || !subjectName) {
+      setStudentLevel(null);
+      return;
+    }
+    getStudentDetails({
+      class_id: studentClassId,
+      subject: subjectName,
+      teacher_id: 1,
+      student_id: apiId,
+    })
+      .then((response) => {
+        setStudentLevel(response.level);
+      })
+      .catch(() => {
+        setStudentLevel(null);
+      });
+  }, [studentId, studentClassId, subjectName]);
+
   const classLabel =
     studentGrade && studentClassId
       ? classIdToLabel(studentGrade, studentClassId)
@@ -148,6 +172,7 @@ const StudentTest = () => {
     if (!sidebarClassName || !sidebarTopicName) {
       return [];
     }
+    const apiId = toNumericId(studentId);
     const filters: {
       courseId?: string;
       subject?: string;
@@ -167,8 +192,12 @@ const StudentTest = () => {
     if (studentClassId) {
       filters.classId = studentClassId;
     }
-    return getMaterials(filters);
-  }, [courseId, sidebarClassName, sidebarTopicName, subjectName, studentClassId]);
+    const allMaterials = getMaterials(filters);
+    // Filter by visibility - STRICT assignment targeting
+    return apiId
+      ? allMaterials.filter((m) => isVisibleToStudent(m, apiId, studentLevel ?? undefined))
+      : allMaterials;
+  }, [courseId, sidebarClassName, sidebarTopicName, subjectName, studentClassId, studentId, studentLevel]);
   const sidebarNotes = sidebarMaterials.filter((item) => item.type === "note");
   const sidebarTests = sidebarMaterials.filter((item) => item.type === "test");
 

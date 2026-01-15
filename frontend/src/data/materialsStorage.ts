@@ -2,6 +2,8 @@ import { fixLatexEscapes } from "../api/client";
 
 export type MaterialType = "note" | "test";
 
+export type AssignmentScope = "class" | "levels" | "students";
+
 export interface MaterialItem {
   id: string;
   type: MaterialType;
@@ -16,6 +18,10 @@ export interface MaterialItem {
   className?: string;
   topicName?: string;
   createdAt: string;
+  // Assignment targeting - exactly ONE scope per material
+  assignmentScope?: AssignmentScope;
+  assignedLevels?: ("weak" | "medium" | "strong")[];
+  assignedStudents?: number[];
 }
 
 export interface TopicItem {
@@ -224,4 +230,53 @@ export const addTopic = (input: Omit<TopicItem, "id" | "createdAt">) => {
   const updated = [...items, nextItem];
   writeTopics(updated);
   return nextItem;
+};
+
+/**
+ * Check if a student should see a material based on assignment scope.
+ * Implements strict visibility rules:
+ * - assignmentScope="class" → ALL students see it
+ * - assignmentScope="students" → ONLY listed students see it
+ * - assignmentScope="levels" → students in those levels see it (requires level lookup)
+ * - No assignmentScope (legacy) → treat as "class" (all see it)
+ */
+export const isVisibleToStudent = (
+  material: MaterialItem,
+  studentId: number,
+  studentLevel?: "weak" | "medium" | "strong"
+): boolean => {
+  // Legacy materials without scope → visible to all (class default)
+  if (!material.assignmentScope) {
+    return true;
+  }
+
+  switch (material.assignmentScope) {
+    case "class":
+      // Entire class → everyone sees it
+      return true;
+
+    case "students":
+      // Individual assignment → ONLY listed students
+      if (!material.assignedStudents || material.assignedStudents.length === 0) {
+        // Edge case: scope is "students" but no students listed → no one sees it
+        return false;
+      }
+      return material.assignedStudents.includes(studentId);
+
+    case "levels":
+      // Level assignment → students matching the level
+      if (!material.assignedLevels || material.assignedLevels.length === 0) {
+        // Edge case: scope is "levels" but no levels listed → no one sees it
+        return false;
+      }
+      // If student level is unknown, they cannot match
+      if (!studentLevel) {
+        return false;
+      }
+      return material.assignedLevels.includes(studentLevel);
+
+    default:
+      // Unknown scope → default to visible (fail-open for legacy)
+      return true;
+  }
 };

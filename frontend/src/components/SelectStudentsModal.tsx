@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Modal from "./Modal";
 
 interface SelectStudentsModalProps {
@@ -15,12 +15,31 @@ const SelectStudentsModal = ({
   onSave,
 }: SelectStudentsModalProps) => {
   const [activeTab, setActiveTab] = useState<"levels" | "individual">("levels");
-  
+
   // Level selections
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
-  
+
   // Student selections
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+
+  // Reset all state when modal opens to prevent stale selections
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab("levels");
+      setSelectedLevels([]);
+      setSelectedStudents([]);
+    }
+  }, [isOpen]);
+
+  // Clear opposite selection when switching tabs to prevent mixed assignment
+  const handleTabChange = (tab: "levels" | "individual") => {
+    if (tab === "levels") {
+      setSelectedStudents([]);
+    } else {
+      setSelectedLevels([]);
+    }
+    setActiveTab(tab);
+  };
 
   const classStudents = useMemo(
     () =>
@@ -72,7 +91,7 @@ const SelectStudentsModal = ({
             {/* Tabs */}
             <div className="flex rounded-xl bg-[#E9F1FF] p-1">
                 <button
-                    onClick={() => setActiveTab("levels")}
+                    onClick={() => handleTabChange("levels")}
                     className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
                         activeTab === "levels"
                         ? "bg-[#1E73F7] text-white shadow-sm"
@@ -82,7 +101,7 @@ const SelectStudentsModal = ({
                     Рівень
                 </button>
                 <button
-                    onClick={() => setActiveTab("individual")}
+                    onClick={() => handleTabChange("individual")}
                     className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
                         activeTab === "individual"
                         ? "bg-[#1E73F7] text-white shadow-sm"

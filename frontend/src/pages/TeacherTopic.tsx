@@ -283,6 +283,7 @@ const TeacherTopic = () => {
                 buttonLabel="Згенерувати конспект"
                 onClick={() => {
                   setMaterialError(null);
+                  setAudienceSelection(null);
                   setActiveModal("material");
                 }}
               />
@@ -323,7 +324,10 @@ const TeacherTopic = () => {
                 className="mt-4"
                 title="Додайте навчальні матеріали"
                 buttonLabel="Згенерувати тест"
-                onClick={() => setActiveModal("test")}
+                onClick={() => {
+                  setAudienceSelection(null);
+                  setActiveModal("test");
+                }}
               />
             </section>
           </div>
@@ -366,25 +370,56 @@ const TeacherTopic = () => {
               setIsGeneratingMaterial(true);
               try {
                 const topicDefinition = materialName.trim();
-                const response =
-                  audienceSelection?.students?.length
-                    ? await generateNotesIndividual({
-                        class_id: apiClassId,
-                        teacher_id: apiTeacherId,
-                        subject: subjectName,
-                        student_list: audienceSelection.students,
-                        topic_definition: topicDefinition,
-                      })
-                    : await generateNotesByLevel({
-                        class_id: apiClassId,
-                        teacher_id: apiTeacherId,
-                        subject: subjectName,
-                        level_list:
-                          audienceSelection?.levels?.length
-                            ? audienceSelection.levels
-                            : ["weak", "medium", "strong"],
-                        topic_definition: topicDefinition,
-                      });
+
+                // PRIORITY ORDER (highest to lowest):
+                // 1. Levels selected → assign to all students in those levels
+                // 2. Individual students selected → assign only to those students
+                // 3. No selection → assign to entire class (default)
+                const hasLevels = audienceSelection?.levels && audienceSelection.levels.length > 0;
+                const hasStudents = audienceSelection?.students && audienceSelection.students.length > 0;
+
+                let response;
+                let assignmentScope: "class" | "levels" | "students";
+                let assignedLevels: ("weak" | "medium" | "strong")[] | undefined;
+                let assignedStudents: number[] | undefined;
+
+                if (hasLevels) {
+                  // PRIORITY 1: Level assignment (overrides any student selection)
+                  assignmentScope = "levels";
+                  assignedLevels = audienceSelection.levels;
+                  assignedStudents = undefined; // Explicitly clear
+                  response = await generateNotesByLevel({
+                    class_id: apiClassId,
+                    teacher_id: apiTeacherId,
+                    subject: subjectName,
+                    level_list: audienceSelection.levels,
+                    topic_definition: topicDefinition,
+                  });
+                } else if (hasStudents) {
+                  // PRIORITY 2: Individual student assignment
+                  assignmentScope = "students";
+                  assignedLevels = undefined; // Explicitly clear
+                  assignedStudents = audienceSelection.students;
+                  response = await generateNotesIndividual({
+                    class_id: apiClassId,
+                    teacher_id: apiTeacherId,
+                    subject: subjectName,
+                    student_list: audienceSelection.students,
+                    topic_definition: topicDefinition,
+                  });
+                } else {
+                  // PRIORITY 3: No selection → entire class (all levels)
+                  assignmentScope = "class";
+                  assignedLevels = undefined;
+                  assignedStudents = undefined;
+                  response = await generateNotesByLevel({
+                    class_id: apiClassId,
+                    teacher_id: apiTeacherId,
+                    subject: subjectName,
+                    level_list: ["weak", "medium", "strong"],
+                    topic_definition: topicDefinition,
+                  });
+                }
 
                 if (!response?.title || !response?.contents) {
                   throw new Error("Invalid notes response");
@@ -401,6 +436,9 @@ const TeacherTopic = () => {
                   classId: apiClassId || undefined,
                   className: classLabel,
                   topicName: decodedTopic,
+                  assignmentScope,
+                  assignedLevels,
+                  assignedStudents,
                 });
                 setNotes((prev) => [
                   ...prev,
@@ -448,6 +486,32 @@ const TeacherTopic = () => {
             }
             setTestGenerationStarted(true);
             setIsGeneratingTest(true);
+
+            // PRIORITY ORDER (highest to lowest):
+            // 1. Levels selected → assign to all students in those levels
+            // 2. Individual students selected → assign only to those students
+            // 3. No selection → assign to entire class (default)
+            const hasLevels = audienceSelection?.levels && audienceSelection.levels.length > 0;
+            const hasStudents = audienceSelection?.students && audienceSelection.students.length > 0;
+
+            let assignmentScope: "class" | "levels" | "students";
+            let assignedLevels: ("weak" | "medium" | "strong")[] | undefined;
+            let assignedStudents: number[] | undefined;
+
+            if (hasLevels) {
+              assignmentScope = "levels";
+              assignedLevels = audienceSelection.levels;
+              assignedStudents = undefined;
+            } else if (hasStudents) {
+              assignmentScope = "students";
+              assignedLevels = undefined;
+              assignedStudents = audienceSelection.students;
+            } else {
+              assignmentScope = "class";
+              assignedLevels = undefined;
+              assignedStudents = undefined;
+            }
+
             try {
               const topicDefinition = testName.trim();
               const response = await generateTest({
@@ -469,6 +533,9 @@ const TeacherTopic = () => {
                 classId: apiClassId || undefined,
                 className: classLabel,
                 topicName: decodedTopic,
+                assignmentScope,
+                assignedLevels,
+                assignedStudents,
               });
               setTests((prev) => [
                 ...prev,
@@ -490,6 +557,9 @@ const TeacherTopic = () => {
                 classId: apiClassId || undefined,
                 className: classLabel,
                 topicName: decodedTopic,
+                assignmentScope,
+                assignedLevels,
+                assignedStudents,
               });
               setTests((prev) => [
                 ...prev,

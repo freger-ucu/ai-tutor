@@ -5,9 +5,10 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Card from "../components/Card";
 import Panel from "../components/Panel";
 import PillButton from "../components/PillButton";
-import { getMaterials } from "../data/materialsStorage";
+import { getMaterials, isVisibleToStudent } from "../data/materialsStorage";
 import { getStudentTestCompletionMap } from "../data/studentProgress";
 import { getStudentData } from "../api/student";
+import { getStudentDetails } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
 import { classIdToLabel } from "../data/classUtils";
 
@@ -57,6 +58,7 @@ const StudentTopic = () => {
   const [studentGrade, setStudentGrade] = useState<number | null>(null);
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
   const [studentError, setStudentError] = useState<string | null>(null);
+  const [studentLevel, setStudentLevel] = useState<"weak" | "medium" | "strong" | null>(null);
 
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
@@ -99,6 +101,28 @@ const StudentTopic = () => {
       });
   }, [studentId]);
 
+  // Fetch student level for visibility filtering
+  useEffect(() => {
+    const apiId = toNumericId(studentId);
+    if (!apiId || !studentClassId || !subjectName) {
+      setStudentLevel(null);
+      return;
+    }
+    // teacher_id=1 is used as fallback since we need some teacher context
+    getStudentDetails({
+      class_id: studentClassId,
+      subject: subjectName,
+      teacher_id: 1,
+      student_id: apiId,
+    })
+      .then((response) => {
+        setStudentLevel(response.level);
+      })
+      .catch(() => {
+        setStudentLevel(null);
+      });
+  }, [studentId, studentClassId, subjectName]);
+
   const availableSubjects = apiSubjects.length
     ? subjects.filter((subject) => apiSubjects.includes(subject.label))
     : subjects;
@@ -106,6 +130,7 @@ const StudentTopic = () => {
   useEffect(() => {
     if (studentError) return;
 
+    const apiId = toNumericId(studentId);
     const materials = getMaterials({
         courseId: decodedCourse,
         subject: subjectName,
@@ -114,13 +139,18 @@ const StudentTopic = () => {
         topicName: decodedTopic,
     });
 
-    const storedNotes = materials
+    // Filter materials by visibility - STRICT assignment targeting
+    const visibleMaterials = apiId
+      ? materials.filter((m) => isVisibleToStudent(m, apiId, studentLevel ?? undefined))
+      : materials;
+
+    const storedNotes = visibleMaterials
         .filter(m => m.type === "note")
         .map(m => ({ id: m.id, title: m.title }));
-        
+
     const completionMap = getStudentTestCompletionMap(studentId);
 
-    const storedTests = materials
+    const storedTests = visibleMaterials
         .filter(m => m.type === "test")
         .map(m => {
           const completion = completionMap.get(m.id);
@@ -143,6 +173,7 @@ const StudentTopic = () => {
     studentError,
     classLabel,
     studentClassId,
+    studentLevel,
     decodedCourse,
     decodedTopic,
     studentId,
