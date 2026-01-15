@@ -67,7 +67,7 @@ graph TB
 
 ### Test Generation Flow (EP4)
 
-Generates validated test questions using a planning-based parallel architecture. An LLM first plans the test structure (concepts to cover, question specs), then questions are generated and validated in parallel with automatic retry for failures.
+Generates validated test questions using a planning-based parallel architecture with **post-factum difficulty classification**. Always generates 12 questions, with difficulty assigned after generation using batch LLM classification.
 
 ```mermaid
 graph LR
@@ -78,15 +78,17 @@ graph LR
     E --> F[prepare_retry]
     F --> G{has pending?}
     G -->|yes| D
-    G -->|no| H[finalize]
-    H --> I((END))
+    G -->|no| H[classify_difficulty]
+    H --> I[finalize]
+    I --> J((END))
 
     style A fill:#e1f5fe
     style B fill:#fff9c4
     style C fill:#e1f5fe
     style D fill:#fff3e0
     style E fill:#f3e5f5
-    style H fill:#e8f5e9
+    style H fill:#ffe0b2
+    style I fill:#e8f5e9
 ```
 
 **State:** `TestGenState`
@@ -96,15 +98,15 @@ graph LR
 | subject | string | Subject name |
 | grade | int | Grade level (8-9) |
 | topic_definition | string | Topic to generate questions for |
-| easy_count, medium_count, hard_count | int | Requested question counts |
+| level | string | Student level for prompt guidance ("weak"/"medium"/"strong") |
 | rag_context | string | Base topic context from RAG |
 | test_plan | TestPlan | LLM-generated test structure |
 | concepts | list[str] | Key concepts identified by planner |
 | concept_contexts | dict | Per-concept RAG contexts |
 | pending_specs | list[QuestionSpec] | Queue of specs to generate |
-| validated_questions | list | Final validated questions |
+| validated_questions | list | Final validated questions with difficulty |
 | failed_specs | list | Specs that failed validation |
-| retry_count | int | Current retry iteration (max 2) |
+| retry_count | int | Current retry iteration (max 1) |
 
 **Flow Details:**
 
@@ -112,8 +114,9 @@ graph LR
 
 2. **plan_test**: Single LLM call to design entire test structure
    - Identifies 3-5 key concepts to cover
-   - Creates question specs with difficulty, type, concept, and focus
-   - Smart distribution of question types based on difficulty
+   - Creates 12 question specs (no difficulty at this stage)
+   - Distribution: ~50% single_choice, ~20% multiple_choice, ~30% open
+   - Level-aware prompt adjustment (simpler for weak, deeper for strong)
 
 3. **retrieve_concepts**: Parallel RAG retrieval for each concept (5 concurrent)
    - Gets targeted context for each concept
@@ -121,24 +124,53 @@ graph LR
 
 4. **batch_generate**: Parallel question generation (10 concurrent LLM calls)
    - Each spec gets concept-specific context
-   - Normalizes output format (handles old/new answer formats)
+   - **single_choice**: 4 options, exactly 1 correct (`correct_answer_index`)
+   - **multiple_choice**: 4 options, 2-3 correct (`correct_answer_indices`)
+   - **open**: free-text with expected answer
    - Temperature 0.7 for creative diversity
 
 5. **batch_validate**: Two-phase validation
    - **CPU Phase** (instant): Format checks, deduplication, field validation
+     - Validates `correct_answer_index` for single_choice
+     - Validates `correct_answer_indices` (2-3 items) for multiple_choice
    - **LLM Phase** (parallel):
      - MC questions: Support Scoring V3 (checks each option against context)
      - Open questions: Fresh RAG retrieval + answerability check
 
-6. **prepare_retry**: Queue failed specs for retry (max 2 iterations)
+6. **prepare_retry**: Queue failed specs for retry (max 1 iteration)
 
-7. **finalize**: Log statistics and return validated questions
+7. **classify_difficulty** (NEW): Batch difficulty classification
+   - Single LLM call classifies ALL validated questions at once
+   - Subject-specific criteria (Algebra, Ukrainian, History)
+   - Forces distribution: ~25-35% easy, ~35-45% medium, ~25-35% hard
+   - Bias: "if unsure between medium and hard → choose hard"
+   - Fallback: equal 33% distribution if classification fails
+
+8. **finalize**: Log statistics and return validated questions
+
+**Question Type Differences:**
+
+| Type | Options | Correct Answers | Field |
+|------|---------|-----------------|-------|
+| single_choice | 4 | Exactly 1 | `correct_answer_index` (int) |
+| multiple_choice | 4 | 2-3 | `correct_answer_indices` (list[int]) |
+| open | None | N/A | `explanation` contains expected answer |
+
+**Difficulty Classification Criteria:**
+
+| Subject | Easy | Medium | Difficult |
+|---------|------|--------|-----------|
+| Алгебра | Substitution, 1-2 steps | Typical equations, 2-3 formulas | Parameters, proofs, multi-topic |
+| Українська мова | Single rule, recognition | Apply rules, fix errors | Exceptions, complex cases |
+| Історія України | Basic dates/facts | Cause-effect, comparisons | Source analysis, significance |
+
+Note: Internally uses "hard" which is mapped to "difficult" in API responses.
 
 **Concurrency Limits:**
 - RAG retrieval: 5 concurrent
 - LLM calls: 10 concurrent
 
-**LLM Calls:** ~1 + 2N (1 planning + N generation + N validation, where N = total questions)
+**LLM Calls:** ~1 + N + N + 1 (planning + generation + validation + classification)
 
 ---
 

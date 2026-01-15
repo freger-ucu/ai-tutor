@@ -215,9 +215,15 @@ Uses the same internal flow as EP3.1, but targets specific students instead of l
 
 ### EP4: Generate Test
 
-Generates validated test questions using a planning-based parallel architecture. The flow first plans the test structure, then generates and validates questions in parallel with automatic retry for failed questions.
+Generates validated test questions using a planning-based parallel architecture with **post-factum difficulty classification**. The flow always generates 12 questions, plans the structure, generates and validates in parallel, then classifies difficulty using subject-specific LLM criteria.
 
-**Endpoint:** `POST /teacher/generate-test`
+**Key Design:**
+- Always generates **12 questions** (fixed count)
+- **Difficulty is classified post-factum** by LLM after generation
+- Supports **level-aware generation** (adjusts prompts for weak/medium/strong students)
+- Uses **batch difficulty classification** for better distribution (~25-35% easy, ~35-45% medium, ~25-35% hard)
+
+**Endpoint:** `POST /teacher/test/generate`
 
 **Request Body:** `GenerateTestRequest`
 
@@ -227,9 +233,8 @@ Generates validated test questions using a planning-based parallel architecture.
   "teacher_id": 1,
   "subject": "Алгебра",
   "topic_definition": "Квадратні рівняння",
-  "easy_count": 3,
-  "medium_count": 4,
-  "hard_count": 3
+  "level_list": ["weak", "medium"],
+  "student_list": []
 }
 ```
 
@@ -239,68 +244,94 @@ Generates validated test questions using a planning-based parallel architecture.
 | teacher_id | integer | Yes | - | Teacher identifier |
 | subject | string | Yes | - | Subject name in Ukrainian |
 | topic_definition | string | Yes | - | Topic description |
-| easy_count | integer | No | 1 | Number of easy questions (0-20) |
-| medium_count | integer | No | 1 | Number of medium questions (0-20) |
-| hard_count | integer | No | 1 | Number of hard questions (0-20) |
+| level_list | array[Level] | No | [] | Filter students by level (empty = all students) |
+| student_list | array[integer] | No | [] | Specific students (overrides level_list if provided) |
+
+**Student Selection Priority:**
+1. If `student_list` is provided → use those specific students
+2. Else if `level_list` is provided → filter by levels
+3. Else → use all students in class
+
+The selected students' scores are used to compute a **median level** which adjusts prompt tone.
 
 **Response:** `TestResponse`
 
 ```json
 {
   "success": true,
-  "message": "Generated 10 questions",
+  "message": "Generated 12 questions",
   "questions": [
     {
       "question": "Яке значення дискримінанта рівняння x² - 4x + 4 = 0?",
       "type": "single_choice",
       "difficulty": "easy",
-      "options": ["0", "4", "8", "-4"],
-      "correct_answer_index": 0,
+      "answer_options": [
+        {"answer": "0", "correct": true},
+        {"answer": "4", "correct": false},
+        {"answer": "8", "correct": false},
+        {"answer": "-4", "correct": false}
+      ],
       "explanation": "D = b² - 4ac = (-4)² - 4(1)(4) = 16 - 16 = 0",
       "topic": "Дискримінант"
     },
     {
-      "question": "Які корені має рівняння x² - 5x + 6 = 0?",
+      "question": "Які з наступних тверджень про квадратні корені є правильними?",
       "type": "multiple_choice",
       "difficulty": "medium",
-      "options": ["x = 2", "x = 3", "x = 4", "x = 6"],
-      "correct_answer_indices": [0, 1],
-      "explanation": "D = 25 - 24 = 1. x₁ = 3, x₂ = 2",
-      "topic": "Квадратні рівняння"
+      "answer_options": [
+        {"answer": "√(ab) = √a · √b для a,b ≥ 0", "correct": true},
+        {"answer": "√(a+b) = √a + √b для a,b ≥ 0", "correct": false},
+        {"answer": "√(a/b) = √a / √b для a ≥ 0, b > 0", "correct": true},
+        {"answer": "√(a-b) = √a - √b для a ≥ b ≥ 0", "correct": false}
+      ],
+      "explanation": "Корінь добутку/частки дорівнює добутку/частці коренів",
+      "topic": "Властивості квадратних коренів"
     },
     {
       "question": "Розв'яжіть рівняння: x² - 7x + 12 = 0",
       "type": "open",
-      "difficulty": "medium",
-      "correct_answer": "x = 3 або x = 4",
-      "explanation": "D = 49 - 48 = 1. x₁ = (7+1)/2 = 4, x₂ = (7-1)/2 = 3",
+      "difficulty": "difficult",
+      "answer_options": [],
+      "explanation": "D = 49 - 48 = 1. x₁ = 4, x₂ = 3",
       "topic": "Квадратні рівняння"
     }
   ],
   "stats": {
-    "total_questions": 10,
-    "easy_count": 3,
-    "medium_count": 4,
-    "hard_count": 3,
-    "single_choice_count": 5,
+    "total_questions": 12,
+    "easy_count": 4,
+    "medium_count": 5,
+    "difficult_count": 3,
+    "single_choice_count": 6,
     "multiple_choice_count": 3,
-    "open_count": 2,
-    "llm_calls": 21
+    "open_count": 3,
+    "llm_calls": 15
   }
 }
 ```
 
 **Question Types:**
 
-| Type | Fields | Description |
-|------|--------|-------------|
-| single_choice | options (4), correct_answer_index | Exactly one correct answer |
-| multiple_choice | options (4), correct_answer_indices | One or more correct answers |
-| open | correct_answer | Free-text answer expected |
+| Type | Description | Answer Format |
+|------|-------------|---------------|
+| single_choice | 4 options, exactly **1 correct** | `answer_options` with one `correct: true` |
+| multiple_choice | 4 options, **2-3 correct** | `answer_options` with 2-3 `correct: true` |
+| open | Free-text answer | `answer_options: []`, answer in `explanation` |
+
+**Difficulty Classification:**
+
+Difficulty is assigned **post-factum** by the LLM using subject-specific criteria:
+
+| Subject | Easy | Medium | Difficult |
+|---------|------|--------|-----------|
+| Алгебра | 1-2 steps, formula substitution | Typical equations, 2-3 formulas | Parameters, proofs, multi-topic |
+| Українська мова | One rule, recognition | Apply rule, fix errors | Exceptions, complex cases |
+| Історія України | Basic dates/events | Cause-effect, comparisons | Source analysis, significance |
+
+Note: Internally uses "hard" which is mapped to "difficult" in API responses.
 
 **Error Responses:**
-- `400`: At least one question count must be > 0
 - `404`: Class not found
+- `404`: No students found / No matching students found
 
 ---
 
@@ -630,6 +661,8 @@ Generates feedback after completing a test using LangGraph flow. Output is conci
 ```
 "easy" | "medium" | "difficult"
 ```
+
+Note: Internally the test generator uses "hard", which is mapped to "difficult" in the API response.
 
 ### QuestionType
 ```
