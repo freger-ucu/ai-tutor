@@ -28,9 +28,9 @@ os.chdir(project_root)
 load_dotenv()
 
 from openai import AsyncOpenAI
-from scripts.agentic_rag_solution.utils.data_loader import get_data_loader
-from scripts.agentic_rag_solution.state import create_initial_state
-from scripts.agentic_rag_solution.nodes.smart_retrieve import smart_retrieve_node
+from app.rag.utils.rag_data_loader import get_textbook_loader
+from app.rag.state import create_initial_state
+from app.rag.nodes.smart_retrieve import smart_retrieve_node
 
 
 # Model configurations
@@ -58,8 +58,8 @@ PROMPT_TEMPLATE = """Ти — експерт з {subject}.
 ## ВАРІАНТИ:
 {options}
 
-Проаналізуй кожен варіант і обери правильний.
-Поверни JSON: {{"answer": 0-3, "reasoning": "пояснення"}}"""
+Відповідай ТІЛЬКИ буквою: A, B, C або D.
+Поверни JSON: {{"answer": "A/B/C/D"}}"""
 
 
 async def test_model(
@@ -94,7 +94,8 @@ async def test_model(
 
         # Format prompt
         answers = question.get("answers", [])
-        options = "\n".join([f"{i}) {ans}" for i, ans in enumerate(answers)])
+        letters = ["A", "B", "C", "D"]
+        options = "\n".join([f"{letters[i]}) {ans}" for i, ans in enumerate(answers[:4])])
 
         prompt = PROMPT_TEMPLATE.format(
             subject=question.get("global_discipline_name", ""),
@@ -126,9 +127,11 @@ async def test_model(
 
             # Parse JSON
             import json
+            letter_to_index = {"A": 0, "B": 1, "C": 2, "D": 3}
             try:
                 result = json.loads(result_text)
-                answer_index = result.get("answer", 0)
+                answer_letter = result.get("answer", "A")
+                answer_index = letter_to_index.get(str(answer_letter).upper(), 0)
             except:
                 answer_index = 0
 
@@ -176,7 +179,7 @@ async def compare_models(
     print("=" * 70)
 
     # Load questions
-    data_loader = get_data_loader()
+    data_loader = get_textbook_loader()
     questions_df = data_loader.load_benchmark_questions().head(limit)
 
     print(f"  Testing on {len(questions_df)} questions")

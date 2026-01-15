@@ -40,8 +40,9 @@ def _format_context_summary(docs: list, max_docs: int = 4) -> str:
 
 
 def _format_options(answers: list) -> str:
-    """Format answer options."""
-    return "\n".join([f"{i}) {ans}" for i, ans in enumerate(answers)])
+    """Format answer options with letters A-D."""
+    letters = ["A", "B", "C", "D"]
+    return "\n".join([f"{letters[i]}) {ans}" for i, ans in enumerate(answers[:4])])
 
 
 AGENT_DECISION_PROMPT = """Ти AI-агент для освітньої системи. Оціни контекст та прийми рішення.
