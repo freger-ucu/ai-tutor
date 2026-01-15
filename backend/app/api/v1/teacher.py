@@ -331,14 +331,16 @@ async def generate_notes_by_level(
     """
     EP3.1: Generate notes for students by level.
 
-    Generates lesson notes adapted to specified student levels.
+    Generates lesson notes adapted to student levels.
     Uses LangGraph flow that:
-    1. Analyzes students to aggregate gaps
+    1. Analyzes students to compute level and aggregate gaps
     2. Filters gaps to prerequisites using LLM
     3. Retrieves RAG context for topic and prerequisites
     4. Generates notes with optional recap section
 
-    The level is provided by the request (not computed from students).
+    If level_list is provided, filters students to those levels.
+    If level_list is empty, includes all students in the class.
+    The level is computed from the selected students' scores.
     """
     from app.graph.flows.notes import generate_notes
 
@@ -351,33 +353,41 @@ async def generate_notes_by_level(
 
     grade = class_info["class_number"]
 
-    # Get the target level from request (use first one if multiple)
-    target_level = request.level_list[0].value if request.level_list else "medium"
-
-    # Get students at the specified level(s)
+    # Get all students in class
     all_students = data_loader.get_class_students(
         class_id=request.class_id,
         subject=request.subject,
         teacher_id=request.teacher_id
     )
 
-    # Filter to students at specified levels
-    target_levels = {lv.value for lv in request.level_list} if request.level_list else {"medium"}
-    student_ids = [
-        s.student_id for s in all_students
-        if s.subject_level.value in target_levels
-    ]
+    if not all_students:
+        raise HTTPException(
+            status_code=404,
+            detail="No students found for this class/subject combination"
+        )
 
-    if not student_ids:
-        raise HTTPException(status_code=404, detail="No students found at specified levels")
+    # Filter students by requested levels (or take all if empty)
+    if request.level_list:
+        target_levels = {lv.value for lv in request.level_list}
+        student_ids = [
+            s.student_id for s in all_students
+            if s.subject_level.value in target_levels
+        ]
+        if not student_ids:
+            raise HTTPException(
+                status_code=404,
+                detail="No students found at specified levels"
+            )
+    else:
+        # No levels specified → all students
+        student_ids = [s.student_id for s in all_students]
 
-    # Generate notes using LangGraph flow with explicit level
+    # Generate notes - level will be computed from student scores
     result = await generate_notes(
         student_ids=student_ids,
         subject=request.subject,
         grade=grade,
         topic_definition=request.topic_definition,
-        level=target_level,  # Pass the requested level explicitly
     )
 
     if "error" in result:
