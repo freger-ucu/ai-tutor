@@ -42,7 +42,7 @@ const TestNavigation = ({
                   ? "bg-[#1E73F7] text-white ring-2 ring-white"
                   : isAnswered
                     ? "bg-white/90 text-[#1E73F7]"
-                    : "border border-white/50 bg-white/10 text-white hover:bg-white/20"
+                    : "border border-slate-200 bg-white text-[#1E73F7] hover:bg-slate-50"
             }`}
           >
             {index + 1}

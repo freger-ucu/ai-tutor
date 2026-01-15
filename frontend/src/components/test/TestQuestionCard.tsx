@@ -124,6 +124,9 @@ const TestQuestionCard = ({
                 onClick={() => onOptionSelect(option.id)}
                 disabled={showResult}
                 resultState={resultStateForOption(option.id)}
+                selectionStyle={
+                  question.type === "single_choice" ? "single" : "multiple"
+                }
               />
             ))}
           </div>

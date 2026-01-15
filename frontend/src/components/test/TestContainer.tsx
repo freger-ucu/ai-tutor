@@ -102,24 +102,20 @@ const TestContainer = ({
     return [];
   };
 
-  // Pre-populate answers for teacher view (simulating that students have already answered)
+  // Pre-populate answers for teacher view with correct options from test data
   useEffect(() => {
     if (viewMode === "teacher") {
       const preFilledAnswers = new Map<string, TestAnswer>();
       testData.questions.forEach((question) => {
-        // Simulate 50% correct answers for demo
-        const isCorrect = Math.random() > 0.5;
         const selectedOptionIds =
           question.type === "open"
             ? []
-            : isCorrect
-            ? question.correctOptionIds
-            : toIncorrectSelection(question);
+            : question.correctOptionIds;
         preFilledAnswers.set(question.id, {
           questionId: question.id,
           selectedOptionIds,
-          openAnswer: question.type === "open" ? "Відповідь учня" : undefined,
-          isCorrect,
+          openAnswer: question.type === "open" ? "—" : undefined,
+          isCorrect: true,
         });
       });
       setAnswers(preFilledAnswers);

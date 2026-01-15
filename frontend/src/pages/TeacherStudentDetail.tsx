@@ -38,7 +38,6 @@ const TeacherStudentDetail = () => {
 
   const [studentDetails, setStudentDetails] =
     useState<StudentDetailsResponse | null>(null);
-  const [recommendation, setRecommendation] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -63,23 +62,19 @@ const TeacherStudentDetail = () => {
     setIsLoading(true);
     setFetchError(null);
 
-    Promise.all([
-      getStudentDetails({
-        class_id: decodedClassId,
-        subject: subjectName,
-        teacher_id: apiTeacherId,
-        student_id: apiStudentId,
-      }),
-      getStudentRecommendation({ student_id: apiStudentId }),
-    ])
-      .then(([details, rec]) => {
+    getStudentDetails({
+      class_id: decodedClassId,
+      subject: subjectName,
+      teacher_id: apiTeacherId,
+      student_id: apiStudentId,
+    })
+      .then((details) => {
         setStudentDetails(details);
-        setRecommendation(rec.feedback ?? "");
+        setFetchError(null);
       })
       .catch((error) => {
         console.error(error);
         setStudentDetails(null);
-        setRecommendation("");
         if (error instanceof Error && error.message.includes("404")) {
           setFetchError("Учня не знайдено");
         } else {
@@ -187,63 +182,66 @@ const TeacherStudentDetail = () => {
             </div>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr]">
-            <Panel title="Рекомендації" className="h-fit">
-              <p className="text-sm text-slate-600 leading-relaxed">
-                {recommendation ||
-                  "Рекомендації для цього учня ще не сформовані."}
-              </p>
-            </Panel>
-
-            <div className="space-y-6">
-              <Panel title="Пропущені теми" className="max-h-[280px] flex flex-col">
-                <div className="space-y-2 overflow-y-auto flex-1">
-                  {studentDetails.skipped_lessons.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                      Немає пропущених тем.
-                    </div>
-                  ) : (
-                    studentDetails.skipped_lessons.map((lesson, index) => (
+          <div className="grid gap-6 lg:grid-cols-2 items-stretch">
+            <Panel
+              title="Проблемні теми"
+              className="h-[460px] flex flex-col min-h-0 overflow-hidden"
+              contentClassName="flex-1 min-h-0"
+            >
+              <div className="h-[360px] overflow-y-auto pr-1">
+                {studentDetails.problematic_topics.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    Немає проблемних тем.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {studentDetails.problematic_topics.map((topic, index) => (
                       <div
                         key={index}
-                        className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                      >
-                        <span className="text-sm font-medium text-slate-800">
-                          {lesson.topic}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {lesson.date}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Panel>
-
-              <Panel title="Проблемні теми" className="max-h-[280px] flex flex-col">
-                <div className="space-y-2 overflow-y-auto flex-1">
-                  {studentDetails.problematic_topics.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                      Немає проблемних тем.
-                    </div>
-                  ) : (
-                    studentDetails.problematic_topics.map((topic, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                        className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
                       >
                         <span className="text-sm font-medium text-slate-800">
                           {topic.topic}
                         </span>
-                        <span className="text-xs font-semibold text-slate-600">
+                        <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">
                           {topic.average_score.toFixed(1)} балів
                         </span>
                       </div>
-                    ))
-                  )}
-                </div>
-              </Panel>
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Panel>
+
+            <Panel
+              title="Пропущені теми"
+              className="h-[460px] flex flex-col min-h-0 overflow-hidden"
+              contentClassName="flex-1 min-h-0"
+            >
+              <div className="h-[360px] overflow-y-auto pr-1">
+                {studentDetails.skipped_lessons.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    Немає пропущених тем.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {studentDetails.skipped_lessons.map((lesson, index) => (
+                      <div
+                        key={index}
+                        className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                      >
+                        <span className="text-sm font-medium text-slate-800">
+                          {lesson.topic}
+                        </span>
+                        <span className="text-xs text-slate-500 text-right whitespace-nowrap">
+                          {lesson.date}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Panel>
           </div>
         </main>
       </div>

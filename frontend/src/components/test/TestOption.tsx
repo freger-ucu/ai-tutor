@@ -5,6 +5,7 @@ interface TestOptionProps {
   onClick: () => void;
   disabled?: boolean;
   resultState?: "correct" | "incorrect" | "partial" | "neutral";
+  selectionStyle?: "single" | "multiple";
 }
 
 const TestOption = ({
@@ -13,6 +14,7 @@ const TestOption = ({
   onClick,
   disabled = false,
   resultState = "neutral",
+  selectionStyle = "multiple",
 }: TestOptionProps) => {
   const resultStyles: Record<
     "correct" | "incorrect" | "partial",
@@ -34,6 +36,8 @@ const TestOption = ({
   const resolvedResult =
     resultState !== "neutral" ? resultStyles[resultState] : null;
 
+  const isSingle = selectionStyle === "single";
+
   return (
     <button
       type="button"
@@ -50,7 +54,9 @@ const TestOption = ({
       }`}
     >
       <span
-        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-all ${
+        className={`flex h-5 w-5 shrink-0 items-center justify-center border-2 transition-all ${
+          isSingle ? "rounded-full" : "rounded"
+        } ${
           resolvedResult
             ? resolvedResult.indicator
             : isSelected
@@ -58,21 +64,24 @@ const TestOption = ({
               : "border-slate-300 bg-white"
         }`}
       >
-        {isSelected && (
-          <svg
-            className="h-3 w-3 text-white"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={3}
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
-        )}
+        {isSelected &&
+          (isSingle ? (
+            <span className="h-2.5 w-2.5 rounded-full bg-white" />
+          ) : (
+            <svg
+              className="h-3 w-3 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={3}
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          ))}
       </span>
       <span>{text}</span>
     </button>
