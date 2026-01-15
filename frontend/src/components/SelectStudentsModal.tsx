@@ -116,17 +116,21 @@ const SelectStudentsModal = ({
             <div className="min-h-[300px]">
                 {activeTab === "levels" && (
                     <div className="space-y-3">
-                        {["Високий", "Середній", "Низький"].map((level) => (
+                        {[
+                          { id: "strong", label: "Високий" },
+                          { id: "medium", label: "Середній" },
+                          { id: "weak", label: "Низький" },
+                        ].map((level) => (
                              <label
-                                key={level}
+                                key={level.id}
                                 className={`flex cursor-pointer items-center gap-4 rounded-xl px-4 py-3 transition ${
-                                    selectedLevels.includes(level) ? "bg-[#E9F1FF]" : "bg-slate-50 hover:bg-slate-100"
+                                    selectedLevels.includes(level.id) ? "bg-[#E9F1FF]" : "bg-slate-50 hover:bg-slate-100"
                                 }`}
                              >
                                 <div className={`flex h-6 w-6 items-center justify-center rounded border transition ${
-                                    selectedLevels.includes(level) ? "border-[#1E73F7] bg-[#1E73F7]" : "border-slate-300 bg-white"
+                                    selectedLevels.includes(level.id) ? "border-[#1E73F7] bg-[#1E73F7]" : "border-slate-300 bg-white"
                                 }`}>
-                                     {selectedLevels.includes(level) && (
+                                     {selectedLevels.includes(level.id) && (
                                         <svg width="14" height="10" viewBox="0 0 14 10" fill="none" xmlns="http://www.w3.org/2000/svg">
                                             <path d="M1 5L4.5 8.5L13 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                         </svg>
@@ -135,11 +139,11 @@ const SelectStudentsModal = ({
                                 <input
                                     type="checkbox"
                                     className="hidden"
-                                    checked={selectedLevels.includes(level)}
-                                    onChange={() => toggleLevel(level)}
+                                    checked={selectedLevels.includes(level.id)}
+                                    onChange={() => toggleLevel(level.id)}
                                 />
-                                <span className={`text-sm font-semibold ${selectedLevels.includes(level) ? "text-[#1E73F7]" : "text-slate-700"}`}>
-                                    {level}
+                                <span className={`text-sm font-semibold ${selectedLevels.includes(level.id) ? "text-[#1E73F7]" : "text-slate-700"}`}>
+                                    {level.label}
                                 </span>
                              </label>
                         ))}

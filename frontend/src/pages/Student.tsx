@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getMaterials, getTopics } from "../data/materialsStorage";
 import PillButton from "../components/PillButton";
 import { getStudentData } from "../api/student";
@@ -32,11 +32,24 @@ const Subjects = [
 const Student = () => {
   const { studentId } = useParams();
   const navigate = useNavigate();
-  const [activeSubjectId, setActiveSubjectId] = useState("ukr-lang");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const subjectParam = searchParams.get("subject");
+  const [activeSubjectId, setActiveSubjectId] = useState(subjectParam || "ukr-lang");
   const [apiSubjects, setApiSubjects] = useState<string[]>([]);
   const [studentGrade, setStudentGrade] = useState<number | null>(null);
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
   const [studentError, setStudentError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (subjectParam && subjectParam !== activeSubjectId) {
+      setActiveSubjectId(subjectParam);
+    }
+  }, [subjectParam, activeSubjectId]);
+
+  const handleSubjectChange = (subjectId: string) => {
+    setActiveSubjectId(subjectId);
+    setSearchParams({ subject: subjectId });
+  };
 
   useEffect(() => {
     const apiId = toNumericId(studentId);
@@ -72,9 +85,11 @@ const Student = () => {
       return;
     }
     if (!availableSubjects.find((subject) => subject.id === activeSubjectId)) {
-      setActiveSubjectId(availableSubjects[0].id);
+      const newSubject = availableSubjects[0].id;
+      setActiveSubjectId(newSubject);
+      setSearchParams({ subject: newSubject });
     }
-  }, [availableSubjects, activeSubjectId]);
+  }, [availableSubjects, activeSubjectId, setSearchParams]);
 
   const gradeSuffix = studentGrade ?? 8;
   const courseIdMap: Record<string, string> = {
@@ -113,17 +128,18 @@ const Student = () => {
       return [];
     }
 
+    // Fetch topics and materials without teacherId filter - students should see all content for their class
+    // Use classId OR className (not both) to avoid overly strict filtering
+    const classFilter = studentClassId ? { classId: studentClassId } : className ? { className } : {};
     const fetchedTopics = getTopics({
       courseId: targetCourseId,
       subject: activeSubjectLabel,
-      classId: studentClassId ?? undefined,
-      className,
+      ...classFilter,
     });
     const tests = getMaterials({
       courseId: targetCourseId,
       subject: activeSubjectLabel,
-      classId: studentClassId ?? undefined,
-      className,
+      ...classFilter,
       type: "test",
     });
     const testsByTopic = new Map<string, typeof tests>();
@@ -172,7 +188,7 @@ const Student = () => {
     <div className="min-h-screen bg-[#1E73F7] font-sans text-slate-900">
       <div className="flex min-h-screen">
         {/* Sidebar */}
-        <aside className="fixed left-0 top-0 h-screen w-64 bg-white flex flex-col z-10">
+        <aside className="fixed left-0 top-0 h-screen w-72 bg-white flex flex-col z-10">
           <div className="px-6 py-8">
             <div className="flex items-center gap-3">
                {/* Avatar */}
@@ -195,7 +211,7 @@ const Student = () => {
               return (
                 <button
                   key={subject.id}
-                  onClick={() => setActiveSubjectId(subject.id)}
+                  onClick={() => handleSubjectChange(subject.id)}
                   className={`flex w-full items-center gap-4 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${
                     isActive
                       ? "bg-[#E9F1FF] text-[#1E73F7]"
@@ -213,7 +229,7 @@ const Student = () => {
         </aside>
 
         {/* Main Content */}
-        <div className="ml-64 w-full p-10">
+        <div className="ml-72 w-full p-10">
           <h1 className="text-2xl font-semibold text-white">Теми</h1>
 
           <div className="mt-6 space-y-4">

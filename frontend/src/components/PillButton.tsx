@@ -10,8 +10,8 @@ interface PillButtonProps {
 }
 
 const variantClasses = {
-  light: "bg-[#E9F1FF] text-[#1E73F7]",
-  white: "bg-white text-[#1E73F7]",
+  light: "bg-[#E9F1FF] text-[#1E73F7] hover:bg-[#D4E4FF] hover:-translate-y-0.5",
+  white: "bg-white text-[#1E73F7] hover:bg-slate-50 hover:-translate-y-0.5 hover:shadow-lg",
 };
 
 const sizeClasses = {
