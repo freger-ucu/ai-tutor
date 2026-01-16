@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Card from "../components/Card";
 import Panel from "../components/Panel";
 import PillButton from "../components/PillButton";
-import StudentSidebarNav from "../components/StudentSidebarNav";
+import StudentSidebar from "../components/StudentSidebar";
 import { getMaterials, isVisibleToStudent } from "../data/materialsStorage";
 import { getStudentTestCompletionMap } from "../data/studentProgress";
 import { getStudentData } from "../api/student";
@@ -54,7 +54,6 @@ const subjectLabelMap: Record<string, string> = {
 
 const StudentTopic = () => {
   const { studentId, courseId, topicId } = useParams();
-  const navigate = useNavigate();
   const [apiSubjects, setApiSubjects] = useState<string[]>([]);
   const [studentGrade, setStudentGrade] = useState<number | null>(null);
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
@@ -222,105 +221,15 @@ const StudentTopic = () => {
   return (
     <div className="min-h-screen bg-[#1E73F7] text-slate-900">
       <div className="flex min-h-screen">
-        {/* Sidebar */}
-        <aside className="fixed left-0 top-0 h-screen w-72 bg-white px-6 py-8 flex flex-col z-10">
-          <div className="flex items-center gap-3">
-            <div
-                className="h-10 w-10 overflow-hidden rounded-full bg-slate-200"
-                style={{
-                  backgroundImage: "url('https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80')",
-                  backgroundSize: "cover",
-                }}
-              />
-            <div>
-              <div className="text-base font-semibold text-slate-900">
-                {studentId ? `Учень ${studentId}` : "Учень"}
-              </div>
-              <div className="text-xs text-slate-500">
-                Клас: {classLabel || "—"}
-              </div>
-            </div>
-          </div>
+        {/* Static sidebar - always shows only subjects list */}
+        <StudentSidebar
+          studentId={studentId || ""}
+          classLabel={classLabel || undefined}
+          subjects={availableSubjects}
+          activeSubjectId={subjectSlug}
+        />
 
-          <div className="mt-8 space-y-2">
-            {availableSubjects.map((subject) => {
-              const isActive = subjectSlug === subject.id;
-              return (
-                <button
-                  key={subject.id}
-                  type="button"
-                  onClick={() => navigate(`/student/${studentId}?subject=${subject.id}`)}
-                  className={`flex w-full items-center gap-4 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${
-                    isActive
-                      ? "bg-[#E9F1FF] text-[#1E73F7]"
-                      : "text-slate-900 hover:bg-slate-50"
-                  }`}
-                >
-                  <div
-                    className={`flex items-center justify-center ${
-                      isActive ? "text-[#1E73F7]" : "text-slate-900"
-                    }`}
-                  >
-                    {subject.icon}
-                  </div>
-                  {subject.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Back navigation */}
-          <div className="mt-6 border-t border-slate-200 pt-6 px-2">
-            <StudentSidebarNav
-              items={[
-                {
-                  label: subjectName || courseLabel,
-                  href: backToSubjectHref,
-                },
-                {
-                  label: decodedTopic || "Тема",
-                  isActive: true,
-                },
-              ]}
-            />
-          </div>
-
-          {/* Materials for current topic */}
-          <div className="mt-6 border-t border-slate-200 pt-6 space-y-2 text-sm">
-            {notes.map((item) => (
-              <Link
-                key={item.id}
-                to={`/student/${studentId}/note/${courseId}/${topicId}/${item.id}`}
-                className="flex items-center gap-3 rounded-xl px-4 py-3 font-semibold text-slate-800 hover:bg-slate-50"
-              >
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
-                  <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
-                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
-                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
-                  </svg>
-                </span>
-                {item.title}
-              </Link>
-            ))}
-            {tests.map((item) => (
-              <Link
-                key={item.id}
-                to={`/student/${studentId}/test/${item.id}`}
-                className="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50"
-              >
-                <img src="/src/assets/Group.svg" alt="" className="h-4 w-4" />
-                Тест. {item.title}
-              </Link>
-            ))}
-            {notes.length === 0 && tests.length === 0 && (
-              <div className="px-4 py-3 text-slate-400 text-sm">
-                Немає матеріалів
-              </div>
-            )}
-          </div>
-        </aside>
-
-        <main className="ml-72 flex-1 px-10 py-10 w-full">
+        <main className="flex-1 px-8 py-10">
           <div className="flex items-center gap-4 mb-6">
             <BackButton fallbackPath={backToSubjectHref} />
             <Breadcrumbs

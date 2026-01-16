@@ -1,27 +1,35 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
+import TestEditModal from "../components/TestEditModal";
 import { getTestById, getTestStatistics, mockTestData } from "../data/mockTests";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { TestContainer } from "../components/test";
 import SelectStudentsModal from "../components/SelectStudentsModal";
-import { deleteMaterial, getMaterials } from "../data/materialsStorage";
+import { deleteMaterial, getMaterials, updateMaterial } from "../data/materialsStorage";
 import { withGeneratedQuestions } from "../data/testMapper";
 import { classLabelToId } from "../data/classUtils";
 import { getTeacherStudents } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
+import type { TestQuestion } from "../types/testTypes";
 
 const TeacherTest = () => {
   const { id, testId } = useParams();
   const navigate = useNavigate();
 
+  // Modal states
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
+  // Force re-fetch trigger for test data after editing
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Fetch stored test - refreshKey triggers re-fetch after save
   const storedTest = useMemo(
     () => getMaterials({ type: "test" }).find((item) => item.id === testId),
-    [testId]
+    [testId, refreshKey]
   );
   const testData = useMemo(() => {
     const fallbackBase = getTestById(testId ?? "") ?? mockTestData;
@@ -87,35 +95,8 @@ const TeacherTest = () => {
       ? `/teacher/${id}`
       : "/";
   const backToClassHref = id ? `/teacher/${id}` : "/";
-  const sidebarMaterials = useMemo(() => {
-    if (!id || !testData?.className || !testData?.topicName) {
-      return [];
-    }
-    const filters: {
-      teacherId?: string;
-      courseId?: string;
-      subject?: string;
-      classId?: number;
-      className?: string;
-      topicName?: string;
-    } = {
-      teacherId: id,
-      className: testData.className,
-      topicName: testData.topicName,
-    };
-    if (courseId) {
-      filters.courseId = courseId;
-    }
-    if (subjectName) {
-      filters.subject = subjectName;
-    }
-    if (classId) {
-      filters.classId = classId;
-    }
-    return getMaterials(filters);
-  }, [id, courseId, testData?.className, testData?.topicName, subjectName, classId]);
-  const sidebarNotes = sidebarMaterials.filter((item) => item.type === "note");
-  const sidebarTests = sidebarMaterials.filter((item) => item.type === "test");
+
+  // Fetch class students for the audience modal
   const [classStudents, setClassStudents] = useState<number[]>([]);
   useEffect(() => {
     const apiTeacherId = toNumericId(id) ?? 0;
@@ -146,6 +127,41 @@ const TeacherTest = () => {
     setIsDeleteModalOpen(false);
   }, [testId, navigate, backToTopicHref]);
 
+  /**
+   * Handle saving edited questions
+   * Updates the test in storage and triggers a re-fetch
+   */
+  const handleSaveQuestions = useCallback(
+    async (updatedQuestions: TestQuestion[]) => {
+      if (!testId) return;
+
+      // Convert TestQuestion[] to the storage format (GeneratedQuestion-like)
+      // IMPORTANT: Must use answer_options with {answer, correct} format
+      // to match what mapGeneratedQuestions expects in testMapper.ts
+      const storageQuestions = updatedQuestions.map((q) => ({
+        question: q.text,
+        type: q.type,
+        difficulty: q.difficulty === "hard" ? "difficult" : q.difficulty,
+        answer_options: q.options.map((opt) => ({
+          answer: opt.text,
+          correct: q.correctOptionIds.includes(opt.id),
+        })),
+        explanation: q.explanation || "",
+        topic: q.topic ?? "",
+        subtopics: q.subtopics ?? [],
+      }));
+
+      // Update in storage
+      updateMaterial(testId, {
+        questions: storageQuestions,
+      });
+
+      // Trigger re-fetch of test data
+      setRefreshKey((prev) => prev + 1);
+    },
+    [testId]
+  );
+
   if (!testData) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#1E73F7]">
@@ -156,46 +172,17 @@ const TeacherTest = () => {
 
   return (
     <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
+      {/*
+        Teacher Sidebar - Static navigation
+        Per requirements: Only shows "Навчальні матеріали" and "Учні" links.
+        No dynamic content is displayed regardless of current page state.
+      */}
       <TeacherSidebar
-        teacherName={
-          id ? `Вчитель ${id}` : "Вчитель"
-        }
+        teacherName={id ? `Вчитель ${id}` : "Вчитель"}
         activeItem="materials"
         onMaterialsClick={() => navigate(`/teacher/${id}`)}
         onStudentsClick={() => navigate(`/teacher/${id}?view=students`)}
-      >
-        <div className="space-y-4">
-          {sidebarNotes.map((item) => (
-            <Link
-              key={item.id}
-              to={`/teacher/${id}/note/${courseId}/${classId}/${encodedTopic}/${item.id}`}
-              className="flex items-center gap-3 rounded-xl px-4 py-3 font-semibold text-slate-800 hover:bg-slate-50"
-            >
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
-                <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
-                  <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
-                  <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
-                </svg>
-              </span>
-              {item.title}
-            </Link>
-          ))}
-          {sidebarTests.map((item) => (
-            <Link
-              key={item.id}
-              to={`/teacher/${id}/test/${item.id}`}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 font-semibold transition ${
-                item.id === testId
-                  ? "bg-[#E9F1FF] text-[#1E73F7]"
-                  : "text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              <img src="/src/assets/Group.svg" alt="" className="h-4 w-4" />
-              Тест. {item.title}
-            </Link>
-          ))}
-        </div>
-      </TeacherSidebar>
+      />
 
       <main className="flex-1 px-10 py-8 flex flex-col h-full">
           <div className="flex items-center gap-4 mb-4 shrink-0">
@@ -213,6 +200,21 @@ const TeacherTest = () => {
             <h1 className="text-2xl font-bold text-white">
               {testData.title}
             </h1>
+
+            {/* Edit Test button - opens the editing modal */}
+            <button
+              type="button"
+              onClick={() => setIsEditModalOpen(true)}
+              className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+              Редагувати тест
+            </button>
+
+            {/* Delete button */}
             <button
               type="button"
               onClick={() => setIsDeleteModalOpen(true)}
@@ -255,6 +257,21 @@ const TeacherTest = () => {
         onConfirm={handleDelete}
         title={testData.title}
         itemType="test"
+      />
+
+      {/*
+        Test Edit Modal - Full-screen editing interface
+        Opens when teacher clicks "Редагувати тест" button.
+        Provides add/delete/modify question functionality.
+        Changes are saved to localStorage via handleSaveQuestions.
+      */}
+      <TestEditModal
+        isOpen={isEditModalOpen}
+        testId={testId ?? ""}
+        testTitle={testData.title}
+        questions={testData.questions}
+        onSave={handleSaveQuestions}
+        onClose={() => setIsEditModalOpen(false)}
       />
     </div>
   );

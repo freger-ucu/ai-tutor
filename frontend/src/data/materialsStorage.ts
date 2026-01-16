@@ -1,4 +1,5 @@
 import { fixLatexEscapes } from "../api/client";
+import type { Source } from "../components/LectureContent";
 
 export type MaterialType = "note" | "test";
 
@@ -10,6 +11,13 @@ export interface MaterialItem {
   title: string;
   content?: string;
   teacherNotes?: string;
+  /**
+   * Source references for lecture notes - visible only to teachers.
+   * Supports both simple strings (backward compatible) and structured objects:
+   * - string: "Textbook Name"
+   * - object: { name: "Підручник 1", pages: "19-25" }
+   */
+  sources?: Source[];
   questions?: unknown;
   classId?: number;
   subject?: string;

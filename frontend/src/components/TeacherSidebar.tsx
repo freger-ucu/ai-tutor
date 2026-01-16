@@ -1,12 +1,27 @@
-import type { ReactNode } from "react";
+/**
+ * TeacherSidebar - Static navigation sidebar for teacher interface
+ *
+ * This sidebar is intentionally STATIC and displays exactly two navigation items:
+ * 1. "Навчальні матеріали" (Learning Materials)
+ * 2. "Учні" (Students)
+ *
+ * IMPORTANT: This sidebar must NEVER change based on:
+ * - Current page or route
+ * - Edit mode or viewing state
+ * - Selected topics, tests, or materials
+ *
+ * The sidebar provides consistent navigation back to the main teacher views
+ * and does not support dynamic content or additional links.
+ */
 
 interface TeacherSidebarProps {
+  /** Teacher display name shown at top of sidebar */
   teacherName: string;
+  /** Which navigation item is currently active */
   activeItem?: "materials" | "students";
-  children?: ReactNode;
-  showPrimaryNav?: boolean;
-  afterPrimaryNav?: ReactNode;
+  /** Handler for clicking "Learning Materials" button */
   onMaterialsClick?: () => void;
+  /** Handler for clicking "Students" button */
   onStudentsClick?: () => void;
 }
 
@@ -22,28 +37,27 @@ const StudentsIcon = () => (
   </svg>
 );
 
+/**
+ * TeacherSidebar component - renders a STATIC sidebar with exactly two navigation items.
+ *
+ * This component intentionally does NOT accept children or any dynamic content props.
+ * The sidebar always displays the same two buttons regardless of application state.
+ */
 const TeacherSidebar = ({
   teacherName,
   activeItem = "materials",
-  children,
-  showPrimaryNav = true,
-  afterPrimaryNav,
   onMaterialsClick,
   onStudentsClick,
 }: TeacherSidebarProps) => {
+  // Static CSS classes for navigation buttons
   const baseClass =
-    "flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-sm";
+    "flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-sm cursor-pointer";
   const activeClass = "bg-[#E9F1FF] font-semibold text-[#1E73F7]";
   const inactiveClass = "font-medium text-slate-800 hover:bg-slate-100";
-  const hasTopSection = showPrimaryNav || Boolean(afterPrimaryNav);
-  const dividerClass = hasTopSection
-    ? afterPrimaryNav
-      ? "mt-6 border-t border-slate-200 pt-6 text-sm text-slate-500"
-      : "mt-10 border-t border-slate-200 pt-6 text-sm text-slate-500"
-    : "mt-8 text-sm text-slate-500";
 
   return (
     <aside className="w-64 shrink-0 bg-white px-6 py-8">
+      {/* Teacher profile section */}
       <div className="flex items-center gap-3">
         <div
           className="h-12 w-12 overflow-hidden rounded-full bg-slate-200"
@@ -57,44 +71,41 @@ const TeacherSidebar = ({
           {teacherName}
         </div>
       </div>
-      {showPrimaryNav ? (
-        <div className="mt-10 space-y-3">
-          <button
-            type="button"
-            onClick={onMaterialsClick}
-            className={`${baseClass} ${
-              activeItem === "materials" ? activeClass : inactiveClass
-            } cursor-pointer`}
-          >
-            <span className={`flex items-center justify-center ${activeItem === "materials" ? "text-[#1E73F7]" : "text-slate-600"}`}>
-              <MaterialsIcon />
-            </span>
-            <span className="flex-1 text-left leading-5">Навчальні матеріали</span>
-          </button>
-          <button
-            type="button"
-            onClick={onStudentsClick}
-            className={`${baseClass} ${
-              activeItem === "students" ? activeClass : inactiveClass
-            } cursor-pointer`}
-          >
-            <span className={`flex items-center justify-center ${activeItem === "students" ? "text-[#1E73F7]" : "text-slate-600"}`}>
-              <StudentsIcon />
-            </span>
-            <span className="flex-1 text-left leading-5">Учні</span>
-          </button>
-        </div>
-      ) : null}
-      {afterPrimaryNav ? (
-        <div className={showPrimaryNav ? "mt-4" : "mt-8"}>
-          {afterPrimaryNav}
-        </div>
-      ) : null}
-      {children ? (
-        <div className={dividerClass}>
-          {children}
-        </div>
-      ) : null}
+
+      {/*
+       * STATIC NAVIGATION - Always shows exactly two items:
+       * 1. Learning Materials (Навчальні матеріали)
+       * 2. Students (Учні)
+       *
+       * These buttons navigate to the main teacher views and do NOT
+       * change based on current page, topic, or editing state.
+       */}
+      <div className="mt-10 space-y-3">
+        <button
+          type="button"
+          onClick={onMaterialsClick}
+          className={`${baseClass} ${
+            activeItem === "materials" ? activeClass : inactiveClass
+          }`}
+        >
+          <span className={`flex items-center justify-center ${activeItem === "materials" ? "text-[#1E73F7]" : "text-slate-600"}`}>
+            <MaterialsIcon />
+          </span>
+          <span className="flex-1 text-left leading-5">Навчальні матеріали</span>
+        </button>
+        <button
+          type="button"
+          onClick={onStudentsClick}
+          className={`${baseClass} ${
+            activeItem === "students" ? activeClass : inactiveClass
+          }`}
+        >
+          <span className={`flex items-center justify-center ${activeItem === "students" ? "text-[#1E73F7]" : "text-slate-600"}`}>
+            <StudentsIcon />
+          </span>
+          <span className="flex-1 text-left leading-5">Учні</span>
+        </button>
+      </div>
     </aside>
   );
 };

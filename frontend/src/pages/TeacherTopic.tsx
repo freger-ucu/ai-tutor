@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import AddMaterialsCard from "../components/AddMaterialsCard";
 import BackButton from "../components/BackButton";
@@ -62,7 +62,6 @@ const TeacherTopic = () => {
     ? courseLabels[decodedCourse] ?? decodedCourse
     : "";
   const subjectName = courseLabel || decodedCourse;
-  const backToClassHref = id ? `/teacher/${id}` : "/";
   const classNumberMatch = decodedCourse.match(/(\d+)$/);
   const classNumber = classNumberMatch ? Number(classNumberMatch[1]) : null;
   const classLabel =
@@ -194,42 +193,13 @@ const TeacherTopic = () => {
   return (
     <div className="min-h-screen bg-[#1E73F7] text-slate-900">
       <div className="flex min-h-screen">
+        {/* Static sidebar - always shows only "Materials" and "Students" links */}
         <TeacherSidebar
-          teacherName={
-            id ? `Вчитель ${id}` : "Вчитель"
-          }
+          teacherName={id ? `Вчитель ${id}` : "Вчитель"}
           activeItem="materials"
           onMaterialsClick={() => navigate(`/teacher/${id}`)}
           onStudentsClick={() => navigate(`/teacher/${id}?view=students`)}
-        >
-          <div className="space-y-4">
-            {notes.map((item) => (
-              <Link
-                key={item.id}
-                to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
-                className="flex items-center gap-3 rounded-xl px-4 py-3 font-semibold text-slate-800 hover:bg-slate-50"
-              >
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
-                  <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
-                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
-                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
-                  </svg>
-                </span>
-                {item.title}
-              </Link>
-            ))}
-            {tests.map((item) => (
-              <Link
-                key={item.id}
-                to={`/teacher/${id}/test/${item.id}`}
-                className="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50"
-              >
-                <img src="/src/assets/Group.svg" alt="" className="h-4 w-4" />
-                Тест. {item.title}
-              </Link>
-            ))}
-          </div>
-        </TeacherSidebar>
+        />
         <main className="flex-1 px-10 py-10">
           <div className="flex items-center gap-4 mb-6">
             <BackButton fallbackPath={`/teacher/${id}`} />
@@ -462,6 +432,8 @@ const TeacherTopic = () => {
                   title: response.title,
                   content: response.contents,
                   teacherNotes: response.teacher_notes,
+                  // Save sources from backend response (visible only to teachers)
+                  sources: response.sources,
                   teacherId: id,
                   courseId: decodedCourse,
                   subject: subjectName,

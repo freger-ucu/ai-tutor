@@ -44,10 +44,23 @@ export interface GenerateNotesByStudentRequest {
   topic_definition: string;
 }
 
+/**
+ * Source reference returned by the backend when generating notes.
+ * Contains the textbook/resource name and optional page range.
+ */
+export interface GeneratedSourceItem {
+  /** Name of the source (e.g., "Підручник 1", "Українська мова 8 клас") */
+  name: string;
+  /** Optional page range (e.g., "19-25", "10-18") */
+  pages?: string;
+}
+
 export interface GeneratedNotesResponse {
   title: string;
   contents: string;
   teacher_notes: string;
+  /** Source references for the generated notes - visible only to teachers */
+  sources?: GeneratedSourceItem[];
 }
 
 export interface GenerateTestRequest {

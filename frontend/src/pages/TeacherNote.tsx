@@ -1,15 +1,52 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
-import MarkdownContent from "../components/MarkdownContent";
+import LectureContent from "../components/LectureContent";
 import SelectStudentsModal from "../components/SelectStudentsModal";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { deleteMaterial, getMaterials, updateMaterial } from "../data/materialsStorage";
+import type { Source } from "../components/LectureContent";
 import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
 import { getTeacherStudents } from "../api/teacher";
+
+/**
+ * Converts a Source (string or SourceItem) to a display string for editing.
+ * Format: "Name: pages" or just "Name" if no pages.
+ */
+const sourceToEditString = (source: Source): string => {
+  if (typeof source === "string") {
+    return source;
+  }
+  // Structured source object
+  if (source.pages && source.pages.trim()) {
+    return `${source.name}: ${source.pages}`;
+  }
+  return source.name;
+};
+
+/**
+ * Parses an edit string back to a Source object.
+ * Format: "Name: pages" → { name: "Name", pages: "pages" }
+ * Or just "Name" → { name: "Name" }
+ */
+const parseEditStringToSource = (str: string): Source => {
+  const trimmed = str.trim();
+  // Check if it contains ": " which indicates "name: pages" format
+  const colonIndex = trimmed.indexOf(": ");
+  if (colonIndex > 0) {
+    const name = trimmed.substring(0, colonIndex).trim();
+    const pages = trimmed.substring(colonIndex + 2).trim();
+    if (pages) {
+      return { name, pages };
+    }
+    return { name };
+  }
+  // No colon found, treat as simple name
+  return { name: trimmed };
+};
 
 const PencilIcon = () => (
   <svg
@@ -35,6 +72,8 @@ const TeacherNote = () => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [editTeacherNotes, setEditTeacherNotes] = useState("");
+  // Sources editing state - stored as newline-separated string for easier textarea editing
+  const [editSources, setEditSources] = useState("");
   const [materialVersion, setMaterialVersion] = useState(0);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
@@ -75,45 +114,8 @@ const TeacherNote = () => {
       ? `/teacher/${teacherId}`
       : "/";
   const backToClassHref = teacherId ? `/teacher/${teacherId}` : "/";
-  const sidebarMaterials = useMemo(() => {
-    const sidebarClassName = noteMaterial?.className ?? classLabel;
-    if (!teacherId || !sidebarClassName || !sidebarTopicName) {
-      return [];
-    }
-    const filters: {
-      teacherId?: string;
-      courseId?: string;
-      subject?: string;
-      classId?: number;
-      className?: string;
-      topicName?: string;
-    } = {
-      teacherId,
-      className: sidebarClassName,
-      topicName: sidebarTopicName,
-    };
-    if (sidebarCourseId) {
-      filters.courseId = sidebarCourseId;
-    }
-    if (subjectName) {
-      filters.subject = subjectName;
-    }
-    if (apiClassId) {
-      filters.classId = apiClassId;
-    }
-    return getMaterials(filters);
-  }, [
-    teacherId,
-    classLabel,
-    noteMaterial?.className,
-    noteMaterial?.topicName,
-    sidebarCourseId,
-    sidebarTopicName,
-    subjectName,
-    apiClassId,
-  ]);
-  const sidebarNotes = sidebarMaterials.filter((item) => item.type === "note");
-  const sidebarTests = sidebarMaterials.filter((item) => item.type === "test");
+
+  // Fetch class students for audience selection modal
   useEffect(() => {
     if (!apiTeacherId || !apiClassId || !subjectName) {
       setClassStudents([]);
@@ -136,24 +138,39 @@ const TeacherNote = () => {
   const handleStartEdit = useCallback(() => {
     setEditContent(noteMaterial?.content ?? "");
     setEditTeacherNotes(noteMaterial?.teacherNotes ?? "");
+    // Convert sources array to newline-separated string for editing
+    // Handles both string sources and structured { name, pages } objects
+    const sourcesText = (noteMaterial?.sources ?? [])
+      .map(sourceToEditString)
+      .join("\n");
+    setEditSources(sourcesText);
     setIsEditMode(true);
-  }, [noteMaterial?.content, noteMaterial?.teacherNotes]);
+  }, [noteMaterial?.content, noteMaterial?.teacherNotes, noteMaterial?.sources]);
 
   const handleCancelEdit = useCallback(() => {
     setIsEditMode(false);
     setEditContent("");
     setEditTeacherNotes("");
+    setEditSources("");
   }, []);
 
   const handleSaveEdit = useCallback(() => {
     if (!noteId) return;
+    // Parse sources from newline-separated string, filtering out empty lines
+    // Each line is parsed as "Name: pages" or just "Name"
+    const sourcesArray = editSources
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .map(parseEditStringToSource);
     updateMaterial(noteId, {
       content: editContent,
       teacherNotes: editTeacherNotes,
+      sources: sourcesArray,
     });
     setMaterialVersion((v) => v + 1);
     setIsEditMode(false);
-  }, [noteId, editContent, editTeacherNotes]);
+  }, [noteId, editContent, editTeacherNotes, editSources]);
 
   const handleDelete = useCallback(() => {
     if (!noteId) return;
@@ -166,44 +183,13 @@ const TeacherNote = () => {
 
   return (
     <div className="min-h-screen bg-[#1E73F7] text-slate-900 flex">
+      {/* Static sidebar - always shows only "Materials" and "Students" links */}
       <TeacherSidebar
         teacherName={teacherId ? `Вчитель ${teacherId}` : "Вчитель"}
         activeItem="materials"
         onMaterialsClick={() => navigate(`/teacher/${teacherId}`)}
         onStudentsClick={() => navigate(`/teacher/${teacherId}?view=students`)}
-      >
-        <div className="space-y-4">
-          {sidebarNotes.map((item) => (
-            <Link
-              key={item.id}
-              to={`/teacher/${teacherId}/note/${sidebarCourseId}/${classId}/${encodedTopic}/${item.id}`}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 font-semibold transition ${
-                item.id === noteId
-                  ? "bg-[#E9F1FF] text-[#1E73F7]"
-                  : "text-slate-800 hover:bg-slate-50"
-              }`}
-            >
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
-                <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
-                  <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
-                  <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
-                </svg>
-              </span>
-              {item.title}
-            </Link>
-          ))}
-          {sidebarTests.map((item) => (
-            <Link
-              key={item.id}
-              to={`/teacher/${teacherId}/test/${item.id}`}
-              className="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50"
-            >
-              <img src="/src/assets/Group.svg" alt="" className="h-4 w-4" />
-              Тест. {item.title}
-            </Link>
-          ))}
-        </div>
-      </TeacherSidebar>
+      />
 
       <main className="flex-1 px-10 py-6 w-full">
           <div className="flex items-center gap-4 mb-4">
@@ -229,19 +215,42 @@ const TeacherNote = () => {
                 </h2>
                 <div className="mt-4">
                   {isEditMode ? (
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 mb-2 block">
-                        Зміст конспекту
-                      </label>
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        className="min-h-[300px] w-full rounded-xl border border-slate-200 p-4 text-sm text-slate-800 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
-                        placeholder="Введіть зміст конспекту..."
-                      />
+                    <div className="space-y-6">
+                      {/* Content editing */}
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 mb-2 block">
+                          Зміст конспекту
+                        </label>
+                        <textarea
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          className="min-h-[300px] w-full rounded-xl border border-slate-200 p-4 text-sm text-slate-800 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
+                          placeholder="Введіть зміст конспекту..."
+                        />
+                      </div>
+
+                      {/* Sources editing - teacher-only feature */}
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 mb-2 block">
+                          Джерела
+                          <span className="ml-2 text-xs text-slate-400 font-normal">
+                            (видимі тільки для вчителя, кожне джерело з нового рядка)
+                          </span>
+                        </label>
+                        <textarea
+                          value={editSources}
+                          onChange={(e) => setEditSources(e.target.value)}
+                          className="min-h-[100px] w-full rounded-xl border border-slate-200 p-4 text-sm text-slate-800 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
+                          placeholder="Підручник з алгебри, 7 клас&#10;Стаття про квадратні рівняння&#10;https://example.com/math"
+                        />
+                      </div>
                     </div>
                   ) : noteMaterial?.content ? (
-                    <MarkdownContent content={noteMaterial.content} />
+                    <LectureContent
+                      content={noteMaterial.content}
+                      sources={noteMaterial.sources ?? []}
+                      userRole="teacher"
+                    />
                   ) : (
                     <div className="space-y-6 text-sm leading-relaxed text-slate-800">
                       <p>

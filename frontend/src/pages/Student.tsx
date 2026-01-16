@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getMaterials, getTopics } from "../data/materialsStorage";
 import PillButton from "../components/PillButton";
+import StudentSidebar from "../components/StudentSidebar";
 import { getStudentData } from "../api/student";
 import { toNumericId } from "../api/idUtils";
 import { getStudentCompletedTestIds } from "../data/studentProgress";
@@ -187,49 +188,14 @@ const Student = () => {
   return (
     <div className="min-h-screen bg-[#1E73F7] font-sans text-slate-900">
       <div className="flex min-h-screen">
-        {/* Sidebar */}
-        <aside className="fixed left-0 top-0 h-screen w-72 bg-white flex flex-col z-10">
-          <div className="px-6 py-8">
-            <div className="flex items-center gap-3">
-               {/* Avatar */}
-              <div
-                className="h-10 w-10 overflow-hidden rounded-full bg-slate-200"
-                style={{
-                  backgroundImage: "url('https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80')",
-                  backgroundSize: "cover",
-                }}
-              />
-              <div className="text-sm font-bold text-slate-900">
-                {studentId ? `Учень ${studentId}` : "Учень"}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 flex-1 space-y-1 px-4">
-            {availableSubjects.map((subject) => {
-              const isActive = activeSubjectId === subject.id;
-              return (
-                <button
-                  key={subject.id}
-                  onClick={() => handleSubjectChange(subject.id)}
-                  className={`flex w-full items-center gap-4 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${
-                    isActive
-                      ? "bg-[#E9F1FF] text-[#1E73F7]"
-                      : "text-slate-900 hover:bg-slate-50"
-                  }`}
-                >
-                  <div className={`flex items-center justify-center ${isActive ? "text-[#1E73F7]" : "text-slate-900"}`}>
-                    {subject.icon}
-                  </div>
-                  {subject.label}
-                </button>
-              );
-            })}
-          </div>
-        </aside>
+        <StudentSidebar
+          studentId={studentId || ""}
+          subjects={availableSubjects}
+          activeSubjectId={activeSubjectId}
+        />
 
         {/* Main Content */}
-        <div className="ml-72 w-full p-10">
+        <main className="flex-1 px-8 py-10">
           <h1 className="text-2xl font-semibold text-white">Теми</h1>
 
           <div className="mt-6 space-y-4">
@@ -285,7 +251,7 @@ const Student = () => {
               </div>
             )}
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );

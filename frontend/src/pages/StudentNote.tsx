@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
-import MarkdownContent from "../components/MarkdownContent";
-import StudentSidebarNav from "../components/StudentSidebarNav";
-import { getMaterials, isVisibleToStudent } from "../data/materialsStorage";
+import LectureContent from "../components/LectureContent";
+import StudentSidebar from "../components/StudentSidebar";
+import { getMaterials } from "../data/materialsStorage";
 import { getStudentData } from "../api/student";
-import { getStudentDetails } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
 import { classIdToLabel } from "../data/classUtils";
 
@@ -40,12 +39,10 @@ const subjectLabelMap: Record<string, string> = {
 
 const StudentNote = () => {
   const { studentId, courseId, topicId, noteId } = useParams();
-  const navigate = useNavigate();
   const [apiSubjects, setApiSubjects] = useState<string[]>([]);
   const [studentGrade, setStudentGrade] = useState<number | null>(null);
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
   const [studentError, setStudentError] = useState<string | null>(null);
-  const [studentLevel, setStudentLevel] = useState<"weak" | "medium" | "strong" | null>(null);
 
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
@@ -72,6 +69,7 @@ const StudentNote = () => {
   const availableSubjects = apiSubjects.length
     ? subjects.filter((subject) => apiSubjects.includes(subject.label))
     : subjects;
+
   useEffect(() => {
     const apiId = toNumericId(studentId);
     if (!apiId) {
@@ -91,63 +89,6 @@ const StudentNote = () => {
       });
   }, [studentId]);
 
-  // Fetch student level for visibility filtering
-  // We need to get the teacher ID from existing materials to look up the correct level
-  const teacherIdForLevel = useMemo(() => {
-    const materials = getMaterials({
-      courseId: decodedCourse,
-      subject: subjectName,
-      ...(studentClassId ? { classId: studentClassId } : classLabel ? { className: classLabel } : {}),
-    });
-    // Find first material with a valid teacherId
-    for (const m of materials) {
-      const tid = toNumericId(m.teacherId);
-      if (tid) return tid;
-    }
-    return 1; // Fallback to teacher 1 if no materials found
-  }, [decodedCourse, subjectName, studentClassId, classLabel]);
-
-  useEffect(() => {
-    const apiId = toNumericId(studentId);
-    if (!apiId || !studentClassId || !subjectName) {
-      setStudentLevel(null);
-      return;
-    }
-    getStudentDetails({
-      class_id: studentClassId,
-      subject: subjectName,
-      teacher_id: teacherIdForLevel,
-      student_id: apiId,
-    })
-      .then((response) => {
-        setStudentLevel(response.level);
-      })
-      .catch(() => {
-        setStudentLevel(null);
-      });
-  }, [studentId, studentClassId, subjectName, teacherIdForLevel]);
-
-  const materials = useMemo(() => {
-    if (studentError) {
-      return [];
-    }
-    const apiId = toNumericId(studentId);
-    // Fetch materials without teacherId filter - students should see all materials for their class
-    // Use classId OR className (not both) to avoid overly strict filtering
-    const allMaterials = getMaterials({
-      courseId: decodedCourse,
-      subject: subjectName,
-      ...(studentClassId ? { classId: studentClassId } : classLabel ? { className: classLabel } : {}),
-      topicName: decodedTopic,
-    });
-    // Filter by visibility - STRICT assignment targeting
-    return apiId
-      ? allMaterials.filter((m) => isVisibleToStudent(m, apiId, studentLevel ?? undefined))
-      : allMaterials;
-  }, [studentError, classLabel, studentClassId, studentLevel, decodedCourse, decodedTopic, subjectName, studentId]);
-  const sidebarNotes = materials.filter((item) => item.type === "note");
-  const sidebarTests = materials.filter((item) => item.type === "test");
-
   if (studentError) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#1E73F7]">
@@ -159,109 +100,15 @@ const StudentNote = () => {
   return (
     <div className="min-h-screen bg-[#1E73F7] text-slate-900">
       <div className="flex min-h-screen">
-        <aside className="fixed left-0 top-0 h-screen w-72 bg-white px-6 py-8 flex flex-col z-10">
-          <div className="flex items-center gap-3">
-            <div
-              className="h-10 w-10 overflow-hidden rounded-full bg-slate-200"
-              style={{
-                backgroundImage:
-                  "url('https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80')",
-                backgroundSize: "cover",
-              }}
-            />
-            <div>
-              <div className="text-sm font-bold text-slate-900">
-                {studentId ? `Учень ${studentId}` : "Учень"}
-              </div>
-              <div className="text-xs text-slate-500">
-                Клас: {classLabel || "—"}
-              </div>
-            </div>
-          </div>
+        {/* Static sidebar - always shows only subjects list */}
+        <StudentSidebar
+          studentId={studentId || ""}
+          classLabel={classLabel || undefined}
+          subjects={availableSubjects}
+          activeSubjectId={subjectSlug}
+        />
 
-          <div className="mt-8 space-y-2">
-            {availableSubjects.map((subject) => {
-              const isActive = subjectSlug === subject.id;
-              return (
-                <button
-                  key={subject.id}
-                  type="button"
-                  onClick={() => navigate(`/student/${studentId}?subject=${subject.id}`)}
-                  className={`flex w-full items-center gap-4 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${
-                    isActive
-                      ? "bg-[#E9F1FF] text-[#1E73F7]"
-                      : "text-slate-900 hover:bg-slate-50"
-                  }`}
-                >
-                  <div
-                    className={`flex items-center justify-center ${
-                      isActive ? "text-[#1E73F7]" : "text-slate-900"
-                    }`}
-                  >
-                    {subject.icon}
-                  </div>
-                  {subject.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Back navigation */}
-          <div className="mt-6 border-t border-slate-200 pt-6 px-2">
-            <StudentSidebarNav
-              items={[
-                {
-                  label: decodedTopic || "Тема",
-                  href: backToTopicHref,
-                },
-                {
-                  label: noteTitle,
-                  isActive: true,
-                },
-              ]}
-            />
-          </div>
-
-          {/* Materials for current topic */}
-          <div className="mt-6 border-t border-slate-200 pt-6 space-y-2 text-sm">
-            {sidebarNotes.map((item) => (
-              <Link
-                key={item.id}
-                to={`/student/${studentId}/note/${courseId}/${topicId}/${item.id}`}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 font-semibold transition ${
-                  item.id === noteId
-                    ? "bg-[#E9F1FF] text-[#1E73F7]"
-                    : "text-slate-800 hover:bg-slate-50"
-                }`}
-              >
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
-                  <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
-                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
-                    <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
-                  </svg>
-                </span>
-                {item.title}
-              </Link>
-            ))}
-            {sidebarTests.map((item) => (
-              <Link
-                key={item.id}
-                to={`/student/${studentId}/test/${item.id}`}
-                className="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-700 hover:bg-slate-50"
-              >
-                <img src="/src/assets/Group.svg" alt="" className="h-4 w-4" />
-                Тест. {item.title}
-              </Link>
-            ))}
-            {sidebarNotes.length === 0 && sidebarTests.length === 0 && (
-              <div className="px-4 py-3 text-slate-400 text-sm">
-                Немає матеріалів
-              </div>
-            )}
-          </div>
-        </aside>
-
-        <main className="ml-72 flex-1 px-10 py-6 w-full">
+        <main className="flex-1 px-8 py-10">
           <div className="flex items-center gap-4 mb-4">
             <BackButton fallbackPath={backToTopicHref} />
             <Breadcrumbs
@@ -283,7 +130,12 @@ const StudentNote = () => {
               </h2>
               <div className="mt-4">
                 {noteMaterial?.content ? (
-                  <MarkdownContent content={noteMaterial.content} skipFirstHeading />
+                  <LectureContent
+                    content={noteMaterial.content}
+                    sources={noteMaterial.sources ?? []}
+                    userRole="student"
+                    skipFirstHeading
+                  />
                 ) : (
                   <div className="space-y-6">
                     <p>
