@@ -122,7 +122,7 @@ async def generate_recommendation_node(state: RecommendationState) -> Dict[str, 
     response = await client.generate(
         prompt=full_prompt,
         temperature=0.7,
-        max_tokens=800,
+        max_tokens=1500,
     )
 
     return {
