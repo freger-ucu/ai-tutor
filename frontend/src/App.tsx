@@ -1,7 +1,6 @@
 import "./App.css";
 import Home from "./pages/Home";
 import Teacher from "./pages/Teacher";
-import TeacherClass from "./pages/TeacherClass";
 import TeacherStudentDetail from "./pages/TeacherStudentDetail";
 import TeacherTopic from "./pages/TeacherTopic";
 import TeacherTest from "./pages/TeacherTest";
