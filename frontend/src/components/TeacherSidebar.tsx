@@ -56,7 +56,7 @@ const TeacherSidebar = ({
   const inactiveClass = "font-medium text-slate-800 hover:bg-slate-100";
 
   return (
-    <aside className="w-64 shrink-0 bg-white px-6 py-8">
+    <aside className="w-64 min-w-64 max-w-64 shrink-0 flex-shrink-0 flex-grow-0 bg-white px-6 py-8">
       {/* Teacher profile section */}
       <div className="flex items-center gap-3">
         <div
