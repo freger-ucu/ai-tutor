@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 TARGET_QUESTION_COUNT = 12
-MAX_RETRY_ITERATIONS = 1  # Reduced from 2
+MAX_RETRY_ITERATIONS = 1
 MAX_CONCURRENT_LLM = 1 if settings.llm_provider == LLMProvider.GEMINI else 10
 MAX_CONCURRENT_RAG = 5
 
@@ -419,8 +419,13 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
                     level=level,
                 )
 
-                # Open questions need more tokens for explanations
-                max_tokens = 3000 if spec["question_type"] == "open" else 1500
+                # Token limits per question type (increased to prevent truncation)
+                TOKEN_LIMITS = {
+                    "single_choice": 2500,
+                    "multiple_choice": 2500,
+                    "open": 3500,
+                }
+                max_tokens = TOKEN_LIMITS.get(spec["question_type"], 2500)
 
                 response = await client.generate(
                     prompt=f"{TEST_GENERATOR_SYSTEM_PROMPT}\n\n{prompt}",
@@ -431,11 +436,11 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
 
                 parsed = parse_json_response(
                     response,
-                    fallback={},
+                    fallback=None,
                     context=f"TestGen-{spec['spec_id']}",
                 )
 
-                if not parsed:
+                if parsed is None or not parsed.get("question"):
                     # Log raw response for debugging
                     response_preview = response[:500] if response else "(empty)"
                     logger.info(

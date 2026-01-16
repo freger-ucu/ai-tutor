@@ -259,7 +259,7 @@ async def collect_gaps_node(state: NotesState) -> Dict[str, Any]:
         response = await client.generate(
             prompt=prompt,
             temperature=0.0,
-            max_tokens=500,
+            max_tokens=2500,
         )
 
         parsed = parse_json_response(
@@ -377,7 +377,7 @@ async def generate_notes_node(state: NotesState) -> Dict[str, Any]:
     response = await client.generate(
         prompt=f"{NOTES_SYSTEM_PROMPT}\n\n{prompt}",
         temperature=0.0,
-        max_tokens=4000,
+        max_tokens=10000,
     )
 
     # Parse response

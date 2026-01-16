@@ -121,7 +121,17 @@ class LLMClient:
                 response = await self.client.chat.completions.create(**kwargs)
             else:
                 raise
-        return response.choices[0].message.content
+
+        content = response.choices[0].message.content
+        finish_reason = response.choices[0].finish_reason
+
+        if not content:
+            logger.warning(
+                f"LLM returned empty content: model={self.model}, "
+                f"finish_reason={finish_reason}, max_tokens={max_tokens}"
+            )
+
+        return content or ""
 
     async def generate_json(
         self,
