@@ -366,7 +366,7 @@ const Teacher = () => {
                           <div className="text-sm font-semibold text-slate-700">
                             {group.title}
                           </div>
-                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="mt-3 space-y-3">
                             {group.classes.map((item) => (
                               <button
                                 key={item.id}
@@ -440,7 +440,7 @@ const Teacher = () => {
                           <div className="text-sm font-semibold text-slate-700">
                             {group.title}
                           </div>
-                          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                          <div className="mt-3 space-y-3">
                             {group.classes.map((item) => (
                               <button
                                 key={item.id}
