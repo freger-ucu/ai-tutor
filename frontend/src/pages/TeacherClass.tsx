@@ -31,11 +31,13 @@ const TeacherClass = () => {
 
   const [students, setStudents] = useState<TeacherStudentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [levelFilters, setLevelFilters] = useState({
+  const createDefaultFilters = () => ({
     strong: true,
     medium: true,
     weak: true,
   });
+  const [levelFilters, setLevelFilters] = useState(createDefaultFilters);
+  const [pendingLevelFilters, setPendingLevelFilters] = useState(createDefaultFilters);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement | null>(null);
 
@@ -101,29 +103,28 @@ const TeacherClass = () => {
       levelFilters.weak ? "weak" : null,
     ].filter(Boolean) as Array<"strong" | "medium" | "weak">;
     if (active.length === 3) {
-      return "All levels (3)";
+      return "Всі рівні (3)";
     }
     if (active.length === 2) {
-      return "2 levels selected";
+      return "Обрано 2 рівні";
     }
     if (active.length === 1) {
       const single = active[0];
       return single === "strong"
-        ? "High level (1)"
+        ? "Високий рівень"
         : single === "medium"
-        ? "Medium level (1)"
-        : "Low level (1)";
+        ? "Середній рівень"
+        : "Початковий рівень";
     }
-    return "No levels selected";
+    return "Рівні не обрано";
   }, [levelFilters]);
 
   const toggleFilter = (level: "strong" | "medium" | "weak") => {
-    setLevelFilters((prev) => ({ ...prev, [level]: !prev[level] }));
-    setIsFilterOpen(false);
+    setPendingLevelFilters((prev) => ({ ...prev, [level]: !prev[level] }));
   };
 
-  const clearFilters = () => {
-    setLevelFilters({ strong: true, medium: true, weak: true });
+  const applyFilters = () => {
+    setLevelFilters({ ...pendingLevelFilters });
     setIsFilterOpen(false);
   };
 
@@ -161,54 +162,57 @@ const TeacherClass = () => {
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setIsFilterOpen((open) => !open)}
-                    className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    onClick={() => {
+                      if (!isFilterOpen) {
+                        setPendingLevelFilters({ ...levelFilters });
+                      }
+                      setIsFilterOpen((open) => !open);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#1E73F7] hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                   >
                     {filterButtonLabel}
                     <span className="text-slate-400">▾</span>
                   </button>
                   {isFilterOpen && (
-                    <div className="absolute top-full left-0 z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
-                      <label className="group flex cursor-pointer items-center rounded-lg p-3 transition-all duration-200 hover:bg-gray-50">
-                        <input
-                          type="checkbox"
-                          checked={levelFilters.strong}
-                          onChange={() => toggleFilter("strong")}
-                          className="mr-3 h-4 w-4 rounded border-gray-300 accent-blue-600 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-medium text-gray-900 group-hover:text-gray-900">
+                    <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                      <div className="space-y-2">
+                        <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-green-100 px-3 py-2 text-sm font-semibold text-green-700 transition hover:brightness-95">
+                          <input
+                            type="checkbox"
+                            checked={pendingLevelFilters.strong}
+                            onChange={() => toggleFilter("strong")}
+                            className="h-4 w-4 rounded border-slate-300 accent-blue-600 text-blue-600 focus:ring-blue-500"
+                          />
                           Високий рівень
-                        </span>
-                      </label>
-                      <label className="group flex cursor-pointer items-center rounded-lg p-3 transition-all duration-200 hover:bg-gray-50">
-                        <input
-                          type="checkbox"
-                          checked={levelFilters.medium}
-                          onChange={() => toggleFilter("medium")}
-                          className="mr-3 h-4 w-4 rounded border-gray-300 accent-blue-600 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-medium text-gray-900 group-hover:text-gray-900">
+                        </label>
+                        <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-yellow-100 px-3 py-2 text-sm font-semibold text-yellow-700 transition hover:brightness-95">
+                          <input
+                            type="checkbox"
+                            checked={pendingLevelFilters.medium}
+                            onChange={() => toggleFilter("medium")}
+                            className="h-4 w-4 rounded border-slate-300 accent-blue-600 text-blue-600 focus:ring-blue-500"
+                          />
                           Середній рівень
-                        </span>
-                      </label>
-                      <label className="group flex cursor-pointer items-center rounded-lg p-3 transition-all duration-200 hover:bg-gray-50">
-                        <input
-                          type="checkbox"
-                          checked={levelFilters.weak}
-                          onChange={() => toggleFilter("weak")}
-                          className="mr-3 h-4 w-4 rounded border-gray-300 accent-blue-600 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-medium text-gray-900 group-hover:text-gray-900">
-                          Низький рівень
-                        </span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={clearFilters}
-                        className="mx-3 mb-2 mt-2 w-[calc(100%-1.5rem)] rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition hover:bg-gray-50"
-                      >
-                        Clear filters
-                      </button>
+                        </label>
+                        <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-pink-100 px-3 py-2 text-sm font-semibold text-pink-700 transition hover:brightness-95">
+                          <input
+                            type="checkbox"
+                            checked={pendingLevelFilters.weak}
+                            onChange={() => toggleFilter("weak")}
+                            className="h-4 w-4 rounded border-slate-300 accent-blue-600 text-blue-600 focus:ring-blue-500"
+                          />
+                          Початковий рівень
+                        </label>
+                      </div>
+                      <div className="mt-4 grid gap-2">
+                        <button
+                          type="button"
+                          onClick={applyFilters}
+                          className="w-full rounded-xl bg-[#1E73F7] px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#1A63D6]"
+                        >
+                          Застосувати фільтр
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -249,7 +253,7 @@ const TeacherClass = () => {
                               ? "bg-green-100 text-green-700"
                               : student.subject_level === "medium"
                               ? "bg-yellow-100 text-yellow-700"
-                              : "bg-red-100 text-red-700"
+                              : "bg-pink-100 text-pink-700"
                           }`}
                         >
                           {levelLabels[student.subject_level] ??
