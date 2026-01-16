@@ -5,20 +5,25 @@ Generates a pool of validated test questions using batch processing
 with an intelligent planning phase for concept coverage.
 
 Flow:
-    retrieve_context → plan_test → retrieve_concepts → batch_generate
-                                                            ↓
-                                                      batch_validate
-                                                            ↓
-                                                      prepare_retry ──┐
-                                                            ↓         │
-                                                        finalize ◄────┘
+    retrieve_context → plan_test (assigns difficulty) → retrieve_concepts → batch_generate
+                                                                                  ↓
+                                                                            batch_validate
+                                                                                  ↓
+                                                                            prepare_retry ──┐
+                                                                                  ↓         │
+                                                                          finalize (sort) ◄─┘
 
 Key Design:
 - Planning phase: 1 LLM call to design entire test structure
+- CPU-based difficulty distribution: Assigned at planning based on student level
+  - weak students: 6 easy, 4 medium, 2 hard
+  - medium students: 4 easy, 4 medium, 4 hard
+  - strong students: 2 easy, 4 medium, 6 hard
 - Per-concept RAG: Parallel retrieval for each identified concept
-- Batch generation: All questions generated in parallel
-- Solver-based validation: Independent solver validates each question (like agent.py)
-- Smart retry: Up to 2 retry iterations for failed questions
+- Batch generation: All questions generated in parallel with difficulty-aware prompts
+- Solver-based validation: Independent solver validates each question
+- Smart retry: Only retry if 3+ questions fail, max 1 retry iteration
+- Output sorted by difficulty: easy first, then medium, then hard
 """
 
 import asyncio
@@ -52,6 +57,36 @@ TARGET_QUESTION_COUNT = 12
 MAX_RETRY_ITERATIONS = 1
 MAX_CONCURRENT_LLM = 1 if settings.llm_provider == LLMProvider.GEMINI else 10
 MAX_CONCURRENT_RAG = 5
+MIN_FAILED_FOR_RETRY = 3  # Only retry if 3+ questions failed
+
+
+# =============================================================================
+# Difficulty Distribution (CPU-based)
+# =============================================================================
+
+
+def compute_difficulty_distribution(level: str) -> List[str]:
+    """
+    Compute difficulty distribution for 12 questions based on student level.
+
+    Uses "easy", "medium", "hard" internally.
+    Converted to "difficult" at API layer (teacher.py).
+
+    Args:
+        level: Student level ("weak", "medium", "strong")
+
+    Returns:
+        List of 12 difficulty strings
+    """
+    if level == "weak":
+        # More easy questions for weaker students: 6 easy, 4 medium, 2 hard
+        return ["easy"] * 6 + ["medium"] * 4 + ["hard"] * 2
+    elif level == "strong":
+        # More hard questions for stronger students: 2 easy, 4 medium, 6 hard
+        return ["easy"] * 2 + ["medium"] * 4 + ["hard"] * 6
+    else:  # medium (default)
+        # Balanced distribution: 4 easy, 4 medium, 4 hard
+        return ["easy"] * 4 + ["medium"] * 4 + ["hard"] * 4
 
 
 # =============================================================================
@@ -65,6 +100,7 @@ class QuestionSpec(TypedDict):
     question_type: Literal["single_choice", "multiple_choice", "open"]
     concept: str  # What concept to assess
     focus: str    # Specific aspect to test
+    difficulty: Literal["easy", "medium", "hard"]  # Assigned by CPU distribution
 
 
 class TestPlan(TypedDict):
@@ -197,7 +233,7 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     Plan test structure using LLM.
 
     Identifies key concepts and creates question specifications.
-    Difficulty is NOT determined here - it's classified post-factum.
+    Difficulty is assigned here using CPU-based distribution based on student level.
     """
     start_time = time.time()
 
@@ -222,13 +258,13 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     response = await client.generate(
         prompt=f"{TEST_PLANNER_SYSTEM_PROMPT}\n\n{prompt}",
         temperature=0.3,
-        max_tokens=3000,
+        max_tokens=5000,
         json_mode=True,
     )
 
     parsed = parse_json_response(
         response,
-        fallback=_generate_fallback_plan(topic),
+        fallback=_generate_fallback_plan(topic, level),
         context="TestPlanner",
     )
 
@@ -236,13 +272,19 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     question_specs = parsed.get("question_specs", [])
     concepts = parsed.get("concepts", [topic])
 
+    # Compute difficulty distribution based on student level
+    difficulties = compute_difficulty_distribution(level)
+
     normalized_specs: List[QuestionSpec] = []
     for i, spec in enumerate(question_specs):
+        # Assign difficulty from CPU distribution
+        difficulty = difficulties[i] if i < len(difficulties) else "medium"
         normalized_specs.append({
             "spec_id": spec.get("spec_id", i + 1),
             "question_type": spec.get("question_type", "single_choice"),
             "concept": spec.get("concept", topic),
             "focus": spec.get("focus", ""),
+            "difficulty": difficulty,
         })
 
     # If planner didn't produce enough specs, add fallback
@@ -253,6 +295,7 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
                 topic=topic,
                 count=TARGET_QUESTION_COUNT - len(normalized_specs),
                 start_id=len(normalized_specs) + 1,
+                level=level,
             )
         )
 
@@ -262,8 +305,16 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
         "rationale": parsed.get("rationale", ""),
     }
 
+    # Log difficulty distribution
+    easy_count = sum(1 for s in normalized_specs if s.get("difficulty") == "easy")
+    medium_count = sum(1 for s in normalized_specs if s.get("difficulty") == "medium")
+    hard_count = sum(1 for s in normalized_specs if s.get("difficulty") == "hard")
+
     planning_time = int((time.time() - start_time) * 1000)
-    logger.info(f"Test plan created in {planning_time}ms: {len(normalized_specs)} specs, concepts: {concepts}")
+    logger.info(
+        f"Test plan created in {planning_time}ms: {len(normalized_specs)} specs, "
+        f"difficulty distribution: easy={easy_count}, medium={medium_count}, hard={hard_count}"
+    )
 
     return {
         "test_plan": test_plan,
@@ -274,9 +325,9 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     }
 
 
-def _generate_fallback_plan(topic: str) -> Dict[str, Any]:
+def _generate_fallback_plan(topic: str, level: str = "medium") -> Dict[str, Any]:
     """Generate fallback plan if LLM fails."""
-    specs = _generate_fallback_specs(topic, TARGET_QUESTION_COUNT, 1)
+    specs = _generate_fallback_specs(topic, TARGET_QUESTION_COUNT, 1, level)
     return {
         "concepts": [topic],
         "question_specs": specs,
@@ -288,8 +339,9 @@ def _generate_fallback_specs(
     topic: str,
     count: int,
     start_id: int,
+    level: str = "medium",
 ) -> List[QuestionSpec]:
-    """Generate fallback specs with balanced type distribution."""
+    """Generate fallback specs with balanced type and difficulty distribution."""
     import random
     specs: List[QuestionSpec] = []
 
@@ -301,13 +353,20 @@ def _generate_fallback_specs(
     )
     random.shuffle(types)
 
+    # Get difficulty distribution based on level
+    difficulties = compute_difficulty_distribution(level)
+
     for i in range(count):
         q_type = types[i % len(types)]
+        # Use difficulty from distribution, accounting for start_id offset
+        difficulty_idx = (start_id - 1 + i) % len(difficulties)
+        difficulty = difficulties[difficulty_idx] if difficulty_idx < len(difficulties) else "medium"
         specs.append({
             "spec_id": start_id + i,
             "question_type": q_type,
             "concept": topic,
             "focus": "",
+            "difficulty": difficulty,
         })
 
     return specs
@@ -377,7 +436,7 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
     Generate all pending questions in parallel.
 
     Uses concept-specific context for each question.
-    Difficulty is NOT set here - classified post-factum.
+    Difficulty is assigned from spec (set during planning phase).
     """
     start_time = time.time()
 
@@ -404,7 +463,7 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
                 # Get concept-specific context
                 context = concept_contexts.get(spec["concept"], base_context)
 
-                # Pass actual question type for differentiated prompts
+                # Pass actual question type and difficulty for differentiated prompts
                 # single_choice: 4 options, 1 correct (correct_answer_index)
                 # multiple_choice: 4 options, 2-3 correct (correct_answer_indices)
                 # open: no options, free text answer
@@ -417,13 +476,14 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
                     concept=spec["concept"],
                     focus=spec["focus"],
                     level=level,
+                    difficulty=spec.get("difficulty", "medium"),
                 )
 
-                # Token limits per question type (increased to prevent truncation)
+                # Token limits per question type
                 TOKEN_LIMITS = {
-                    "single_choice": 2500,
-                    "multiple_choice": 2500,
-                    "open": 3500,
+                    "single_choice": 3500,
+                    "multiple_choice": 3500,
+                    "open": 4000,
                 }
                 max_tokens = TOKEN_LIMITS.get(spec["question_type"], 2500)
 
@@ -492,11 +552,12 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
                             parsed["correct_answer_indices"] = correct_indices
                             logger.info(f"[GEN] spec_id={spec['spec_id']} - Converted answer_options to multiple_choice with {len(correct_indices)} correct")
 
-                # Normalize the question (difficulty will be set by classify_difficulty_node)
+                # Normalize the question (difficulty assigned from spec)
                 question = parsed
                 question["type"] = spec["question_type"]
                 question["spec_id"] = spec["spec_id"]
                 question["concept"] = spec["concept"]
+                question["difficulty"] = spec.get("difficulty", "medium")
 
                 # Ensure correct_answer_index(es) for choice questions
                 if spec["question_type"] == "single_choice":
@@ -727,13 +788,14 @@ def prepare_retry_node(state: TestGenState) -> Dict[str, Any]:
     """
     Prepare failed specs for retry.
 
-    Finds original specs for failed questions and queues them
-    for another generation attempt (max 1 iteration).
+    Only retries if 3 or more questions failed (otherwise skip retry).
+    Max 1 retry iteration.
     """
     retry_count = state.get("retry_count", 0)
     failed_specs = state.get("failed_specs", [])
     test_plan = state.get("test_plan") or {}
 
+    # Check if we should retry: need 3+ failures AND haven't retried yet
     if retry_count >= MAX_RETRY_ITERATIONS:
         logger.info(f"Max retry iterations ({MAX_RETRY_ITERATIONS}) reached")
         # Move remaining failed to final failed list
@@ -747,6 +809,18 @@ def prepare_retry_node(state: TestGenState) -> Dict[str, Any]:
         logger.info("No failed specs to retry")
         return {"pending_specs": []}
 
+    # Only retry if 3+ questions failed
+    if len(failed_specs) < MIN_FAILED_FOR_RETRY:
+        logger.info(
+            f"Only {len(failed_specs)} failed (threshold: {MIN_FAILED_FOR_RETRY}), skipping retry"
+        )
+        # Move failed to final list without retry
+        return {
+            "pending_specs": [],
+            "failed_questions": state.get("failed_questions", []) + failed_specs,
+            "failed_specs": [],
+        }
+
     # Find original specs for failed questions
     original_specs = {s["spec_id"]: s for s in test_plan.get("question_specs", [])}
     failed_ids = {f["spec_id"] for f in failed_specs}
@@ -754,13 +828,14 @@ def prepare_retry_node(state: TestGenState) -> Dict[str, Any]:
     retry_specs: List[QuestionSpec] = []
     for spec_id in failed_ids:
         if spec_id in original_specs:
-            # Create modified spec for retry with new ID
+            # Create modified spec for retry with new ID, preserving difficulty
             original = original_specs[spec_id]
             retry_specs.append({
                 "spec_id": spec_id + 1000 * (retry_count + 1),
                 "question_type": original["question_type"],
                 "concept": original["concept"],
                 "focus": f"{original.get('focus', '')} (retry {retry_count + 1})".strip(),
+                "difficulty": original.get("difficulty", "medium"),
             })
 
     logger.info(f"Prepared {len(retry_specs)} specs for retry iteration {retry_count + 1}")
@@ -772,117 +847,13 @@ def prepare_retry_node(state: TestGenState) -> Dict[str, Any]:
     }
 
 
-def should_retry(state: TestGenState) -> Literal["batch_generate", "classify_difficulty"]:
-    """Decide whether to retry or proceed to difficulty classification."""
+def should_retry(state: TestGenState) -> Literal["batch_generate", "finalize"]:
+    """Decide whether to retry or proceed to finalize."""
     pending_specs = state.get("pending_specs", [])
 
     if pending_specs:
         return "batch_generate"
-    return "classify_difficulty"
-
-
-# =============================================================================
-# Node: Classify Difficulty (Post-factum)
-# =============================================================================
-
-
-@trace_chain(name="classify_difficulty")
-async def classify_difficulty_node(state: TestGenState) -> Dict[str, Any]:
-    """
-    Classify difficulty for all validated questions using LLM.
-
-    Uses BATCH classification for better difficulty distribution.
-    The LLM sees all questions together and is instructed to use all three levels.
-    """
-    from app.prompts.test_generator import build_batch_difficulty_classifier_prompt
-
-    start_time = time.time()
-
-    questions = state.get("validated_questions", [])
-    subject = state.get("subject", "")
-    grade = state.get("grade", 9)
-
-    if not questions:
-        logger.warning("No questions to classify")
-        return {}
-
-    logger.info(f"Classifying difficulty for {len(questions)} questions (batch mode)")
-
-    client = get_llm_client()
-
-    # Build batch classification prompt
-    prompt = build_batch_difficulty_classifier_prompt(
-        subject=subject,
-        grade=grade,
-        questions=questions,
-    )
-
-    try:
-        response = await client.generate(
-            prompt=prompt,
-            temperature=0.1,  # Small temperature for variety
-            max_tokens=2000,  # Enough for all classifications
-            json_mode=True,
-        )
-
-        result = parse_json_response(
-            response,
-            fallback={"classifications": []},
-            context="BatchDifficultyClassifier",
-        )
-
-        classifications = result.get("classifications", [])
-
-        # Build a map of spec_id -> difficulty
-        difficulty_map: Dict[int, str] = {}
-        for c in classifications:
-            spec_id = c.get("spec_id")
-            difficulty = c.get("difficulty", "medium").lower()
-            if difficulty not in {"easy", "medium", "hard"}:
-                difficulty = "medium"
-            if spec_id is not None:
-                difficulty_map[spec_id] = difficulty
-                logger.debug(
-                    f"[CLASSIFY] spec_id={spec_id} - {difficulty} | "
-                    f"{c.get('reasoning', '')[:50]}"
-                )
-
-        # Apply classifications to questions
-        for q in questions:
-            spec_id = q.get("spec_id")
-            if spec_id in difficulty_map:
-                q["difficulty"] = difficulty_map[spec_id]
-            else:
-                # Fallback for unclassified questions
-                q["difficulty"] = "medium"
-                logger.warning(f"[CLASSIFY] spec_id={spec_id} not in batch result, defaulting to medium")
-
-    except Exception as e:
-        logger.error(f"Batch difficulty classification failed: {e}")
-        # Fallback: distribute difficulties evenly
-        logger.info("Using fallback distribution: ~33% each")
-        n = len(questions)
-        for i, q in enumerate(questions):
-            if i < n // 3:
-                q["difficulty"] = "easy"
-            elif i < 2 * n // 3:
-                q["difficulty"] = "medium"
-            else:
-                q["difficulty"] = "hard"
-
-    classification_time = int((time.time() - start_time) * 1000)
-    logger.info(f"Difficulty classification complete in {classification_time}ms")
-
-    # Log distribution
-    easy = sum(1 for q in questions if q.get("difficulty") == "easy")
-    medium = sum(1 for q in questions if q.get("difficulty") == "medium")
-    hard = sum(1 for q in questions if q.get("difficulty") == "hard")
-    logger.info(f"Difficulty distribution: easy={easy}, medium={medium}, hard={hard}")
-
-    return {
-        "validated_questions": questions,
-        "llm_calls_count": state.get("llm_calls_count", 0) + 1,  # Only 1 batch call now
-    }
+    return "finalize"
 
 
 # =============================================================================
@@ -894,22 +865,30 @@ def finalize_node(state: TestGenState) -> Dict[str, Any]:
     """
     Finalize the test generation.
 
-    Logs statistics and returns final state.
+    Sorts questions by difficulty (easy first, then medium, then hard)
+    and logs statistics.
     """
     validated = state.get("validated_questions", [])
 
+    # Sort by difficulty: easy → medium → hard
+    difficulty_order = {"easy": 0, "medium": 1, "hard": 2}
+    sorted_questions = sorted(
+        validated,
+        key=lambda q: difficulty_order.get(q.get("difficulty", "medium"), 1)
+    )
+
     # Count by difficulty
-    easy_count = sum(1 for q in validated if q.get("difficulty") == "easy")
-    medium_count = sum(1 for q in validated if q.get("difficulty") == "medium")
-    hard_count = sum(1 for q in validated if q.get("difficulty") == "hard")
+    easy_count = sum(1 for q in sorted_questions if q.get("difficulty") == "easy")
+    medium_count = sum(1 for q in sorted_questions if q.get("difficulty") == "medium")
+    hard_count = sum(1 for q in sorted_questions if q.get("difficulty") == "hard")
 
     # Count by type
-    single_count = sum(1 for q in validated if q.get("type") == "single_choice")
-    multiple_count = sum(1 for q in validated if q.get("type") == "multiple_choice")
-    open_count = sum(1 for q in validated if q.get("type") == "open")
+    single_count = sum(1 for q in sorted_questions if q.get("type") == "single_choice")
+    multiple_count = sum(1 for q in sorted_questions if q.get("type") == "multiple_choice")
+    open_count = sum(1 for q in sorted_questions if q.get("type") == "open")
 
     logger.info(
-        f"Test generation complete: {len(validated)} questions "
+        f"Test generation complete: {len(sorted_questions)} questions "
         f"(easy={easy_count}, medium={medium_count}, hard={hard_count}, "
         f"single_choice={single_count}, multiple_choice={multiple_count}, open={open_count})"
     )
@@ -926,7 +905,7 @@ def finalize_node(state: TestGenState) -> Dict[str, Any]:
         f"validation={state.get('validation_time_ms', 0)}ms"
     )
 
-    return {}
+    return {"validated_questions": sorted_questions}
 
 
 # =============================================================================
@@ -939,15 +918,16 @@ def build_test_gen_graph():
     Build the LangGraph workflow for parallel test generation.
 
     Flow:
-        retrieve_context → plan_test → retrieve_concepts → batch_generate
-                                                                ↓
-                                                          batch_validate
-                                                                ↓
-                                                          prepare_retry ──┐
-                                                                ↓         │
-                                                    classify_difficulty ◄─┘
-                                                                ↓
-                                                            finalize
+        retrieve_context → plan_test (assigns difficulty) → retrieve_concepts → batch_generate
+                                                                                      ↓
+                                                                                batch_validate
+                                                                                      ↓
+                                                                                prepare_retry ──┐
+                                                                                      ↓         │
+                                                                              finalize (sort) ◄─┘
+
+    Note: Difficulty is assigned at planning time (CPU-based distribution),
+    not classified post-factum. Retry only happens if 3+ questions fail.
     """
     from langgraph.graph import StateGraph, END
 
@@ -960,7 +940,6 @@ def build_test_gen_graph():
     workflow.add_node("batch_generate", batch_generate_node)
     workflow.add_node("batch_validate", batch_validate_node)
     workflow.add_node("prepare_retry", prepare_retry_node)
-    workflow.add_node("classify_difficulty", classify_difficulty_node)
     workflow.add_node("finalize", finalize_node)
 
     # Setup edges
@@ -971,17 +950,16 @@ def build_test_gen_graph():
     workflow.add_edge("batch_generate", "batch_validate")
     workflow.add_edge("batch_validate", "prepare_retry")
 
-    # Conditional retry loop - goes to classify_difficulty when done
+    # Conditional retry loop - goes to finalize when done
     workflow.add_conditional_edges(
         "prepare_retry",
         should_retry,
         {
             "batch_generate": "batch_generate",
-            "classify_difficulty": "classify_difficulty",
+            "finalize": "finalize",
         },
     )
 
-    workflow.add_edge("classify_difficulty", "finalize")
     workflow.add_edge("finalize", END)
 
     return workflow.compile()

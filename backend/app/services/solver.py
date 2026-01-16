@@ -737,7 +737,7 @@ async def _validate_open(
     response = await client.generate(
         prompt=solver_prompt,
         temperature=0.0,
-        max_tokens=1500,
+        max_tokens=2000,
     )
 
     # Check for INVALID first
