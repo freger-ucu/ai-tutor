@@ -140,7 +140,7 @@ async def evaluate_answer_node(state: CheckAnswerState) -> Dict[str, Any]:
     response = await client.generate(
         prompt=full_prompt,
         temperature=0.3,  # Lower temperature for consistent evaluation
-        max_tokens=600,
+        max_tokens=1500,
     )
 
     # Parse response

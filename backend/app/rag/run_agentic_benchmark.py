@@ -35,8 +35,8 @@ sys.path.insert(0, str(project_root))
 # Set working directory for data loading
 os.chdir(project_root)
 
-from scripts.agentic_rag_solution.graph import solve_question, solve_question_with_state
-from scripts.agentic_rag_solution.utils.data_loader import get_data_loader
+from app.rag.graph import solve_question, solve_question_with_state
+from app.rag.utils.rag_data_loader import get_textbook_loader
 
 
 async def run_benchmark(
@@ -64,7 +64,7 @@ async def run_benchmark(
     print("=" * 60)
 
     # Load questions
-    data_loader = get_data_loader()
+    data_loader = get_textbook_loader()
     questions_df = data_loader.load_benchmark_questions()
 
     # Apply filters
@@ -182,7 +182,7 @@ async def test_single_question(
     print(f"  SINGLE QUESTION TEST ({version})")
     print("=" * 60)
 
-    data_loader = get_data_loader()
+    data_loader = get_textbook_loader()
 
     if question_id:
         question = data_loader.get_question_by_id(question_id)

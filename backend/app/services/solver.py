@@ -347,12 +347,18 @@ ANSWER_COMPARISON_PROMPT = """Порівняй дві відповіді на п
 {solver_answer}
 
 ## Завдання
-Визнач, чи відповіді еквівалентні ЗА ЗМІСТОМ (не обов'язково дослівно).
+Визнач, чи відповіді ЕКВІВАЛЕНТНІ за змістом.
 
-Відповіді еквівалентні, якщо:
-- Передають однаковий зміст/факт
-- Містять ту саму ключову інформацію
-- Відрізняються лише формулюванням
+Відповіді ЕКВІВАЛЕНТНІ, якщо:
+- Передають ТУ САМУ ключову інформацію/результат
+- Відрізняються лише формою запису (0.5 = 1/2, "у 1918 році" = "1918 р.")
+- Одна коротша, інша детальніша, але СУТЬ однакова
+- Використовують синоніми чи перефразування
+
+НЕ вважай різними:
+- Різні формати чисел: -0.5 і -1/2, 25% і 0.25
+- Короткі vs повні відповіді з тим самим результатом
+- Різний порядок перелічення (якщо питання не вимагає порядку)
 
 JSON: {{"match": true/false, "reason": "коротке пояснення"}}"""
 
@@ -385,21 +391,41 @@ def _extract_answer(response: str, allow_multiple: bool = False) -> str:
         - Comma-separated "A,C" for multiple_choice
         - Empty string if no answer found
     """
+    if not response:
+        return ""
+
     # Check for INVALID first
     if re.search(r'\bINVALID\b', response, re.IGNORECASE):
         return "INVALID"
 
-    # Try "Відповідь: X" or "Відповідь: A,C" pattern
-    match = re.search(r'Відповідь:\s*([ABCD,\s]+)', response, re.IGNORECASE)
-    if match:
-        letters = re.findall(r'[ABCD]', match.group(1).upper())
-        if letters:
-            if allow_multiple:
-                return ",".join(sorted(set(letters)))  # "A,C"
-            else:
-                return letters[0]  # "A"
+    # Multiple patterns in priority order
+    patterns = [
+        # "Відповідь: A" or "Відповідь - A" or "Відповідь: A, C"
+        r'Відповідь[:\s\-–—]+([ABCD][,\s]*(?:[ABCD][,\s]*)*)',
+        # "Правильна відповідь: A"
+        r'[Пп]равильна\s+відповідь[:\s\-–—]+([ABCD][,\s]*(?:[ABCD][,\s]*)*)',
+        # "Отже, A" / "Тому A"
+        r'(?:Отже|Тому)[,:\s]+([ABCD])\b',
+        # **A** markdown bold
+        r'\*\*([ABCD])\*\*',
+        # "варіант A" or "варіант: A"
+        r'варіант[:\s]+([ABCD])\b',
+        # "відповідь A" (without colon)
+        r'відповідь\s+([ABCD])\b',
+        # Letter at end of response with optional punctuation
+        r'\b([ABCD])\s*[.!]?\s*$',
+    ]
 
-    # Fallback: find standalone letters
+    for pattern in patterns:
+        match = re.search(pattern, response, re.IGNORECASE | re.MULTILINE)
+        if match:
+            letters = re.findall(r'[ABCD]', match.group(1).upper())
+            if letters:
+                if allow_multiple:
+                    return ",".join(sorted(set(letters)))
+                return letters[0]
+
+    # Fallback: find standalone letters, take the last one
     letters = re.findall(r'\b([ABCD])\b', response)
     if letters:
         if allow_multiple:
@@ -615,7 +641,7 @@ async def _validate_mc(
     response = await client.generate(
         prompt=prompt,
         temperature=0.0,
-        max_tokens=500,
+        max_tokens=2000,
     )
 
     # Extract answer(s) from response
@@ -639,7 +665,8 @@ async def _validate_mc(
 
     # Handle empty answer
     if not solver_answer:
-        logger.warning(f"MC Validation: could not extract answer from response")
+        response_preview = response[:300] if response else "(empty)"
+        logger.warning(f"MC Validation: could not extract answer from response: {response_preview}")
         return CheckResult(
             is_valid=False,
             reason="Solver failed to provide an answer",
@@ -710,7 +737,7 @@ async def _validate_open(
     response = await client.generate(
         prompt=solver_prompt,
         temperature=0.0,
-        max_tokens=500,
+        max_tokens=1500,
     )
 
     # Check for INVALID first

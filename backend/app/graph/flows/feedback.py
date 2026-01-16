@@ -148,7 +148,7 @@ async def generate_feedback_node(state: FeedbackState) -> Dict[str, Any]:
     response = await client.generate(
         prompt=full_prompt,
         temperature=0.7,
-        max_tokens=800,
+        max_tokens=1500,
     )
 
     return {

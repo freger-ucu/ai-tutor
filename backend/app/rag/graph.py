@@ -60,7 +60,7 @@ def reset_graphs():
 
 
 # Backwards compatible aliases
-def build_agentic_graph() -> StateGraph:
+def build_agentic_graph():
     """Build default graph (V4 Enhanced)."""
     return build_v4_graph()
 
