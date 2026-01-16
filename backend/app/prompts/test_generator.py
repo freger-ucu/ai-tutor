@@ -252,6 +252,7 @@ def build_single_question_prompt(
     concept: Optional[str] = None,
     focus: Optional[str] = None,
     level: str = "medium",
+    difficulty: str = "medium",
 ) -> str:
     """
     Build prompt for generating exactly ONE question.
@@ -265,12 +266,24 @@ def build_single_question_prompt(
         concept: Specific concept to assess (from planner)
         focus: Specific aspect to test (from planner)
         level: Student level for subtle guidance ("weak", "medium", "strong")
+        difficulty: Target difficulty level ("easy", "medium", "hard")
 
     Returns:
         Formatted prompt string for single question generation
     """
     subject_rules = SUBJECT_RULES_MAP.get(subject, "")
     level_guidance = LEVEL_GUIDANCE.get(level, LEVEL_GUIDANCE["medium"])
+
+    # Build difficulty instruction
+    difficulty_labels = {
+        "easy": "ЛЕГКЕ (базовий рівень)",
+        "medium": "СЕРЕДНЄ (достатній рівень)",
+        "hard": "СКЛАДНЕ (високий рівень)",
+    }
+    difficulty_label = difficulty_labels.get(difficulty, difficulty_labels["medium"])
+
+    # Get subject-specific difficulty criteria
+    subject_criteria = get_subject_difficulty_criteria(subject, grade)
 
     # Build concept-focused instruction if provided
     concept_instruction = ""
@@ -286,6 +299,14 @@ def build_single_question_prompt(
 ## ФОКУС ПИТАННЯ:
 - Концепція: {concept}
 - Питання має перевіряти розуміння цієї концепції.
+"""
+
+    # Build difficulty instruction
+    difficulty_instruction = f"""
+## РІВЕНЬ СКЛАДНОСТІ: {difficulty_label}
+Питання ОБОВ'ЯЗКОВО має відповідати цьому рівню складності!
+
+{subject_criteria}
 """
 
     if question_type == "single_choice":
@@ -440,7 +461,7 @@ def build_single_question_prompt(
 
 ## ТЕМА (питання ТІЛЬКИ по цій темі!):
 {topic}
-{concept_instruction}
+{concept_instruction}{difficulty_instruction}
 ## РЕКОМЕНДАЦІЇ ДО СТИЛЮ:
 {level_guidance}
 

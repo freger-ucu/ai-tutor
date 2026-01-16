@@ -160,7 +160,7 @@ async def generate_recommendation(
     response = await llm_client.generate(
         prompt=full_prompt,
         temperature=0.7,
-        max_tokens=1500
+        max_tokens=2500
     )
 
     return response

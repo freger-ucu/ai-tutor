@@ -40,24 +40,26 @@ def test_gen_graph():
     """Build test generation graph (parallel architecture with planning).
 
     Flow:
-        retrieve_context → plan_test → retrieve_concepts → batch_generate
-                                                                ↓
-                                                          batch_validate
-                                                                ↓
-                                                          prepare_retry ──┐
-                                                                ↓         │
-                                                    classify_difficulty ◄─┘
-                                                                ↓
-                                                            finalize
+        retrieve_context → plan_test (assigns difficulty) → retrieve_concepts → batch_generate
+                                                                                      ↓
+                                                                                batch_validate
+                                                                                      ↓
+                                                                                prepare_retry ──┐
+                                                                                      ↓         │
+                                                                              finalize (sort) ◄─┘
 
     Key features:
     - Planning phase: 1 LLM call to design 12 question specs
-    - Level-aware generation: Prompts adjusted based on student level
+    - CPU-based difficulty: Assigned at planning based on student level
+      - weak: 6 easy, 4 medium, 2 hard
+      - medium: 4 easy, 4 medium, 4 hard
+      - strong: 2 easy, 4 medium, 6 hard
+    - Level-aware generation: Prompts adjusted based on student level and difficulty
     - Per-concept RAG: Parallel retrieval for each identified concept
     - Batch generation: All questions generated in parallel
     - Hybrid validation: MC reuses concept context, Open gets fresh RAG
-    - Post-factum difficulty: Difficulty classified after generation
-    - Smart retry: 1 retry iteration for failed questions
+    - Smart retry: Only retry if 3+ fail, max 1 retry iteration
+    - Output sorted: easy first, then medium, then hard
 
     Note: For Studio testing, recursion_limit=20 is sufficient.
     """
@@ -71,7 +73,6 @@ def test_gen_graph():
         batch_validate_node,
         prepare_retry_node,
         should_retry,
-        classify_difficulty_node,
         finalize_node,
     )
 
@@ -84,7 +85,6 @@ def test_gen_graph():
     workflow.add_node("batch_generate", batch_generate_node)
     workflow.add_node("batch_validate", batch_validate_node)
     workflow.add_node("prepare_retry", prepare_retry_node)
-    workflow.add_node("classify_difficulty", classify_difficulty_node)
     workflow.add_node("finalize", finalize_node)
 
     # Setup edges
@@ -95,17 +95,16 @@ def test_gen_graph():
     workflow.add_edge("batch_generate", "batch_validate")
     workflow.add_edge("batch_validate", "prepare_retry")
 
-    # Conditional retry loop - goes to classify_difficulty when done
+    # Conditional retry loop - goes to finalize when done
     workflow.add_conditional_edges(
         "prepare_retry",
         should_retry,
         {
             "batch_generate": "batch_generate",
-            "classify_difficulty": "classify_difficulty",
+            "finalize": "finalize",
         },
     )
 
-    workflow.add_edge("classify_difficulty", "finalize")
     workflow.add_edge("finalize", END)
     return workflow
 
