@@ -24,10 +24,6 @@ function App() {
       />
       <Route path="/teacher/:id" element={<Teacher />} />
       <Route
-        path="/teacher/:id/class/:courseId/:classId"
-        element={<TeacherClass />}
-      />
-      <Route
         path="/teacher/:id/class/:courseId/:classId/student/:studentId"
         element={<TeacherStudentDetail />}
       />
