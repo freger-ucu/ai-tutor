@@ -94,7 +94,29 @@ def fix_latex_escapes(json_str: str) -> str:
     LaTeX uses backslashes like \\begin, \\frac which Python JSON
     interprets as invalid escape sequences (\\b = backspace, \\f = formfeed).
     This converts single backslashes to double backslashes inside strings.
+
+    Key insight: We use a prefix list of known LaTeX commands that conflict
+    with JSON escapes to distinguish \\frac (LaTeX) from \\f (formfeed).
     """
+    # Common LaTeX commands that start with letters that are also JSON escapes.
+    # We check if the text after backslash starts with any of these prefixes.
+    # Format: commands starting with b, f, n, r, t (the ambiguous JSON escapes)
+    latex_prefixes = {
+        # \b... commands (JSON \b = backspace)
+        'bar', 'begin', 'beta', 'bf', 'big', 'binom', 'bmod', 'bold', 'boldsymbol',
+        'bot', 'boxed', 'brace', 'breve', 'bullet',
+        # \f... commands (JSON \f = formfeed)
+        'frac', 'flat', 'forall', 'footnote',
+        # \n... commands (JSON \n = newline)
+        'nabla', 'ne', 'neg', 'neq', 'newline', 'newcommand', 'ni', 'not', 'notin',
+        'nu', 'nwarrow',
+        # \r... commands (JSON \r = carriage return)
+        'rangle', 'rceil', 'ref', 'rfloor', 'rho', 'right', 'rightarrow', 'rm',
+        # \t... commands (JSON \t = tab)
+        'tan', 'tau', 'text', 'textbf', 'textit', 'textrm', 'therefore', 'theta',
+        'tilde', 'times', 'to', 'top', 'triangle',
+    }
+
     result = []
     in_string = False
     i = 0
@@ -109,20 +131,63 @@ def fix_latex_escapes(json_str: str) -> str:
             continue
 
         if in_string and char == '\\':
-            # Check if next char forms an invalid JSON escape
             if i + 1 < len(json_str):
                 next_char = json_str[i + 1]
-                # Valid JSON escapes: " \ / b f n r t u
-                valid_escapes = {'"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'}
-                if next_char not in valid_escapes:
-                    # It's a LaTeX command like \begin, \frac - double the backslash
-                    result.append('\\\\')
-                    i += 1
-                    continue
+                # Valid JSON escapes that are NOT ambiguous: " /
+                # Note: \\ is handled separately above
+                safe_json_escapes = {'"', '/'}
+                # Ambiguous: b f n r t (could be JSON escape or start of LaTeX)
+                ambiguous_escapes = {'b', 'f', 'n', 'r', 't'}
+
+                if next_char == 'u':
+                    # \uXXXX unicode escape - check for 4 hex digits
+                    if i + 5 < len(json_str) and all(c in '0123456789abcdefABCDEF' for c in json_str[i+2:i+6]):
+                        # Valid unicode escape, keep as-is
+                        result.append(char)
+                        i += 1
+                        continue
+                    else:
+                        # Not valid unicode, likely LaTeX like \underline
+                        result.append('\\\\')
+                        i += 1
+                        continue
+                elif next_char in ambiguous_escapes:
+                    # Check if this matches a known LaTeX command prefix
+                    # Extract potential command (letters after backslash)
+                    cmd_start = i + 1
+                    cmd_end = cmd_start
+                    while cmd_end < len(json_str) and json_str[cmd_end].isalpha():
+                        cmd_end += 1
+                    potential_cmd = json_str[cmd_start:cmd_end]
+
+                    # Check if it's a known LaTeX command
+                    is_latex = any(potential_cmd.startswith(prefix) or potential_cmd == prefix
+                                   for prefix in latex_prefixes)
+
+                    if is_latex:
+                        # It's a LaTeX command - double the backslash
+                        result.append('\\\\')
+                        i += 1
+                        continue
+                    else:
+                        # It's a JSON escape like \n, \t - keep as-is
+                        result.append(char)
+                        i += 1
+                        continue
                 elif next_char == '\\':
-                    # Already escaped, skip both
+                    # Already escaped (\\) - keep both backslashes and skip both
                     result.append('\\\\')
                     i += 2
+                    continue
+                elif next_char in safe_json_escapes:
+                    # Valid JSON escape like \" or \/ - keep as-is
+                    result.append(char)
+                    i += 1
+                    continue
+                else:
+                    # Not a valid JSON escape - must be LaTeX like \alpha, \cdot
+                    result.append('\\\\')
+                    i += 1
                     continue
             result.append(char)
             i += 1
@@ -202,6 +267,12 @@ def parse_json_response(
 
     text = response.strip()
 
+    # IMPORTANT: Always fix LaTeX escapes FIRST, before any parsing attempt.
+    # This is because \f and \b are valid JSON escapes (formfeed, backspace),
+    # but in LLM responses they're almost always LaTeX commands like \frac, \begin.
+    # If we parse first, json.loads will convert \frac to formfeed+rac, corrupting the data.
+    text = fix_latex_escapes(text)
+
     # Strategy 1: Direct parse
     try:
         return json.loads(text)
@@ -227,20 +298,6 @@ def parse_json_response(
         # Strategy 4: Fix unescaped newlines in JSON strings
         try:
             fixed = fix_json_newlines(json_str)
-            return json.loads(fixed)
-        except json.JSONDecodeError:
-            pass
-
-        # Strategy 5: Fix LaTeX escape sequences (like \begin, \frac)
-        try:
-            fixed = fix_latex_escapes(json_str)
-            return json.loads(fixed)
-        except json.JSONDecodeError:
-            pass
-
-        # Strategy 6: Fix both newlines and LaTeX
-        try:
-            fixed = fix_latex_escapes(fix_json_newlines(json_str))
             return json.loads(fixed)
         except json.JSONDecodeError as e:
             logger.debug(
