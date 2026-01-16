@@ -91,7 +91,7 @@ const TeacherSidebar = ({
           <span className={`flex items-center justify-center ${activeItem === "materials" ? "text-[#1E73F7]" : "text-slate-600"}`}>
             <MaterialsIcon />
           </span>
-          <span className="flex-1 text-left leading-5">Навчальні матеріали</span>
+          <span className="text-left leading-5 whitespace-nowrap">Навчальні&nbsp;матеріали</span>
         </button>
         <button
           type="button"
