@@ -8,7 +8,6 @@ import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import GenerateModalContent from "../components/GenerateModalContent";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
-import PillButton from "../components/PillButton";
 import SelectStudentsModal from "../components/SelectStudentsModal";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { addMaterial, deleteMaterial, getMaterials } from "../data/materialsStorage";
@@ -248,7 +247,10 @@ const TeacherTopic = () => {
                     key={item.id}
                     className="flex items-center justify-between px-5 py-4"
                   >
-                    <div className="flex items-center gap-3 text-sm font-semibold text-slate-900">
+                    <Link
+                      to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
+                      className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900 cursor-pointer"
+                    >
                       <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
                         <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
                           <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
@@ -256,26 +258,19 @@ const TeacherTopic = () => {
                         </svg>
                       </span>
                       {item.title}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Link
-                        to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
-                      >
-                        <PillButton label="Переглянути" />
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "conspect" })}
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-500"
-                        title="Видалити"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 6h18" />
-                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                        </svg>
-                      </button>
-                    </div>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "conspect" })}
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                      title="Видалити"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18" />
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                      </svg>
+                    </button>
                   </Card>
                 ))}
               </div>
@@ -298,27 +293,25 @@ const TeacherTopic = () => {
                     key={item.id}
                     className="flex items-center justify-between px-5 py-4"
                   >
-                    <div className="flex items-center gap-3 text-sm font-semibold text-slate-900">
+                    <Link
+                      to={`/teacher/${id}/test/${item.id}`}
+                      className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900 cursor-pointer"
+                    >
                       <img src="/src/assets/Group.svg" alt="" className="h-6 w-6" />
                       {item.title}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Link to={`/teacher/${id}/test/${item.id}`}>
-                        <PillButton label="Переглянути" />
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "test" })}
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-500"
-                        title="Видалити"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 6h18" />
-                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                        </svg>
-                      </button>
-                    </div>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "test" })}
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                      title="Видалити"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18" />
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                      </svg>
+                    </button>
                   </Card>
                 ))}
               </div>

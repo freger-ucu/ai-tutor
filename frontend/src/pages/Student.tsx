@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getMaterials, getTopics } from "../data/materialsStorage";
-import PillButton from "../components/PillButton";
 import StudentSidebar from "../components/StudentSidebar";
 import { getStudentData } from "../api/student";
 import { toNumericId } from "../api/idUtils";
@@ -202,7 +201,8 @@ const Student = () => {
             {topics.map((topic) => (
               <div
                 key={topic.id}
-                className="flex flex-wrap items-center justify-between gap-6 rounded-[24px] bg-white px-8 py-5 shadow-sm"
+                onClick={() => handleTopicClick(topic.title)}
+                className="flex flex-wrap items-center justify-between gap-6 rounded-[24px] bg-white px-8 py-5 shadow-sm cursor-pointer transition hover:shadow-md"
               >
                 <div className="min-w-[180px] font-semibold text-slate-900">
                   {topic.title}
@@ -236,12 +236,6 @@ const Student = () => {
                     {formatDate(topic.createdAt)}
                   </div>
                 </div>
-
-                <PillButton
-                  label="Переглянути"
-                  className="bg-[#E9F1FF] text-[#1E73F7] hover:bg-[#D4E4FF]"
-                  onClick={() => handleTopicClick(topic.title)}
-                />
               </div>
             ))}
 

@@ -4,7 +4,6 @@ import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import Card from "../components/Card";
 import Panel from "../components/Panel";
-import PillButton from "../components/PillButton";
 import StudentSidebar from "../components/StudentSidebar";
 import { getMaterials, isVisibleToStudent } from "../data/materialsStorage";
 import { getStudentTestCompletionMap } from "../data/studentProgress";
@@ -254,23 +253,20 @@ const StudentTopic = () => {
               <h2 className="text-xl font-semibold text-white">Конспекти</h2>
               <div className="mt-4 space-y-4">
                 {notes.length > 0 ? notes.map((item) => (
-                  <Card
+                  <Link
                     key={item.id}
-                    className="flex items-center justify-between px-5 py-4"
+                    to={`/student/${studentId}/note/${courseId}/${topicId}/${item.id}`}
                   >
-                    <div className="flex items-center gap-3 text-sm font-semibold text-slate-900">
+                    <Card className="flex items-center gap-3 px-5 py-4 cursor-pointer transition hover:shadow-md">
                       <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
                         <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
                           <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
                           <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
                         </svg>
                       </span>
-                      {item.title}
-                    </div>
-                    <Link to={`/student/${studentId}/note/${courseId}/${topicId}/${item.id}`}>
-                      <PillButton label="Переглянути" />
-                    </Link>
-                  </Card>
+                      <span className="text-sm font-semibold text-slate-900">{item.title}</span>
+                    </Card>
+                  </Link>
                 )) : (
                      <div className="rounded-2xl border border-white/10 px-6 py-8 text-center text-sm text-white/40">
                         Немає конспектів
@@ -285,8 +281,8 @@ const StudentTopic = () => {
                 {tests.length > 0 ? tests.map((item) => {
                   const filledSegments = Math.round(item.percent / 10);
                   return (
-                    <Card key={item.id} className="px-5 py-5">
-                      <div className="flex items-center justify-between">
+                    <Link key={item.id} to={`/student/${studentId}/test/${item.id}`}>
+                      <Card className="px-5 py-5 cursor-pointer transition hover:shadow-md">
                         <div className="flex items-center gap-3 text-sm font-semibold text-slate-900">
                           <img
                             src="/src/assets/Group.svg"
@@ -295,30 +291,25 @@ const StudentTopic = () => {
                           />
                           {item.title}
                         </div>
-                        <Link to={`/student/${studentId}/test/${item.id}`}>
-                          <PillButton
-                            label={item.isCompleted ? "Переглянути" : "Пройти"}
-                          />
-                        </Link>
-                      </div>
-                      <div className="mt-4 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          {Array.from({ length: 10 }).map((_, index) => (
-                            <span
-                              key={index}
-                              className={`h-4 w-2.5 rounded-full ${
-                                index < filledSegments
-                                  ? "bg-[#68E2B0]"
-                                  : "bg-[#E6EEF9]"
-                              }`}
-                            />
-                          ))}
+                        <div className="mt-4 flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            {Array.from({ length: 10 }).map((_, index) => (
+                              <span
+                                key={index}
+                                className={`h-4 w-2.5 rounded-full ${
+                                  index < filledSegments
+                                    ? "bg-[#68E2B0]"
+                                    : "bg-[#E6EEF9]"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <div className="text-sm text-slate-600">
+                            Остання спроба: {item.scoreText}
+                          </div>
                         </div>
-                        <div className="text-sm text-slate-600">
-                          Остання спроба: {item.scoreText}
-                        </div>
-                      </div>
-                    </Card>
+                      </Card>
+                    </Link>
                   );
                 }) : (
                      <div className="rounded-2xl border border-white/10 px-6 py-8 text-center text-sm text-white/40">

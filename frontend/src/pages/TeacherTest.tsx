@@ -229,12 +229,12 @@ const TeacherTest = () => {
             </button>
           </div>
 
-          {/* Main Card */}
-          <div className="mt-4 flex-1 rounded-[32px] bg-white p-8 shadow-xl overflow-y-auto min-h-0">
+          {/* Test content - same layout as student view */}
+          <div className="mt-6 flex-1 min-h-0 overflow-y-auto">
              <TestContainer
                testData={testData}
                statistics={statistics}
-               showStatistics={true}
+               showStatistics={false}
                viewMode="teacher"
              />
           </div>

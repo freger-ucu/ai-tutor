@@ -18,19 +18,22 @@ const TestOption = ({
 }: TestOptionProps) => {
   const resultStyles: Record<
     "correct" | "incorrect" | "partial",
-    { container: string; indicator: string }
+    { container: string; indicator: string; checkColor: string }
   > = {
     correct: {
-      container: "border-[#80E6B6] bg-[#80E6B6] text-slate-900",
-      indicator: "border-[#1E73F7] bg-[#1E73F7]",
+      container: "border-[#A8E6CF] bg-[#E8F8EF] text-slate-900",
+      indicator: "border-slate-700 bg-slate-700",
+      checkColor: "text-white",
     },
     incorrect: {
-      container: "border-[#FFBFE1] bg-[#FFBFE1] text-slate-900",
-      indicator: "border-[#1E73F7] bg-[#1E73F7]",
+      container: "border-[#FFD0E5] bg-[#FFF5F9] text-slate-900",
+      indicator: "border-slate-700 bg-slate-700",
+      checkColor: "text-white",
     },
     partial: {
-      container: "border-[#FFD9B3] bg-[#FFD9B3] text-slate-900",
-      indicator: "border-[#1E73F7] bg-[#1E73F7]",
+      container: "border-[#FFE4C4] bg-[#FFF8F0] text-slate-900",
+      indicator: "border-slate-700 bg-slate-700",
+      checkColor: "text-white",
     },
   };
   const resolvedResult =
@@ -43,25 +46,25 @@ const TestOption = ({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex w-full cursor-pointer items-center gap-4 rounded-xl border-2 px-5 py-4 text-left text-sm font-medium transition-all ${
+      className={`flex w-full cursor-pointer items-center gap-4 rounded-2xl border px-6 py-5 text-left text-base font-medium transition-all ${
         resolvedResult
           ? resolvedResult.container
           : isSelected
             ? "border-[#1E73F7] bg-[#E9F1FF] text-slate-900"
-            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+            : "border-slate-200 bg-[#F8FAFC] text-slate-700 hover:border-slate-300 hover:bg-white"
       } ${disabled ? "cursor-not-allowed" : ""} ${
-        disabled && !resolvedResult ? "opacity-60" : ""
+        disabled && !resolvedResult ? "opacity-70" : ""
       }`}
     >
       <span
-        className={`flex h-5 w-5 shrink-0 items-center justify-center border-2 transition-all ${
-          isSingle ? "rounded-full" : "rounded"
+        className={`flex h-5 w-5 shrink-0 items-center justify-center border transition-all ${
+          isSingle ? "rounded-full" : "rounded-md"
         } ${
-          resolvedResult
+          resolvedResult && isSelected
             ? resolvedResult.indicator
             : isSelected
-              ? "border-[#1E73F7] bg-[#1E73F7]"
-              : "border-slate-300 bg-white"
+              ? "border-slate-700 bg-slate-700"
+              : "border-slate-400 bg-white"
         }`}
       >
         {isSelected &&
@@ -69,21 +72,21 @@ const TestOption = ({
             <span className="h-2.5 w-2.5 rounded-full bg-white" />
           ) : (
             <svg
-              className="h-3 w-3 text-white"
+              className={`h-3 w-3 ${resolvedResult ? resolvedResult.checkColor : "text-white"}`}
               fill="none"
               stroke="currentColor"
+              strokeWidth={2.5}
               viewBox="0 0 24 24"
             >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={3}
                 d="M5 13l4 4L19 7"
               />
             </svg>
           ))}
       </span>
-      <span>{text}</span>
+      <span className="leading-relaxed">{text}</span>
     </button>
   );
 };
