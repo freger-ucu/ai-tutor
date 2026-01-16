@@ -5,6 +5,7 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Card from "../components/Card";
 import Panel from "../components/Panel";
 import PillButton from "../components/PillButton";
+import StudentSidebarNav from "../components/StudentSidebarNav";
 import { getMaterials, isVisibleToStudent } from "../data/materialsStorage";
 import { getStudentTestCompletionMap } from "../data/studentProgress";
 import { getStudentData } from "../api/student";
@@ -65,6 +66,7 @@ const StudentTopic = () => {
   const courseLabel = decodedCourse ? courseLabels[decodedCourse] ?? decodedCourse : "";
   const subjectSlug = decodedCourse.split("-").slice(0, -1).join("-") || decodedCourse;
   const subjectName = subjectLabelMap[subjectSlug] ?? courseLabel ?? "";
+  const backToSubjectHref = `/student/${studentId}?subject=${subjectSlug}`;
   const classLabel =
     studentGrade && studentClassId
       ? classIdToLabel(studentGrade, studentClassId)
@@ -103,17 +105,31 @@ const StudentTopic = () => {
   }, [studentId]);
 
   // Fetch student level for visibility filtering
+  // We need to get the teacher ID from existing materials to look up the correct level
+  const teacherIdForLevel = useMemo(() => {
+    const materials = getMaterials({
+      courseId: decodedCourse,
+      subject: subjectName,
+      ...(studentClassId ? { classId: studentClassId } : classLabel ? { className: classLabel } : {}),
+    });
+    // Find first material with a valid teacherId
+    for (const m of materials) {
+      const tid = toNumericId(m.teacherId);
+      if (tid) return tid;
+    }
+    return 1; // Fallback to teacher 1 if no materials found
+  }, [decodedCourse, subjectName, studentClassId, classLabel]);
+
   useEffect(() => {
     const apiId = toNumericId(studentId);
     if (!apiId || !studentClassId || !subjectName) {
       setStudentLevel(null);
       return;
     }
-    // teacher_id=1 is used as fallback since we need some teacher context
     getStudentDetails({
       class_id: studentClassId,
       subject: subjectName,
-      teacher_id: 1,
+      teacher_id: teacherIdForLevel,
       student_id: apiId,
     })
       .then((response) => {
@@ -122,7 +138,7 @@ const StudentTopic = () => {
       .catch(() => {
         setStudentLevel(null);
       });
-  }, [studentId, studentClassId, subjectName]);
+  }, [studentId, studentClassId, subjectName, teacherIdForLevel]);
 
   const availableSubjects = useMemo(() => {
     if (!apiSubjects.length) {
@@ -139,11 +155,12 @@ const StudentTopic = () => {
     if (studentError) return;
 
     const apiId = toNumericId(studentId);
+    // Fetch materials without teacherId filter - students should see all materials for their class
+    // Use classId OR className (not both) to avoid overly strict filtering
     const materials = getMaterials({
         courseId: decodedCourse,
         subject: subjectName,
-        classId: studentClassId ?? undefined,
-        className: classLabel,
+        ...(studentClassId ? { classId: studentClassId } : classLabel ? { className: classLabel } : {}),
         topicName: decodedTopic,
     });
 
@@ -232,7 +249,7 @@ const StudentTopic = () => {
                 <button
                   key={subject.id}
                   type="button"
-                  onClick={() => navigate(`/student/${studentId}`)}
+                  onClick={() => navigate(`/student/${studentId}?subject=${subject.id}`)}
                   className={`flex w-full items-center gap-4 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${
                     isActive
                       ? "bg-[#E9F1FF] text-[#1E73F7]"
@@ -252,7 +269,24 @@ const StudentTopic = () => {
             })}
           </div>
 
-          <div className="mt-6 border-t border-slate-200 pt-6 space-y-4 text-sm">
+          {/* Back navigation */}
+          <div className="mt-6 border-t border-slate-200 pt-6 px-2">
+            <StudentSidebarNav
+              items={[
+                {
+                  label: subjectName || courseLabel,
+                  href: backToSubjectHref,
+                },
+                {
+                  label: decodedTopic || "Тема",
+                  isActive: true,
+                },
+              ]}
+            />
+          </div>
+
+          {/* Materials for current topic */}
+          <div className="mt-6 border-t border-slate-200 pt-6 space-y-2 text-sm">
             {notes.map((item) => (
               <Link
                 key={item.id}
@@ -278,15 +312,20 @@ const StudentTopic = () => {
                 Тест. {item.title}
               </Link>
             ))}
+            {notes.length === 0 && tests.length === 0 && (
+              <div className="px-4 py-3 text-slate-400 text-sm">
+                Немає матеріалів
+              </div>
+            )}
           </div>
         </aside>
 
         <main className="ml-72 flex-1 px-10 py-10 w-full">
           <div className="flex items-center gap-4 mb-6">
-            <BackButton fallbackPath={`/student/${studentId}`} />
+            <BackButton fallbackPath={backToSubjectHref} />
             <Breadcrumbs
               items={[
-                { label: courseLabel || subjectName, href: `/student/${studentId}` },
+                { label: courseLabel || subjectName, href: backToSubjectHref },
                 { label: decodedTopic || "Тема" },
               ]}
             />
