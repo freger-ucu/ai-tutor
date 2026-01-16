@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
@@ -8,7 +8,6 @@ import { getTeacherStudents } from "../api/teacher";
 import type { TeacherStudentItem } from "../api/teacher";
 import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
-import { getRecommendation } from "../data/recommendationsStorage";
 
 const subjectLabelMap: Record<string, string> = {
   algebra: "Алгебра",
@@ -23,12 +22,6 @@ const levelLabels: Record<string, string> = {
   strong: "Високий",
 };
 
-const levelColors: Record<string, { bg: string; dot: string }> = {
-  strong: { bg: "bg-green-100", dot: "bg-green-500" },
-  medium: { bg: "bg-yellow-100", dot: "bg-yellow-500" },
-  weak: { bg: "bg-pink-100", dot: "bg-pink-500" },
-};
-
 const TeacherClass = () => {
   const { id, courseId, classId } = useParams();
   const navigate = useNavigate();
@@ -38,6 +31,13 @@ const TeacherClass = () => {
 
   const [students, setStudents] = useState<TeacherStudentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [levelFilters, setLevelFilters] = useState({
+    strong: true,
+    medium: true,
+    weak: true,
+  });
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement | null>(null);
 
   const subjectSlug = decodedCourseId.split("-").slice(0, -1).join("-");
   const gradeMatch = decodedCourseId.match(/-(\d+)$/);
@@ -69,32 +69,63 @@ const TeacherClass = () => {
       });
   }, [apiTeacherId, decodedClassId, subjectName]);
 
-  const statistics = useMemo(() => {
-    const counts = { strong: 0, medium: 0, weak: 0 };
-    students.forEach((student) => {
-      if (student.subject_level in counts) {
-        counts[student.subject_level as keyof typeof counts]++;
-      }
-    });
-    return counts;
-  }, [students]);
-
-  const [recommendationText, setRecommendationText] = useState("");
-
   useEffect(() => {
-    if (!id || !decodedClassId || !decodedCourseId || !subjectName) {
-      return;
-    }
-    const stored = getRecommendation({
-      teacherId: id,
-      classId: decodedClassId,
-      courseId: decodedCourseId,
-      subject: subjectName,
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (
+        filterRef.current &&
+        !filterRef.current.contains(event.target as Node)
+      ) {
+        setIsFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  const filteredStudents = useMemo(() => {
+    return students.filter((student) => {
+      if (student.subject_level === "strong") {
+        return levelFilters.strong;
+      }
+      if (student.subject_level === "medium") {
+        return levelFilters.medium;
+      }
+      return levelFilters.weak;
     });
-    if (stored) {
-      setRecommendationText(stored.text);
+  }, [students, levelFilters]);
+
+  const filterButtonLabel = useMemo(() => {
+    const active = [
+      levelFilters.strong ? "strong" : null,
+      levelFilters.medium ? "medium" : null,
+      levelFilters.weak ? "weak" : null,
+    ].filter(Boolean) as Array<"strong" | "medium" | "weak">;
+    if (active.length === 3) {
+      return "All levels (3)";
     }
-  }, [id, decodedClassId, decodedCourseId, subjectName]);
+    if (active.length === 2) {
+      return "2 levels selected";
+    }
+    if (active.length === 1) {
+      const single = active[0];
+      return single === "strong"
+        ? "High level (1)"
+        : single === "medium"
+        ? "Medium level (1)"
+        : "Low level (1)";
+    }
+    return "No levels selected";
+  }, [levelFilters]);
+
+  const toggleFilter = (level: "strong" | "medium" | "weak") => {
+    setLevelFilters((prev) => ({ ...prev, [level]: !prev[level] }));
+    setIsFilterOpen(false);
+  };
+
+  const clearFilters = () => {
+    setLevelFilters({ strong: true, medium: true, weak: true });
+    setIsFilterOpen(false);
+  };
 
   const backToStudentsHref = id ? `/teacher/${id}?view=students` : "/";
   const backToMaterialsHref = id ? `/teacher/${id}` : "/";
@@ -124,21 +155,77 @@ const TeacherClass = () => {
             {classLabel} — {subjectName}
           </h1>
 
-          <div className="grid gap-6 lg:grid-cols-2 flex-1">
+          <div className="flex flex-col gap-6 flex-1">
             <Panel title="Учні класу" className="flex flex-col">
+              <div className="flex items-center justify-end mb-4" ref={filterRef}>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsFilterOpen((open) => !open)}
+                    className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  >
+                    {filterButtonLabel}
+                    <span className="text-slate-400">▾</span>
+                  </button>
+                  {isFilterOpen && (
+                    <div className="absolute top-full left-0 z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
+                      <label className="group flex cursor-pointer items-center rounded-lg p-3 transition-all duration-200 hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={levelFilters.strong}
+                          onChange={() => toggleFilter("strong")}
+                          className="mr-3 h-4 w-4 rounded border-gray-300 accent-blue-600 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-medium text-gray-900 group-hover:text-gray-900">
+                          Високий рівень
+                        </span>
+                      </label>
+                      <label className="group flex cursor-pointer items-center rounded-lg p-3 transition-all duration-200 hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={levelFilters.medium}
+                          onChange={() => toggleFilter("medium")}
+                          className="mr-3 h-4 w-4 rounded border-gray-300 accent-blue-600 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-medium text-gray-900 group-hover:text-gray-900">
+                          Середній рівень
+                        </span>
+                      </label>
+                      <label className="group flex cursor-pointer items-center rounded-lg p-3 transition-all duration-200 hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={levelFilters.weak}
+                          onChange={() => toggleFilter("weak")}
+                          className="mr-3 h-4 w-4 rounded border-gray-300 accent-blue-600 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-medium text-gray-900 group-hover:text-gray-900">
+                          Низький рівень
+                        </span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="mx-3 mb-2 mt-2 w-[calc(100%-1.5rem)] rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition hover:bg-gray-50"
+                      >
+                        Clear filters
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="space-y-3 flex-1 overflow-y-auto max-h-[calc(100vh-16rem)]">
                 {isLoading && (
                   <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
                     Завантаження...
                   </div>
                 )}
-                {!isLoading && students.length === 0 && (
+                {!isLoading && filteredStudents.length === 0 && (
                   <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
                     Немає учнів у цьому класі.
                   </div>
                 )}
                 {!isLoading &&
-                  students.map((student) => (
+                  filteredStudents.map((student) => (
                     <button
                       key={student.student_id}
                       type="button"
@@ -174,33 +261,6 @@ const TeacherClass = () => {
                       </div>
                     </button>
                   ))}
-              </div>
-            </Panel>
-            <Panel title="Статистика" className="flex flex-col">
-              <div className="space-y-4 flex-1">
-                {(["strong", "medium", "weak"] as const).map((level) => (
-                  <div
-                    key={level}
-                    className={`flex items-center justify-between rounded-2xl px-4 py-3 ${levelColors[level].bg}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className={`h-3 w-3 rounded-full ${levelColors[level].dot}`} />
-                      <span className="text-sm font-medium text-slate-800">
-                        {levelLabels[level]} рівень
-                      </span>
-                    </div>
-                    <span className="text-sm font-semibold text-slate-700">
-                      {statistics[level]} учнів
-                    </span>
-                  </div>
-                ))}
-                <div className="mt-6 rounded-2xl bg-[#E9F1FF] p-4">
-                  <h3 className="text-sm font-semibold text-slate-900 mb-2">Рекомендації</h3>
-                  <p className="text-sm text-slate-600">
-                    {recommendationText ||
-                      "Рекомендації для цього класу ще не сформовані."}
-                  </p>
-                </div>
               </div>
             </Panel>
           </div>
