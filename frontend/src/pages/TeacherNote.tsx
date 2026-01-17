@@ -11,7 +11,6 @@ import type { Source } from "../components/LectureContent";
 import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
 import { getTeacherStudents } from "../api/teacher";
-import AudienceInfo from "../components/AudienceInfo";
 
 /**
  * Converts a Source (string or SourceItem) to a display string for editing.
@@ -256,15 +255,6 @@ const TeacherNote = () => {
             )}
           </div>
 
-          {/* Audience info - shows who can see this note */}
-          <div className="mt-2 shrink-0">
-            <AudienceInfo
-              assignmentScope={noteMaterial?.assignmentScope}
-              assignedLevels={noteMaterial?.assignedLevels}
-              assignedStudents={noteMaterial?.assignedStudents}
-            />
-          </div>
-
           <div className="mt-5 flex-1 min-h-0 rounded-[28px] bg-white p-6 shadow-sm flex flex-col overflow-hidden">
             <div className="flex-1 min-h-0 grid gap-6 lg:grid-cols-[1fr_300px]">
               <div className="rounded-[20px] bg-white overflow-y-auto note-scrollbar pr-2">
@@ -352,15 +342,15 @@ const TeacherNote = () => {
                     <textarea
                       value={editTeacherNotes}
                       onChange={(e) => setEditTeacherNotes(e.target.value)}
-                      className="h-full w-full rounded-xl border border-slate-200 bg-white p-3 text-[10px] leading-snug text-slate-700 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
+                      className="h-full w-full rounded-xl border border-slate-200 bg-white p-3 text-sm leading-relaxed text-slate-700 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
                       placeholder="Нотатки для вчителя..."
                     />
                   ) : teacherNotes ? (
-                    <div className="text-[10px] leading-snug text-slate-700 whitespace-pre-wrap overflow-hidden h-full">
+                    <div className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap overflow-y-auto h-full note-scrollbar">
                       {teacherNotes}
                     </div>
                   ) : (
-                    <div className="text-[10px] text-slate-700">
+                    <div className="text-sm text-slate-700">
                       Нотатки відсутні.
                     </div>
                   )}
