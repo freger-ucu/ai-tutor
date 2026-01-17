@@ -66,6 +66,7 @@ app.add_middleware(
         "http://localhost:8080",  # Test frontend
         "http://127.0.0.1:8080",  # Test frontend (alt)
         "null",  # For file:// protocol (opening HTML directly)
+        "http://159.65.201.164:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],
