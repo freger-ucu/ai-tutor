@@ -54,7 +54,7 @@ const Home = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1E73F7] via-[#2B7BFA] to-[#1A63D6] flex items-center justify-center">
+    <div className="min-h-screen bg-linear-to-br from-[#1E73F7] via-[#2B7BFA] to-[#1A63D6] flex items-center justify-center">
       <div className="flex flex-col items-center gap-6 sm:flex-row">
         <Button label="Я Вчитель" onClick={() => setIsTeacherModalOpen(true)}/>
         <Button label="Я Учень" onClick={() => setIsStudentModalOpen(true)} />
