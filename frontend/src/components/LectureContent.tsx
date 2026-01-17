@@ -71,6 +71,8 @@ interface LectureContentProps {
   className?: string;
   /** Optional: Skip the first heading in content (useful when topic is shown separately) */
   skipFirstHeading?: boolean;
+  /** Optional: Title to display as heading before content */
+  title?: string;
 }
 
 /**
@@ -115,6 +117,7 @@ const LectureContent = ({
   userRole,
   className = "",
   skipFirstHeading = false,
+  title,
 }: LectureContentProps) => {
   // Determine if sources should be shown based on user role
   // Only teachers can see the sources section
@@ -122,6 +125,11 @@ const LectureContent = ({
 
   return (
     <div className={`lecture-content ${className}`}>
+      {/* Title heading - visible to ALL users if provided */}
+      {title && (
+        <h1 className="text-xl font-bold text-slate-900 mb-4">{title}</h1>
+      )}
+
       {/* Main lecture content - visible to ALL users */}
       <div className="lecture-content__body">
         {content ? (
