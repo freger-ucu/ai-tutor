@@ -18,9 +18,9 @@ const Home = () => {
     { id: "17", label: "Вчитель 17", hint: "Українська мова" },
   ];
   const studentQuickOptions = [
-    { id: "114", label: "Учень 114", hint: "8 клас" },
-    { id: "162", label: "Учень 162", hint: "8 клас" },
-    { id: "118", label: "Учень 118", hint: "8 клас" },
+    { id: "114", label: "Учень 114", hint: "Сильний учень" },
+    { id: "162", label: "Учень 162", hint: "Середній учень" },
+    { id: "118", label: "Учень 118", hint: "Слабкий учень" },
   ];
 
   const handleTeacherSelect = (teacherId: string) => {
@@ -104,15 +104,18 @@ const Home = () => {
             </div>
             <div className="flex flex-wrap gap-3">
               {teacherQuickOptions.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  title={option.hint}
-                  onClick={() => handleTeacherSelect(option.id)}
-                  className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1E73F7] hover:text-slate-900"
-                >
-                  {option.label}
-                </button>
+                <div key={option.id} className="group relative flex-1">
+                  <button
+                    type="button"
+                    onClick={() => handleTeacherSelect(option.id)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1E73F7] hover:text-slate-900"
+                  >
+                    {option.label}
+                  </button>
+                  <div className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-lg transition-opacity duration-75 group-hover:opacity-100">
+                    {option.hint}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -170,15 +173,18 @@ const Home = () => {
             </div>
             <div className="flex flex-wrap gap-3">
               {studentQuickOptions.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  title={option.hint}
-                  onClick={() => handleStudentSelect(option.id)}
-                  className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1E73F7] hover:text-slate-900"
-                >
-                  {option.label}
-                </button>
+                <div key={option.id} className="group relative flex-1">
+                  <button
+                    type="button"
+                    onClick={() => handleStudentSelect(option.id)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1E73F7] hover:text-slate-900"
+                  >
+                    {option.label}
+                  </button>
+                  <div className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-lg transition-opacity duration-75 group-hover:opacity-100">
+                    {option.hint}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
