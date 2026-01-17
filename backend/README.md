@@ -34,18 +34,28 @@ pip install -r requirements.txt
 
 ### 3. Configure Environment Variables
 
-Create a `.env` file in the `backend` directory:
+Copy the example environment file and configure your API keys:
 
 ```bash
-# LLM Configuration
-LLM_API_KEY=your-api-key
-LLM_BASE_URL=http://your-llm-endpoint
-LLM_MODEL=your-model-name
+cp .env.example .env
+```
 
-# Or use OpenAI
-# LLM_API_KEY=sk-your-openai-key
-# LLM_BASE_URL=https://api.openai.com/v1
-# LLM_MODEL=mamay
+Edit `.env` with your credentials:
+
+```bash
+# Main LLM provider for reasoning-intensive tasks
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4.1-mini
+
+# Task-specific providers for simpler operations (recommendations, feedback)
+TASK_PROVIDER_FEEDBACK=mamay
+TASK_PROVIDER_RECOMMENDATION=mamay
+
+# Lapa/Mamay configuration (for cost-efficient simple tasks)
+LAPA_API_KEY=your-lapa-api-key
+LAPA_BASE_URL=http://146.59.127.106:4000
+LAPA_MODEL=mamay
 
 # Phoenix Telemetry (optional - LLM Observability)
 PHOENIX_ENABLED=false
@@ -56,6 +66,8 @@ LANGSMITH_ENABLED=false
 LANGSMITH_API_KEY=your-langsmith-key
 LANGSMITH_PROJECT=ai-tutor
 ```
+
+See `.env.example` for all available configuration options.
 
 ### 4. Prepare Data Files
 
@@ -129,11 +141,40 @@ backend/
 
 ## Configuration Reference
 
+### LLM Providers
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LLM_API_KEY` | - | API key for LLM provider |
-| `LLM_BASE_URL` | `http://146.59.127.106:4000` | LLM API endpoint |
-| `LLM_MODEL` | `mamay` | Model name to use |
+| `LLM_PROVIDER` | `openai` | Main LLM provider (`openai`, `gemini`, `lapa`) |
+| `TASK_PROVIDER_FEEDBACK` | `mamay` | Provider for feedback generation |
+| `TASK_PROVIDER_RECOMMENDATION` | `mamay` | Provider for recommendations |
+
+### OpenAI (Primary - Complex Reasoning Tasks)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENAI_API_KEY` | - | OpenAI API key |
+| `OPENAI_MODEL` | `gpt-4.1-mini` | OpenAI model for reasoning tasks |
+
+### Lapa/Mamay (Simple Tasks)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LAPA_API_KEY` | - | Lapa API key |
+| `LAPA_BASE_URL` | `http://146.59.127.106:4000` | Lapa API endpoint |
+| `LAPA_MODEL` | `mamay` | Mamay model for simple tasks |
+
+### Gemini (Alternative)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GEMINI_API_KEY` | - | Gemini API key |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model name |
+
+### General Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `LLM_TEMPERATURE` | `0.0` | Generation temperature |
 | `LLM_MAX_TOKENS` | `500` | Max output tokens |
 | `BACKEND_PORT` | `8000` | Server port |
