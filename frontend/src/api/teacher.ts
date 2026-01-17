@@ -68,6 +68,8 @@ export interface GenerateTestRequest {
   teacher_id: number;
   subject: string;
   topic_definition: string;
+  level_list: ("weak" | "medium" | "strong")[];
+  student_list: number[];
 }
 
 export interface TestAnswerOption {
