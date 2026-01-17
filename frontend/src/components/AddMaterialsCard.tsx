@@ -19,7 +19,7 @@ const AddMaterialsCard = ({
       variant="glass"
       className={`px-3 py-3 text-center text-sm font-semibold text-white border-0 bg-transparent shadow-none lg:px-6 lg:py-6 lg:border lg:border-white/30 lg:bg-white/10 ${className}`}
     >
-      <span className="hidden lg:block">{title}</span>
+      <span className="sr-only">{title}</span>
       <div className="mt-3">
         <PillButton
           label={buttonLabel}

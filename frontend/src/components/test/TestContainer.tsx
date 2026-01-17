@@ -243,8 +243,6 @@ const TestContainer = ({
 
   const totalQuestions = testData.questions.length;
   const answeredCount = answeredQuestionIndices.size;
-  // Student can finish test at any time - unanswered questions count as incorrect
-  const isReadyToFinish = viewMode === "student";
 
   const resultMap = useMemo(() => {
     const map = new Map<number, "correct" | "incorrect" | "partial">();
@@ -324,33 +322,25 @@ const TestContainer = ({
     <div ref={containerRef} tabIndex={-1} className="flex flex-col outline-none h-full">
       {/* Title - only shown for students */}
       {viewMode === "student" && (
-        <h1 className="hidden lg:block text-lg font-bold text-white mb-2 lg:text-xl">
-          {testData.title}
-        </h1>
+        <h1 className="text-xl font-bold text-white mb-2">{testData.title}</h1>
       )}
 
       {/* Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3 overflow-visible">
-        <div className="hidden lg:block">
-          <TestNavigation
-            totalQuestions={testData.questions.length}
-            currentQuestionIndex={currentQuestionIndex}
-            answeredQuestions={answeredQuestionIndices}
-            onQuestionSelect={handleQuestionSelect}
-            showResult={viewMode === "student" && isFinished}
-            resultMap={resultMap}
-          />
-        </div>
-        <div className="flex w-full items-center justify-between rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-white lg:hidden">
-          <span>Питання {currentQuestionIndex + 1} з {totalQuestions}</span>
-          <span>{answeredCount}/{totalQuestions} відповіли</span>
-        </div>
+        <TestNavigation
+          totalQuestions={testData.questions.length}
+          currentQuestionIndex={currentQuestionIndex}
+          answeredQuestions={answeredQuestionIndices}
+          onQuestionSelect={handleQuestionSelect}
+          showResult={viewMode === "student" && isFinished}
+          resultMap={resultMap}
+        />
         {viewMode === "student" && !isFinished && (
           <button
             type="button"
             onClick={handleFinish}
             disabled={isSubmitting}
-            className={`hidden w-full rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all lg:inline-flex lg:w-[220px] ${
+            className={`w-full rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all lg:w-[220px] ${
               isSubmitting
                 ? "cursor-not-allowed bg-[#E63C3C]/60"
                 : "cursor-pointer bg-[#E63C3C] hover:-translate-y-0.5 hover:shadow-lg"
@@ -360,7 +350,7 @@ const TestContainer = ({
           </button>
         )}
         {viewMode === "student" && isFinished && (
-          <div className="hidden w-full rounded-xl bg-[#6FDB9B] px-4 py-2 text-center text-xs font-semibold text-white lg:block lg:w-[220px]">
+          <div className="w-full rounded-xl bg-[#6FDB9B] px-4 py-2 text-center text-xs font-semibold text-white lg:w-[220px]">
             {totalQuestions > 0
               ? `${Math.round((correctAnswersCount / totalQuestions) * 100)}% правильних відповідей`
               : "0% правильних відповідей"}
@@ -369,7 +359,7 @@ const TestContainer = ({
       </div>
 
       {/* Question card with feedback on the side - flex to fill available space */}
-      <div className="flex gap-4 flex-1 min-h-0">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 min-h-0">
         <div className="flex-1 min-w-0 flex flex-col">
           {/* Scrollable question area */}
           <div className="flex-1 min-h-0 overflow-y-auto student-scrollbar">
@@ -387,12 +377,12 @@ const TestContainer = ({
           </div>
 
           {/* Navigation buttons - attached to bottom of question card */}
-          <div className="flex flex-col gap-3 pt-3 shrink-0 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center justify-between pt-3 shrink-0">
             <button
               type="button"
               onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
               disabled={currentQuestionIndex === 0}
-              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-300 ease-in-out ${
+              className={`rounded-full px-3 py-1.5 md:px-4 text-xs font-semibold transition-all duration-300 ease-in-out ${
                 currentQuestionIndex === 0
                   ? "cursor-not-allowed bg-white/60 text-slate-300"
                   : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
@@ -404,7 +394,7 @@ const TestContainer = ({
               type="button"
               onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
               disabled={currentQuestionIndex >= testData.questions.length - 1}
-              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-300 ease-in-out ${
+              className={`rounded-full px-3 py-1.5 md:px-4 text-xs font-semibold transition-all duration-300 ease-in-out ${
                 currentQuestionIndex >= testData.questions.length - 1
                   ? "cursor-not-allowed bg-white/60 text-slate-300"
                   : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
@@ -412,33 +402,19 @@ const TestContainer = ({
             >
               Наступне →
             </button>
-            {viewMode === "student" && !isFinished && (
-              <button
-                type="button"
-                onClick={handleFinish}
-                disabled={isSubmitting}
-                className={`w-full rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all lg:hidden ${
-                  isSubmitting
-                    ? "cursor-not-allowed bg-[#E63C3C]/60"
-                    : "cursor-pointer bg-[#E63C3C]"
-                }`}
-              >
-                {isSubmitting ? "Перевіряємо..." : "Завершити тест"}
-              </button>
-            )}
-            {viewMode === "student" && isFinished && (
-              <div className="w-full rounded-xl bg-[#6FDB9B] px-4 py-2 text-center text-xs font-semibold text-white lg:hidden">
-                {totalQuestions > 0
-                  ? `${Math.round((correctAnswersCount / totalQuestions) * 100)}% правильних відповідей`
-                  : "0% правильних відповідей"}
-              </div>
-            )}
           </div>
+
+          {/* Mobile: Feedback below question card */}
+          {feedbackNode && viewMode === "student" && isFinished && (
+            <div className="mt-3 md:hidden overflow-y-auto student-scrollbar max-h-48">
+              {feedbackNode}
+            </div>
+          )}
         </div>
 
-        {/* Feedback on the side - shown after test completion for student */}
+        {/* Desktop: Feedback on the side - shown after test completion for student */}
         {feedbackNode && viewMode === "student" && isFinished && (
-          <div className="w-72 shrink-0 overflow-y-auto student-scrollbar">
+          <div className="hidden md:block w-72 shrink-0 overflow-y-auto student-scrollbar">
             {feedbackNode}
           </div>
         )}

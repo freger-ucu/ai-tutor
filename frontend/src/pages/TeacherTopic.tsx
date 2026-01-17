@@ -52,6 +52,8 @@ const TeacherTopic = () => {
 
   const [materialName, setMaterialName] = useState("");
   const [testName, setTestName] = useState("");
+  const [materialError, setMaterialError] = useState<string | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
   const [classStudents, setClassStudents] = useState<number[]>([]);
   const decodedClassId = classId ? Number(decodeURIComponent(classId)) : null;
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
@@ -444,6 +446,7 @@ const TeacherTopic = () => {
         isOpen={isMaterialModalOpen}
         onClose={() => {
           setActiveModal(null);
+          setTestError(null);
         }}
         size="xl"
         title="Опишіть тему"
@@ -451,12 +454,19 @@ const TeacherTopic = () => {
         <GenerateModalContent
           placeholder="Детально опишіть тему"
           value={materialName}
-          onChange={setMaterialName}
+          onChange={(value) => {
+            setMaterialName(value);
+            if (materialError) {
+              setMaterialError(null);
+            }
+          }}
           primaryLabel="Згенерувати"
           isLoading={false}
           onSecondaryClick={() => handleOpenAudience("material")}
+          errorText={materialError ?? undefined}
           onPrimaryClick={() => {
             if (!materialName.trim()) {
+              setMaterialError("Напишіть тему");
               return;
             }
             const topicDefinition = materialName.trim();
@@ -465,6 +475,7 @@ const TeacherTopic = () => {
             // Close modal immediately
             setActiveModal(null);
             setMaterialName("");
+            setMaterialError(null);
 
             // Start generation in context (runs in background)
             startNoteGeneration({
@@ -489,6 +500,7 @@ const TeacherTopic = () => {
         isOpen={isTestModalOpen}
         onClose={() => {
           setActiveModal(null);
+          setTestError(null);
         }}
         size="xl"
         title="Опишіть тему"
@@ -496,12 +508,19 @@ const TeacherTopic = () => {
         <GenerateModalContent
           placeholder="Детально опишіть тему"
           value={testName}
-          onChange={setTestName}
+          onChange={(value) => {
+            setTestName(value);
+            if (testError) {
+              setTestError(null);
+            }
+          }}
           primaryLabel="Згенерувати"
           isLoading={false}
           onSecondaryClick={() => handleOpenAudience("test")}
+          errorText={testError ?? undefined}
           onPrimaryClick={() => {
             if (!testName.trim()) {
+              setTestError("Напишіть тему");
               return;
             }
             const topicDefinition = testName.trim();
@@ -510,6 +529,7 @@ const TeacherTopic = () => {
             // Close modal immediately
             setActiveModal(null);
             setTestName("");
+            setTestError(null);
 
             // Start generation in context (runs in background)
             startTestGeneration({

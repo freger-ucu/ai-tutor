@@ -8,6 +8,7 @@ interface GenerateModalContentProps {
   onSecondaryClick?: () => void;
   secondaryLabel?: string;
   secondaryDisabled?: boolean;
+  errorText?: string;
 }
 
 const GenerateModalContent = ({
@@ -20,6 +21,7 @@ const GenerateModalContent = ({
   onSecondaryClick,
   secondaryLabel = "Змінити цільову аудиторію",
   secondaryDisabled = false,
+  errorText,
 }: GenerateModalContentProps) => {
   return (
     <div className="flex flex-col gap-8">
@@ -36,6 +38,9 @@ const GenerateModalContent = ({
         rows={4}
         className="w-full resize-none rounded-[28px] bg-[#E9F1FF] px-8 py-6 text-lg font-medium text-slate-700 placeholder-slate-500 outline-none transition focus:bg-white focus:ring-2 focus:ring-[#BFD6FF]"
       />
+      {errorText ? (
+        <div className="text-sm font-semibold text-rose-600">{errorText}</div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {onSecondaryClick && (
           <button
