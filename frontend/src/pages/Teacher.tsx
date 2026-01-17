@@ -331,20 +331,71 @@ const Teacher = () => {
   return (
     <div className="min-h-screen bg-[#1E73F7] text-slate-900">
       <div className="flex min-h-screen">
-        <TeacherSidebar
-          teacherName={
-            id ? `Вчитель ${id}` : "Вчитель"
-          }
-          activeItem={activeView}
-          onMaterialsClick={() => setActiveView("materials")}
-          onStudentsClick={() => setActiveView("students")}
-        />
-        <main className="flex-1 px-8 py-10">
+        <div className="hidden lg:flex">
+          <TeacherSidebar
+            teacherName={id ? `Вчитель ${id}` : "Вчитель"}
+            activeItem={activeView}
+            onMaterialsClick={() => setActiveView("materials")}
+            onStudentsClick={() => setActiveView("students")}
+          />
+        </div>
+        <main
+          className="flex-1 px-8 py-10 overflow-y-auto lg:overflow-visible"
+          data-scroll-root="mobile"
+        >
+          <div className="mb-6 rounded-2xl bg-white/95 px-4 py-3 shadow-md lg:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div
+                  className="h-10 w-10 overflow-hidden rounded-full bg-slate-200"
+                  style={{
+                    backgroundImage: "url('https://i1.poltava.to/uploads/2017/09/2017-09-19/best.jpg')",
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                  }}
+                />
+                <div className="text-sm font-semibold text-slate-700">
+                  {id ? `Вчитель ${id}` : "Вчитель"}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/")}
+                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
+              >
+                Вийти
+              </button>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveView("materials")}
+                className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  activeView === "materials"
+                    ? "bg-[#1E73F7] text-white"
+                    : "bg-slate-100 text-slate-700"
+                }`}
+              >
+                Матеріали
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView("students")}
+                className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  activeView === "students"
+                    ? "bg-[#1E73F7] text-white"
+                    : "bg-slate-100 text-slate-700"
+                }`}
+              >
+                Учні
+              </button>
+            </div>
+          </div>
           <div
             className={`relative ${
               activeView === "students"
-                ? "h-[calc(100vh-5rem)] overflow-hidden"
-                : "min-h-[calc(100vh-5rem)]"
+                ? "lg:h-[calc(100vh-5rem)] lg:overflow-hidden"
+                : "lg:min-h-[calc(100vh-5rem)]"
             }`}
           >
             {activeView === "materials" ? (
@@ -391,8 +442,18 @@ const Teacher = () => {
                       })}
                     </div>
                   </Panel>
-                  <Panel title="Теми">
-                    <div className="space-y-3">
+                  <Panel>
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">Теми</h2>
+                      <button
+                        type="button"
+                        onClick={() => setIsTopicModalOpen(true)}
+                        className="ml-auto mr-1 rounded-full bg-[#1E73F7] px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#1A63D6] lg:hidden"
+                      >
+                        + Додати тему
+                      </button>
+                    </div>
+                    <div className="mt-4 space-y-3 lg:mt-6">
                       {currentTopics.map((topic) => (
                         <button
                           key={topic}
@@ -410,7 +471,7 @@ const Teacher = () => {
                 <button
                   type="button"
                   disabled={!selectedClassId}
-                  className="absolute bottom-0 right-0 flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#1E73F7] shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+                  className="absolute bottom-0 right-0 hidden items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#1E73F7] shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60 lg:flex"
                   onClick={() => setIsTopicModalOpen(true)}
                 >
                   <span className="text-lg">＋</span>

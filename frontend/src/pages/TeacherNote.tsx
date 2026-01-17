@@ -125,29 +125,36 @@ const TeacherNote = () => {
   }, [noteId, navigate, backToTopicHref]);
 
   return (
-    <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
+    <div className="min-h-screen lg:h-screen bg-[#1E73F7] text-slate-900 overflow-y-auto lg:overflow-hidden flex flex-col lg:flex-row">
       {/* Static sidebar - always shows only "Materials" and "Students" links */}
-      <TeacherSidebar
-        teacherName={teacherId ? `Вчитель ${teacherId}` : "Вчитель"}
-        activeItem="materials"
-        onMaterialsClick={() => navigate(`/teacher/${teacherId}`)}
-        onStudentsClick={() => navigate(`/teacher/${teacherId}?view=students`)}
-      />
+      <div className="hidden lg:flex">
+        <TeacherSidebar
+          teacherName={teacherId ? `Вчитель ${teacherId}` : "Вчитель"}
+          activeItem="materials"
+          onMaterialsClick={() => navigate(`/teacher/${teacherId}`)}
+          onStudentsClick={() => navigate(`/teacher/${teacherId}?view=students`)}
+        />
+      </div>
 
-      <main className="flex-1 px-10 py-6 w-full flex flex-col h-full overflow-hidden">
+      <main
+        className="flex-1 px-4 py-6 w-full flex flex-col overflow-y-auto lg:px-10 lg:py-6 lg:h-full lg:overflow-hidden"
+        data-scroll-root="mobile"
+      >
           <div className="flex items-center gap-4 mb-4 shrink-0">
             <BackButton fallbackPath={backToTopicHref} />
-            <Breadcrumbs
-              items={[
-                { label: subjectName || "Предмет", href: backToClassHref },
-                { label: classLabel || "Клас", href: backToClassHref },
-                { label: sidebarTopicName || "Тема", href: backToTopicHref },
-                { label: noteTitle },
-              ]}
-            />
+            <div className="hidden lg:flex">
+              <Breadcrumbs
+                items={[
+                  { label: subjectName || "Предмет", href: backToClassHref },
+                  { label: classLabel || "Клас", href: backToClassHref },
+                  { label: sidebarTopicName || "Тема", href: backToTopicHref },
+                  { label: noteTitle },
+                ]}
+              />
+            </div>
           </div>
           <div className="flex items-center gap-4 shrink-0">
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className="text-lg font-bold text-white lg:text-2xl">
               Конспект. {noteTitle}
             </h1>
 
@@ -160,19 +167,20 @@ const TeacherNote = () => {
                   className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
                 >
                   <PencilIcon />
-                  Редагувати конспект
+                  <span className="hidden lg:inline">Редагувати конспект</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsDeleteModalOpen(true)}
                   className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 hover:border-red-500"
+                  aria-label="Видалити конспект"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 6h18" />
                     <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
                     <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
                   </svg>
-                  Видалити
+                  <span className="hidden lg:inline">Видалити</span>
                 </button>
               </>
             )}
@@ -198,9 +206,9 @@ const TeacherNote = () => {
             )}
           </div>
 
-          <div className="mt-5 flex-1 min-h-0 rounded-[28px] bg-white p-6 shadow-sm flex flex-col overflow-hidden">
+          <div className="mt-4 flex-1 min-h-0 rounded-[28px] bg-white p-4 shadow-sm flex flex-col overflow-visible lg:mt-5 lg:p-6 lg:overflow-hidden">
             <div className="flex-1 min-h-0 grid gap-6 lg:grid-cols-[1fr_300px]">
-              <div className="rounded-[20px] bg-white overflow-y-auto note-scrollbar pr-2">
+              <div className="rounded-[20px] bg-white overflow-y-visible lg:overflow-y-auto lg:pr-2">
                 <div className="break-words">
                   {isEditMode ? (
                     <div>
@@ -259,11 +267,11 @@ const TeacherNote = () => {
 
               </div>
 
-              <div className="rounded-[20px] bg-[#E9F1FF] p-5 h-full flex flex-col overflow-hidden">
+              <div className="rounded-[20px] bg-[#E9F1FF] p-4 h-full flex flex-col overflow-visible lg:p-5 lg:overflow-hidden">
                 <h3 className="text-sm font-bold text-slate-900 shrink-0">Нотатки</h3>
-                <div className="mt-2 flex-1 min-h-0 overflow-hidden">
+                <div className="mt-2 flex-1 min-h-0 overflow-visible lg:overflow-hidden">
                   {teacherNotes ? (
-                    <div className="text-sm leading-relaxed text-slate-700 overflow-y-auto h-full note-scrollbar">
+                    <div className="text-sm leading-relaxed text-slate-700 overflow-y-visible lg:overflow-y-auto lg:h-full">
                       <MarkdownContent content={teacherNotes} />
                     </div>
                   ) : (

@@ -376,16 +376,16 @@ const TeacherTestEditor = ({ testData, onSave }: TeacherTestEditorProps) => {
   return (
     <div className="space-y-6">
       {/* Header with Edit/Save/Cancel buttons */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-xl font-bold text-white">{testData.title}</h2>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <h2 className="text-lg font-bold text-white lg:text-xl">{testData.title}</h2>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           {!isEditMode ? (
             /* Edit button - visible in read-only mode */
             <button
               type="button"
               onClick={handleStartEdit}
-              className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
+              className="flex w-full items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0] lg:w-auto"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
@@ -400,7 +400,7 @@ const TeacherTestEditor = ({ testData, onSave }: TeacherTestEditorProps) => {
                 type="button"
                 onClick={handleCancelEdit}
                 disabled={isSaving}
-                className="rounded-full border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full rounded-full border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed lg:w-auto"
               >
                 Скасувати
               </button>
@@ -408,7 +408,7 @@ const TeacherTestEditor = ({ testData, onSave }: TeacherTestEditorProps) => {
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving || !hasChanges}
-                className="flex items-center gap-2 rounded-full bg-[#6FDB9B] px-5 py-2 text-sm font-semibold text-white hover:bg-[#5BC88A] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-[#6FDB9B] px-5 py-2 text-sm font-semibold text-white hover:bg-[#5BC88A] disabled:opacity-50 disabled:cursor-not-allowed lg:w-auto"
               >
                 {isSaving ? (
                   <>
@@ -454,25 +454,31 @@ const TeacherTestEditor = ({ testData, onSave }: TeacherTestEditorProps) => {
 
       {/* Navigation */}
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <TestNavigation
-          totalQuestions={displayQuestions.length}
-          currentQuestionIndex={currentQuestionIndex}
-          answeredQuestions={answeredQuestionIndices}
-          onQuestionSelect={handleQuestionSelect}
-          showResult={false}
-          resultMap={new Map()}
-        />
+        <div className="hidden lg:block">
+          <TestNavigation
+            totalQuestions={displayQuestions.length}
+            currentQuestionIndex={currentQuestionIndex}
+            answeredQuestions={answeredQuestionIndices}
+            onQuestionSelect={handleQuestionSelect}
+            showResult={false}
+            resultMap={new Map()}
+          />
+        </div>
+        <div className="flex w-full items-center justify-between rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-white lg:hidden">
+          <span>Питання {currentQuestionIndex + 1} з {displayQuestions.length}</span>
+          <span>Всього: {displayQuestions.length}</span>
+        </div>
 
         {/* Question count and Add button (in edit mode) */}
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-white/80">
+        <div className="flex w-full items-center gap-3 lg:w-auto">
+          <span className="hidden text-sm text-white/80 lg:inline">
             Питань: {displayQuestions.length}
           </span>
           {isEditMode && (
             <button
               type="button"
               onClick={addQuestion}
-              className="flex items-center gap-2 rounded-full bg-white/10 border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-white/10 border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20 lg:w-auto"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 5v14M5 12h14" />
