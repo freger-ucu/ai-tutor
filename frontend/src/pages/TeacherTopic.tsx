@@ -513,6 +513,8 @@ const TeacherTopic = () => {
                 teacher_id: apiTeacherId,
                 subject: subjectName,
                 topic_definition: topicDefinition,
+                level_list: assignedLevels ?? [],
+                student_list: assignedStudents ?? [],
               });
               const payload = response?.title
                 ? response
