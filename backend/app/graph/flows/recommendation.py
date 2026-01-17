@@ -19,6 +19,7 @@ from typing import TypedDict, List, Dict, Any, Optional
 
 from app.services.tracing import trace_chain
 from app.rag.utils.llm_client import get_llm_client
+from app.config import settings
 from app.prompts.recommendation import (
     RECOMMENDATION_SYSTEM_PROMPT,
     build_recommendation_prompt,
@@ -98,6 +99,7 @@ async def generate_recommendation_node(state: RecommendationState) -> Dict[str, 
     Creates professional, actionable advice for teachers.
     """
     client = get_llm_client()
+    provider = settings.get_provider_for_task("recommendation")
 
     subject = state.get("subject", "")
     average_grade = state.get("average_grade", 0.0)
@@ -123,6 +125,7 @@ async def generate_recommendation_node(state: RecommendationState) -> Dict[str, 
         prompt=full_prompt,
         temperature=0.7,
         max_tokens=1500,
+        provider=provider,
     )
 
     return {

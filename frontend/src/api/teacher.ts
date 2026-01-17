@@ -85,6 +85,7 @@ export interface GeneratedQuestion {
   explanation: string;
   topic: string;
   subtopics: string[];
+  focus: string;
 }
 
 export interface GeneratedTestResponse {

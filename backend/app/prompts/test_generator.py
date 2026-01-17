@@ -80,7 +80,7 @@ LEVEL_GUIDANCE = {
 
 
 # =============================================================================
-# Test Planner Prompt (Level-Aware, No Difficulty Counts)
+# Test Planner Prompt (Difficulty-Aware)
 # =============================================================================
 
 TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{subject}" для учнів {grade} класу.
@@ -94,10 +94,17 @@ TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{
 ## РІВЕНЬ УЧНІВ: {level}
 {level_guidance}
 
+## РОЗПОДІЛ СКЛАДНОСТІ (ОБОВ'ЯЗКОВО дотримуйся!):
+{difficulty_distribution}
+
+## КРИТЕРІЇ СКЛАДНОСТІ:
+{difficulty_criteria}
+
 ## ВИМОГИ ДО ТЕСТУ:
 - Створи рівно 12 специфікацій питань
 - Кожне питання має УНІКАЛЬНИЙ фокус — різні аспекти теми
 - ~50% single_choice, ~20% multiple_choice, ~30% open
+- ОБОВ'ЯЗКОВО дотримуйся розподілу складності вище!
 
 ## ПРАВИЛА ПЛАНУВАННЯ:
 
@@ -109,16 +116,15 @@ TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{
 ### 2. КРИТИЧНО — Визнач УНІКАЛЬНИЙ фокус для кожного питання:
 - Фокус — це КОНКРЕТНИЙ аспект теми: формула, властивість, метод, застосування
 - ⚠️ ЗАБОРОНЕНО повторювати однаковий фокус у різних питаннях!
-- ⚠️ Якщо фокус "формула дискримінанта" вже є — НЕ МОЖНА створювати інше питання про формулу дискримінанта
-- Приклади РІЗНИХ фокусів для однієї теми:
-  - "формула дискримінанта" (1 питання)
-  - "знак дискримінанта та кількість коренів" (інше питання)
-  - "обчислення дискримінанта для конкретного рівняння" (ще інше)
-  - "формула коренів через дискримінант" (ще інше)
+- Фокус має ВІДПОВІДАТИ складності:
+  - **easy**: базові визначення, прості формули, впізнавання понять
+  - **medium**: застосування формул, типові задачі, алгоритми
+  - **hard**: нестандартні задачі, комбінування понять, доведення
 
 ### 3. Перевір перед завершенням:
 - Переглянь всі 12 фокусів — вони мають бути РІЗНИМИ
 - Жодні два питання не повинні перевіряти те саме знання
+- Розподіл складності відповідає вимогам
 
 ## ФОРМАТ ВІДПОВІДІ (JSON):
 ```json
@@ -127,12 +133,14 @@ TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{
         {{
             "spec_id": 1,
             "question_type": "single_choice",
-            "focus": "конкретний аспект: формула/властивість/метод"
+            "difficulty": "easy",
+            "focus": "базовий аспект теми"
         }},
         {{
             "spec_id": 2,
             "question_type": "open",
-            "focus": "ІНШИЙ конкретний аспект"
+            "difficulty": "hard",
+            "focus": "складний аспект теми"
         }}
     ],
     "rationale": "Коротке пояснення логіки розподілу (1-2 речення)"
@@ -143,7 +151,8 @@ TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{
 - Створи рівно 12 специфікацій питань
 - Кожна специфікація має унікальний spec_id (від 1 до 12)
 - ⚠️ Кожен focus має бути УНІКАЛЬНИМ — не повторюй однакові аспекти!
-- НЕ вказуй difficulty — складність визначається автоматично
+- ОБОВ'ЯЗКОВО вкажи difficulty для кожного питання (easy/medium/hard)
+- Дотримуйся розподілу: {difficulty_summary}
 - Надай ТІЛЬКИ JSON, без додаткового тексту."""
 
 
@@ -153,6 +162,7 @@ def build_planner_prompt(
     topic_definition: str,
     context: str,
     level: str = "medium",
+    difficulty_counts: Optional[Dict[str, int]] = None,
 ) -> str:
     """
     Build the test planning prompt.
@@ -163,11 +173,36 @@ def build_planner_prompt(
         topic_definition: Topic description
         context: Retrieved textbook context
         level: Student level for guidance ("weak", "medium", "strong")
+        difficulty_counts: Dict with counts per difficulty {"easy": 6, "medium": 4, "hard": 2}
 
     Returns:
         Formatted prompt string for test planning
     """
     level_guidance = LEVEL_GUIDANCE.get(level, LEVEL_GUIDANCE["medium"])
+
+    # Default distribution if not provided
+    if difficulty_counts is None:
+        if level == "weak":
+            difficulty_counts = {"easy": 6, "medium": 4, "hard": 2}
+        elif level == "strong":
+            difficulty_counts = {"easy": 2, "medium": 4, "hard": 6}
+        else:
+            difficulty_counts = {"easy": 4, "medium": 4, "hard": 4}
+
+    # Build difficulty distribution text
+    easy_count = difficulty_counts.get("easy", 4)
+    medium_count = difficulty_counts.get("medium", 4)
+    hard_count = difficulty_counts.get("hard", 4)
+
+    difficulty_distribution = f"""Створи РІВНО:
+- {easy_count} ЛЕГКИХ питань (difficulty: "easy") — базові поняття, визначення
+- {medium_count} СЕРЕДНІХ питань (difficulty: "medium") — застосування знань
+- {hard_count} СКЛАДНИХ питань (difficulty: "hard") — аналіз, нестандартні задачі"""
+
+    difficulty_summary = f"{easy_count} easy, {medium_count} medium, {hard_count} hard"
+
+    # Get subject-specific difficulty criteria
+    difficulty_criteria = get_subject_difficulty_criteria(subject, grade)
 
     return TEST_PLANNER_PROMPT.format(
         subject=subject,
@@ -176,6 +211,9 @@ def build_planner_prompt(
         context=context if context else "Контекст не знайдено. Використовуй власні знання про тему.",
         level=level,
         level_guidance=level_guidance,
+        difficulty_distribution=difficulty_distribution,
+        difficulty_criteria=difficulty_criteria,
+        difficulty_summary=difficulty_summary,
     )
 
 
