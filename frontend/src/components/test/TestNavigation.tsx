@@ -16,7 +16,7 @@ const TestNavigation = ({
   resultMap,
 }: TestNavigationProps) => {
   return (
-    <div className="flex gap-2 items-center p-4 overflow-x-auto overflow-y-visible flex-nowrap">
+    <div className="flex gap-1.5 items-center p-1 overflow-x-auto overflow-y-visible flex-nowrap">
       {Array.from({ length: totalQuestions }, (_, index) => {
         const isCurrent = index === currentQuestionIndex;
         const isAnswered = answeredQuestions.has(index);
@@ -40,7 +40,7 @@ const TestNavigation = ({
             key={index}
             type="button"
             onClick={() => onQuestionSelect(index)}
-            className={`flex w-10 h-10 shrink-0 cursor-pointer items-center justify-center rounded-xl text-sm font-semibold transition-all duration-200 ${
+            className={`flex w-8 h-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-xs font-semibold transition-all duration-200 ${
               resultClass
                 ? `${resultClass} ${isCurrent ? "scale-110 ring-2 ring-white shadow-lg z-10" : ""}`
                 : isCurrent

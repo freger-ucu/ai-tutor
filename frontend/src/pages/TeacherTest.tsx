@@ -184,7 +184,7 @@ const TeacherTest = () => {
         onStudentsClick={() => navigate(`/teacher/${id}?view=students`)}
       />
 
-      <main className="flex-1 px-10 py-8 flex flex-col h-full">
+      <main className="flex-1 px-10 py-4 flex flex-col h-full">
           <div className="flex items-center gap-4 mb-4 shrink-0">
             <BackButton fallbackPath={backToTopicHref} />
             <Breadcrumbs
@@ -230,7 +230,7 @@ const TeacherTest = () => {
           </div>
 
           {/* Test content - same layout as student view with custom scrollbar */}
-          <div className="mt-6 flex-1 min-h-0 overflow-y-auto teacher-scrollbar pr-4">
+          <div className="mt-4 flex-1 min-h-0 overflow-y-auto teacher-scrollbar pr-4">
              <TestContainer
                testData={testData}
                statistics={statistics}

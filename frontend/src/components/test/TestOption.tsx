@@ -48,7 +48,7 @@ const TestOption = ({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex w-full cursor-pointer items-center gap-4 rounded-2xl border px-6 py-5 text-left text-base font-medium transition-all ${
+      className={`flex w-full cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-medium transition-all ${
         resolvedResult
           ? resolvedResult.container
           : isSelected
@@ -59,8 +59,8 @@ const TestOption = ({
       }`}
     >
       <span
-        className={`flex h-5 w-5 shrink-0 items-center justify-center border transition-all ${
-          isSingle ? "rounded-full" : "rounded-md"
+        className={`flex h-4 w-4 shrink-0 items-center justify-center border transition-all ${
+          isSingle ? "rounded-full" : "rounded"
         } ${
           resolvedResult && isSelected
             ? resolvedResult.indicator
@@ -71,10 +71,10 @@ const TestOption = ({
       >
         {isSelected &&
           (isSingle ? (
-            <span className="h-2.5 w-2.5 rounded-full bg-white" />
+            <span className="h-2 w-2 rounded-full bg-white" />
           ) : (
             <svg
-              className={`h-3 w-3 ${resolvedResult ? resolvedResult.checkColor : "text-white"}`}
+              className={`h-2.5 w-2.5 ${resolvedResult ? resolvedResult.checkColor : "text-white"}`}
               fill="none"
               stroke="currentColor"
               strokeWidth={2.5}
@@ -88,8 +88,8 @@ const TestOption = ({
             </svg>
           ))}
       </span>
-      <span className="leading-relaxed flex-1">
-        <MarkdownContent content={text} className="[&>p]:mt-0" />
+      <span className="leading-snug flex-1">
+        <MarkdownContent content={text} className="[&>p]:mt-0 text-xs" />
       </span>
     </button>
   );

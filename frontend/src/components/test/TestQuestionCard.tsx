@@ -95,29 +95,29 @@ const TestQuestionCard = ({
   const showDifficultyBadge = isTeacher || showResult;
 
   return (
-    <div className="rounded-[22px] bg-white p-8 shadow-sm">
+    <div className="rounded-2xl bg-white p-4 shadow-sm">
       {/* Question header */}
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-xl font-bold text-slate-900">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-slate-900">
           Питання {question.number}
         </h2>
         {/* Difficulty badge - shown for teacher and student after finishing */}
         {showDifficultyBadge && (
           <span
-            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold ${difficultyColors[question.difficulty]}`}
+            className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${difficultyColors[question.difficulty]}`}
           >
             {difficultyLabels[question.difficulty]}
           </span>
         )}
       </div>
-      <div className="mt-5">
-        <MarkdownContent content={question.text} className="text-base text-slate-700" />
+      <div className="mt-2">
+        <MarkdownContent content={question.text} className="text-sm text-slate-700" />
       </div>
 
       {/* Answer options - inside white block */}
       {question.type === "open" ? (
-        <div className="mt-8">
-          <label className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+        <div className="mt-3">
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Відповідь
           </label>
           <textarea
@@ -125,22 +125,22 @@ const TestQuestionCard = ({
             onChange={(event) => onOpenAnswerChange(event.target.value)}
             disabled={showResult}
             placeholder="Введіть відповідь"
-            className={`mt-3 w-full rounded-xl border-2 px-5 py-4 text-base text-slate-800 shadow-sm outline-none transition ${
+            className={`mt-1.5 w-full rounded-lg border-2 px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition ${
               showResult
                 ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500"
                 : "border-slate-200 bg-white focus:border-[#1E73F7]"
             }`}
-            rows={4}
+            rows={2}
           />
         </div>
       ) : (
-        <div className="mt-8">
-          <p className="text-sm text-slate-500 mb-4">
+        <div className="mt-3">
+          <p className="text-xs text-slate-500 mb-2">
             {question.type === "multiple_choice"
               ? "Оберіть одну або кілька відповідей"
               : "Оберіть одну відповідь"}
           </p>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             {question.options.map((option) => (
               <TestOption
                 key={option.id}
@@ -161,7 +161,7 @@ const TestQuestionCard = ({
 
       {/* Explanation - shown below the question */}
       {showExplanation && question.explanation && (
-        <div className="mt-8">
+        <div className="mt-3">
           <TestExplanation explanation={question.explanation} />
         </div>
       )}

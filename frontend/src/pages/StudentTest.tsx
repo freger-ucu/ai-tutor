@@ -192,8 +192,8 @@ const StudentTest = () => {
         subjects={availableSubjects}
         activeSubjectId={subjectSlug}
       />
-      <main className="flex-1 px-8 py-10 flex flex-col h-full overflow-hidden">
-        <div className="flex items-center gap-4 mb-6 shrink-0">
+      <main className="flex-1 px-8 py-4 flex flex-col h-full overflow-hidden">
+        <div className="flex items-center gap-4 mb-3 shrink-0">
           <BackButton fallbackPath={backToTopicHref} />
           <Breadcrumbs
             items={[
