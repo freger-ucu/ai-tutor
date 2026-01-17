@@ -257,16 +257,13 @@ const StudentNote = () => {
 
           <div className="mt-5 flex-1 min-h-0 rounded-[28px] bg-white p-6 shadow-sm overflow-y-auto note-scrollbar">
             <div className="rounded-[20px] bg-white">
-              <h2 className="text-lg font-semibold text-slate-900">
-                {decodedTopic || noteTitle}
-              </h2>
-              <div className="mt-4 break-words">
+              <div className="break-words">
                 {noteMaterial?.content ? (
                   <LectureContent
                     content={noteMaterial.content}
                     sources={noteMaterial.sources ?? []}
                     userRole="student"
-                    skipFirstHeading
+                    title={noteTitle}
                   />
                 ) : (
                   <div className="space-y-6">

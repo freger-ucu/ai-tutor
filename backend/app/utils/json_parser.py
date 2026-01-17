@@ -115,6 +115,9 @@ def fix_latex_escapes(json_str: str) -> str:
         # \t... commands (JSON \t = tab)
         'tan', 'tau', 'text', 'textbf', 'textit', 'textrm', 'therefore', 'theta',
         'tilde', 'times', 'to', 'top', 'triangle',
+        # Additional common LaTeX commands (not ambiguous with JSON escapes,
+        # but handled by the else branch - listed here for documentation)
+        # \cdot, \left, \right, \sqrt, \sum, \prod, \int, \lim, \alpha, \gamma, etc.
     }
 
     result = []
@@ -151,6 +154,11 @@ def fix_latex_escapes(json_str: str) -> str:
                         result.append('\\\\')
                         i += 1
                         continue
+                elif next_char in {'(', ')', '[', ']'}:
+                    # LaTeX delimiters \( \) \[ \] - keep as-is, they're valid
+                    result.append(char)
+                    i += 1
+                    continue
                 elif next_char in ambiguous_escapes:
                     # Check if this matches a known LaTeX command prefix
                     # Extract potential command (letters after backslash)

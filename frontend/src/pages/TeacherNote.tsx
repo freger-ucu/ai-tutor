@@ -4,6 +4,7 @@ import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import LectureContent from "../components/LectureContent";
+import MarkdownContent from "../components/MarkdownContent";
 import SelectStudentsModal from "../components/SelectStudentsModal";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { deleteMaterial, getMaterials, updateMaterial } from "../data/materialsStorage";
@@ -218,7 +219,7 @@ const TeacherNote = () => {
                       content={noteMaterial.content}
                       sources={noteMaterial.sources ?? []}
                       userRole="teacher"
-                      skipFirstHeading
+                      title={noteTitle}
                     />
                   ) : (
                     <div className="space-y-6 text-sm leading-relaxed text-slate-800">
@@ -262,8 +263,8 @@ const TeacherNote = () => {
                 <h3 className="text-sm font-bold text-slate-900 shrink-0">Нотатки</h3>
                 <div className="mt-2 flex-1 min-h-0 overflow-hidden">
                   {teacherNotes ? (
-                    <div className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap overflow-y-auto h-full note-scrollbar">
-                      {teacherNotes}
+                    <div className="text-sm leading-relaxed text-slate-700 overflow-y-auto h-full note-scrollbar">
+                      <MarkdownContent content={teacherNotes} />
                     </div>
                   ) : (
                     <div className="text-sm text-slate-700">

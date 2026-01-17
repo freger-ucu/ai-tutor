@@ -10,9 +10,9 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, "&quot;");
 
 // Placeholder system to protect LaTeX from escaping/formatting
-// Using Unicode private use area characters to avoid conflicts
-const PLACEHOLDER_PREFIX = "\uE000LATEX_";
-const PLACEHOLDER_SUFFIX = "_\uE001";
+// Using distinctive markers that won't appear in normal text
+const PLACEHOLDER_PREFIX = "%%%LATEX_PLACEHOLDER_";
+const PLACEHOLDER_SUFFIX = "_END%%%";
 
 const extractAndRenderLatex = (
   text: string
@@ -63,8 +63,8 @@ const extractAndRenderLatex = (
     }
   });
 
-  // Also handle \[...\] for block (alternative LaTeX delimiters)
-  result = result.replace(/\\\[([^\]]+)\\\]/g, (_, latex) => {
+  // Also handle \[...\] for block (alternative LaTeX delimiters) - use non-greedy match
+  result = result.replace(/\\\[(.+?)\\\]/g, (_, latex) => {
     try {
       const rendered = `<div class="katex-block my-4">${katex.renderToString(latex.trim(), {
         displayMode: true,
@@ -79,8 +79,8 @@ const extractAndRenderLatex = (
     }
   });
 
-  // Handle \(...\) for inline
-  result = result.replace(/\\\(([^)]+)\\\)/g, (_, latex) => {
+  // Handle \(...\) for inline - use non-greedy match to handle nested parentheses
+  result = result.replace(/\\\((.+?)\\\)/g, (_, latex) => {
     try {
       const rendered = katex.renderToString(latex.trim(), {
         displayMode: false,
@@ -139,30 +139,39 @@ const renderMarkdown = (markdown: string): string => {
   // First, extract and render all LaTeX before any other processing
   const { processed, placeholders } = extractAndRenderLatex(markdown);
 
-  const lines = processed.replace(/\r\n/g, "\n").split("\n");
+  // Clean up stray backslashes (LaTeX line break artifacts)
+  const cleaned = processed.replace(/\\$/gm, "").replace(/\\\s*$/gm, "");
+
+  const lines = cleaned.replace(/\r\n/g, "\n").split("\n");
   let html = "";
-  let inUl = false;
-  let inOl = false;
+  let currentList: "ul" | "ol" | null = null;
 
   const closeLists = () => {
-    if (inUl) {
-      html += "</ul>";
-      inUl = false;
-    }
-    if (inOl) {
-      html += "</ol>";
-      inOl = false;
+    if (currentList) {
+      html += currentList === "ul" ? "</ul>" : "</ol>";
+      currentList = null;
     }
   };
 
+  let prevWasEmpty = false;
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) {
       closeLists();
-      html += "<br />";
+      if (!prevWasEmpty) {
+        prevWasEmpty = true;
+      }
       continue;
     }
+    prevWasEmpty = false;
 
+    // Check headings from most specific to least (#### before ###)
+    if (trimmed.startsWith("#### ")) {
+      closeLists();
+      const content = formatInline(escapeHtml(trimmed.slice(5)), placeholders);
+      html += `<h4 class="mt-5 text-sm font-semibold text-slate-900">${content}</h4>`;
+      continue;
+    }
     if (trimmed.startsWith("### ")) {
       closeLists();
       const content = formatInline(escapeHtml(trimmed.slice(4)), placeholders);
@@ -182,23 +191,25 @@ const renderMarkdown = (markdown: string): string => {
       continue;
     }
 
-    if (trimmed.startsWith("- ")) {
-      if (!inUl) {
+    // Bullet points
+    if (trimmed.startsWith("- ") || trimmed.startsWith("• ") || trimmed.startsWith("* ")) {
+      if (currentList !== "ul") {
         closeLists();
-        html += '<ul class="mt-3 list-disc space-y-1 pl-5">';
-        inUl = true;
+        html += '<ul class="mt-3 list-disc space-y-2 pl-5">';
+        currentList = "ul";
       }
       const content = formatInline(escapeHtml(trimmed.slice(2)), placeholders);
       html += `<li>${content}</li>`;
       continue;
     }
 
-    const orderedMatch = trimmed.match(/^(\d+)\.\s+/);
+    // Numbered lists (1. or 1))
+    const orderedMatch = trimmed.match(/^(\d+)[\.\)]\s+/);
     if (orderedMatch) {
-      if (!inOl) {
+      if (currentList !== "ol") {
         closeLists();
-        html += '<ol class="mt-3 list-decimal space-y-1 pl-5">';
-        inOl = true;
+        html += '<ol class="mt-3 list-decimal space-y-2 pl-5">';
+        currentList = "ol";
       }
       const content = formatInline(
         escapeHtml(trimmed.slice(orderedMatch[0].length)),
