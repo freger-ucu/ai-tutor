@@ -243,8 +243,8 @@ const TestContainer = ({
 
   const totalQuestions = testData.questions.length;
   const answeredCount = answeredQuestionIndices.size;
-  const isReadyToFinish =
-    viewMode === "student" ? answeredCount === totalQuestions : false;
+  // Student can finish test at any time - unanswered questions count as incorrect
+  const isReadyToFinish = viewMode === "student";
 
   const resultMap = useMemo(() => {
     const map = new Map<number, "correct" | "incorrect" | "partial">();
@@ -261,7 +261,7 @@ const TestContainer = ({
   }, [answers, isFinished, testData.questions, viewMode]);
 
   const handleFinish = async () => {
-    if (isFinished || !isReadyToFinish || isSubmitting) {
+    if (isFinished || isSubmitting) {
       return;
     }
     setIsSubmitting(true);
@@ -340,12 +340,12 @@ const TestContainer = ({
         {viewMode === "student" && !isFinished && (
           <button
             type="button"
-            onClick={isFinished ? onExit : handleFinish}
-            disabled={(!isReadyToFinish && !isFinished) || isSubmitting}
+            onClick={handleFinish}
+            disabled={isSubmitting}
             className={`w-full rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all lg:w-[220px] ${
-              (isReadyToFinish || isFinished) && !isSubmitting
-                ? "cursor-pointer bg-[#E63C3C] hover:-translate-y-0.5 hover:shadow-lg"
-                : "cursor-not-allowed bg-[#E63C3C]/60"
+              isSubmitting
+                ? "cursor-not-allowed bg-[#E63C3C]/60"
+                : "cursor-pointer bg-[#E63C3C] hover:-translate-y-0.5 hover:shadow-lg"
             }`}
           >
             {isSubmitting ? "Перевіряємо..." : "Завершити тест"}
@@ -366,6 +366,7 @@ const TestContainer = ({
           {/* Scrollable question area */}
           <div className="flex-1 min-h-0 overflow-y-auto student-scrollbar">
             <TestQuestionCard
+              key={currentQuestion.id}
               question={currentQuestion}
               selectedOptionIds={currentAnswer?.selectedOptionIds ?? []}
               openAnswer={currentAnswer?.openAnswer ?? ""}
@@ -383,7 +384,7 @@ const TestContainer = ({
               type="button"
               onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
               disabled={currentQuestionIndex === 0}
-              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
+              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-300 ease-in-out ${
                 currentQuestionIndex === 0
                   ? "cursor-not-allowed bg-white/60 text-slate-300"
                   : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
@@ -395,7 +396,7 @@ const TestContainer = ({
               type="button"
               onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
               disabled={currentQuestionIndex >= testData.questions.length - 1}
-              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
+              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-300 ease-in-out ${
                 currentQuestionIndex >= testData.questions.length - 1
                   ? "cursor-not-allowed bg-white/60 text-slate-300"
                   : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"

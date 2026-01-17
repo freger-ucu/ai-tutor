@@ -258,8 +258,8 @@ const StudentTopic = () => {
                     to={`/student/${studentId}/note/${courseId}/${topicId}/${item.id}`}
                   >
                     <Card className="flex items-center gap-3 px-6 py-5 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98]">
-                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#1E73F7]/15 transition-all duration-300">
-                        <img src="/src/assets/Vector.svg" alt="" className="h-4 w-5" />
+                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-sm transition-all duration-300">
+                        <img src="/src/assets/Vector.svg" alt="" className="h-4 w-4" />
                       </span>
                       <span className="text-base font-semibold text-slate-900">{item.title}</span>
                     </Card>

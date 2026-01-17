@@ -207,8 +207,8 @@ const TeacherTest = () => {
             <BackButton fallbackPath={backToTopicHref} />
             <Breadcrumbs
               items={[
-                { label: "Матеріали", href: backToClassHref },
-                { label: `${subjectName}. ${testData.className}. id-${classId}` || "Клас", href: backToClassHref },
+                { label: subjectName || "Предмет", href: backToClassHref },
+                { label: testData.className || "Клас", href: backToClassHref },
                 { label: testData.topicName || "Тема", href: backToTopicHref },
                 { label: testData.title },
               ]}

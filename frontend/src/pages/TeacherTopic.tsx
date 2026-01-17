@@ -204,8 +204,8 @@ const TeacherTopic = () => {
             <BackButton fallbackPath={`/teacher/${id}`} />
             <Breadcrumbs
               items={[
-                { label: "Матеріали", href: `/teacher/${id}` },
-                { label: `${subjectName}. ${classLabel}. id-${decodedClassId}` || "Клас", href: `/teacher/${id}` },
+                { label: subjectName || "Предмет", href: `/teacher/${id}` },
+                { label: classLabel || "Клас", href: `/teacher/${id}` },
                 { label: decodedTopic || "Тема" },
               ]}
             />
@@ -214,10 +214,10 @@ const TeacherTopic = () => {
             <div className="grid gap-6 md:grid-cols-[1fr_1fr_1fr_auto]">
               <div>
                 <div className="text-xs font-semibold uppercase text-slate-400">
-                  Дата
+                  Предмет
                 </div>
                 <div className="mt-2 text-sm font-semibold text-slate-900">
-                  22 вересня 2025
+                  {subjectName}
                 </div>
               </div>
               <div>
@@ -251,8 +251,8 @@ const TeacherTopic = () => {
                       to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
                       className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
                     >
-                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 transition-all duration-300 group-hover:bg-[#1E73F7]/25">
-                        <img src="/src/assets/Vector.svg" alt="" className="h-4 w-5" />
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
+                        <img src="/src/assets/Vector.svg" alt="" className="h-4 w-4" />
                       </span>
                       {item.title}
                     </Link>

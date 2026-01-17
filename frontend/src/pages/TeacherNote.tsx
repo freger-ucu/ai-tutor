@@ -196,24 +196,69 @@ const TeacherNote = () => {
             <BackButton fallbackPath={backToTopicHref} />
             <Breadcrumbs
               items={[
-                { label: "Матеріали", href: backToClassHref },
-                { label: `${subjectName}. ${classLabel}. id-${decodedClassId}` || "Клас", href: backToClassHref },
+                { label: subjectName || "Предмет", href: backToClassHref },
+                { label: classLabel || "Клас", href: backToClassHref },
                 { label: sidebarTopicName || "Тема", href: backToTopicHref },
                 { label: noteTitle },
               ]}
             />
           </div>
-          <h1 className="text-2xl font-bold text-white shrink-0">
-            Конспект. {noteTitle}
-          </h1>
+          <div className="flex items-center gap-4 shrink-0">
+            <h1 className="text-2xl font-bold text-white">
+              Конспект. {noteTitle}
+            </h1>
 
-          <div className="mt-5 flex-1 min-h-0 rounded-[28px] bg-white p-6 shadow-sm overflow-y-auto note-scrollbar">
-            <div className="grid gap-6 lg:grid-cols-[1fr_260px]">
-              <div className="rounded-[20px] bg-white">
-                <h2 className="text-lg font-semibold text-slate-900">
-                  {sidebarTopicName || noteTitle}
-                </h2>
-                <div className="mt-4 break-words">
+            {/* Edit/Delete buttons - shown when not in edit mode and material exists */}
+            {!isEditMode && noteMaterial && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleStartEdit}
+                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
+                >
+                  <PencilIcon />
+                  Редагувати конспект
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteModalOpen(true)}
+                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 hover:border-red-500"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18" />
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                  </svg>
+                  Видалити
+                </button>
+              </>
+            )}
+
+            {/* Save/Cancel buttons - shown in edit mode */}
+            {isEditMode && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#1E73F7] transition hover:bg-slate-100"
+                >
+                  Зберегти зміни
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                >
+                  Скасувати
+                </button>
+              </>
+            )}
+          </div>
+
+          <div className="mt-5 flex-1 min-h-0 rounded-[28px] bg-white p-6 shadow-sm flex flex-col overflow-hidden">
+            <div className="flex-1 min-h-0 grid gap-6 lg:grid-cols-[1fr_300px]">
+              <div className="rounded-[20px] bg-white overflow-y-auto note-scrollbar pr-2">
+                <div className="break-words">
                   {isEditMode ? (
                     <div className="space-y-6">
                       {/* Content editing */}
@@ -288,68 +333,24 @@ const TeacherNote = () => {
                   )}
                 </div>
 
-                {/* Edit/Save buttons */}
-                <div className="mt-6 pt-4 border-t border-slate-100">
-                  {isEditMode ? (
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={handleSaveEdit}
-                        className="flex items-center gap-2 rounded-full bg-[#1E73F7] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1A63D6]"
-                      >
-                        Зберегти зміни
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCancelEdit}
-                        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                      >
-                        Скасувати
-                      </button>
-                    </div>
-                  ) : noteMaterial ? (
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={handleStartEdit}
-                        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:border-[#1E73F7] hover:text-[#1E73F7]"
-                      >
-                        <PencilIcon />
-                        Редагувати конспект
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsDeleteModalOpen(true)}
-                        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-red-50 hover:border-red-300 hover:text-red-600"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 6h18" />
-                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                        </svg>
-                        Видалити
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
               </div>
 
-              <div className="rounded-[20px] bg-[#E9F1FF] p-6 h-fit max-h-full overflow-y-auto">
-                <h3 className="text-sm font-bold text-slate-900">Нотатки</h3>
-                <div className="mt-3">
+              <div className="rounded-[20px] bg-[#E9F1FF] p-5 h-full flex flex-col overflow-hidden">
+                <h3 className="text-sm font-bold text-slate-900 shrink-0">Нотатки</h3>
+                <div className="mt-2 flex-1 min-h-0 overflow-hidden">
                   {isEditMode ? (
                     <textarea
                       value={editTeacherNotes}
                       onChange={(e) => setEditTeacherNotes(e.target.value)}
-                      className="min-h-[200px] w-full rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
+                      className="h-full w-full rounded-xl border border-slate-200 bg-white p-3 text-[10px] leading-snug text-slate-700 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
                       placeholder="Нотатки для вчителя..."
                     />
                   ) : teacherNotes ? (
-                    <div className="text-xs leading-relaxed text-slate-700 whitespace-pre-wrap break-words">
+                    <div className="text-[10px] leading-snug text-slate-700 whitespace-pre-wrap overflow-hidden h-full">
                       {teacherNotes}
                     </div>
                   ) : (
-                    <div className="text-xs text-slate-700">
+                    <div className="text-[10px] text-slate-700">
                       Нотатки відсутні.
                     </div>
                   )}

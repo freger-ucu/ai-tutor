@@ -352,7 +352,7 @@ const Teacher = () => {
           >
             {activeView === "materials" ? (
               <>
-                <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+                <div className="grid gap-6 lg:grid-cols-2">
                   <Panel title="Курси">
                     <div className="space-y-6">
                       {courseGroups.length === 0 && (

@@ -95,7 +95,7 @@ const TestQuestionCard = ({
   const showDifficultyBadge = isTeacher || showResult;
 
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm">
+    <div className="rounded-2xl bg-white p-4 shadow-sm animate-fadeIn">
       {/* Question header */}
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-slate-900">
