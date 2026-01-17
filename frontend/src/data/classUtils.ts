@@ -11,5 +11,5 @@ export const classLabelToId = (label: string) => {
 };
 
 export const classIdToLabel = (classNumber: number, classId: number) => {
-  return `${classNumber || classId}`;
+  return `${classNumber || classId} клас`;
 };

@@ -321,7 +321,7 @@ const TestContainer = ({
   };
 
   return (
-    <div ref={containerRef} tabIndex={-1} className="flex flex-col outline-none">
+    <div ref={containerRef} tabIndex={-1} className="flex flex-col outline-none h-full">
       {/* Title - only shown for students */}
       {viewMode === "student" && (
         <h1 className="text-xl font-bold text-white mb-2">{testData.title}</h1>
@@ -360,23 +360,55 @@ const TestContainer = ({
         )}
       </div>
 
-      {/* Question card with feedback on the side - fixed height for consistent button position */}
-      <div className="flex gap-4 mb-3">
-        <div className="flex-1 min-w-0 h-[340px] overflow-y-auto student-scrollbar">
-          <TestQuestionCard
-            question={currentQuestion}
-            selectedOptionIds={currentAnswer?.selectedOptionIds ?? []}
-            openAnswer={currentAnswer?.openAnswer ?? ""}
-            onOptionSelect={handleOptionSelect}
-            onOpenAnswerChange={handleOpenAnswerChange}
-            showResult={viewMode === "student" && isFinished}
-            viewMode={viewMode}
-            showExplanation={viewMode === "teacher" || (viewMode === "student" && isFinished)}
-          />
+      {/* Question card with feedback on the side - flex to fill available space */}
+      <div className="flex gap-4 flex-1 min-h-0">
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* Scrollable question area */}
+          <div className="flex-1 min-h-0 overflow-y-auto student-scrollbar">
+            <TestQuestionCard
+              question={currentQuestion}
+              selectedOptionIds={currentAnswer?.selectedOptionIds ?? []}
+              openAnswer={currentAnswer?.openAnswer ?? ""}
+              onOptionSelect={handleOptionSelect}
+              onOpenAnswerChange={handleOpenAnswerChange}
+              showResult={viewMode === "student" && isFinished}
+              viewMode={viewMode}
+              showExplanation={viewMode === "teacher" || (viewMode === "student" && isFinished)}
+            />
+          </div>
+
+          {/* Navigation buttons - attached to bottom of question card */}
+          <div className="flex items-center justify-between pt-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
+              disabled={currentQuestionIndex === 0}
+              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
+                currentQuestionIndex === 0
+                  ? "cursor-not-allowed bg-white/60 text-slate-300"
+                  : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
+              }`}
+            >
+              ← Попереднє
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
+              disabled={currentQuestionIndex >= testData.questions.length - 1}
+              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
+                currentQuestionIndex >= testData.questions.length - 1
+                  ? "cursor-not-allowed bg-white/60 text-slate-300"
+                  : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
+              }`}
+            >
+              Наступне →
+            </button>
+          </div>
         </div>
+
         {/* Feedback on the side - shown after test completion for student */}
         {feedbackNode && viewMode === "student" && isFinished && (
-          <div className="w-72 shrink-0 h-[340px] overflow-y-auto student-scrollbar">
+          <div className="w-72 shrink-0 overflow-y-auto student-scrollbar">
             {feedbackNode}
           </div>
         )}
@@ -386,50 +418,6 @@ const TestContainer = ({
       {showStatistics && statistics && (
         <TestStatisticsCard statistics={statistics} />
       )}
-
-      {/* Navigation buttons - on blue background */}
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
-          disabled={currentQuestionIndex === 0}
-          className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-            currentQuestionIndex === 0
-              ? "cursor-not-allowed bg-white/60 text-slate-300"
-              : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
-          }`}
-        >
-          ← Попереднє
-        </button>
-        {/* On last question for student: show "Завершити тест" button instead of "Наступне" */}
-        {viewMode === "student" && !isFinished && currentQuestionIndex >= testData.questions.length - 1 ? (
-          <button
-            type="button"
-            onClick={handleFinish}
-            disabled={!isReadyToFinish || isSubmitting}
-            className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-              isReadyToFinish && !isSubmitting
-                ? "cursor-pointer bg-[#E63C3C] text-white hover:-translate-y-0.5 hover:shadow-lg"
-                : "cursor-not-allowed bg-[#E63C3C]/60 text-white/80"
-            }`}
-          >
-            {isSubmitting ? "Перевіряємо..." : "Завершити тест"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
-            disabled={currentQuestionIndex >= testData.questions.length - 1}
-            className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-              currentQuestionIndex >= testData.questions.length - 1
-                ? "cursor-not-allowed bg-white/60 text-slate-300"
-                : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
-            }`}
-          >
-            Наступне →
-          </button>
-        )}
-      </div>
     </div>
   );
 };

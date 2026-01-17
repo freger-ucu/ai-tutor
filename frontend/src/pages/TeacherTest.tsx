@@ -8,7 +8,7 @@ import { getTestById, getTestStatistics, mockTestData } from "../data/mockTests"
 import TeacherSidebar from "../components/TeacherSidebar";
 import { TestContainer } from "../components/test";
 import SelectStudentsModal from "../components/SelectStudentsModal";
-import { deleteMaterial, getMaterials, updateMaterial } from "../data/materialsStorage";
+import { addMaterial, deleteMaterial, getMaterials, updateMaterial } from "../data/materialsStorage";
 import { withGeneratedQuestions } from "../data/testMapper";
 import { classLabelToId } from "../data/classUtils";
 import { getTeacherStudents } from "../api/teacher";
@@ -151,15 +151,33 @@ const TeacherTest = () => {
         subtopics: q.subtopics ?? [],
       }));
 
-      // Update in storage
-      updateMaterial(testId, {
+      // Try to update existing material
+      const updated = updateMaterial(testId, {
         questions: storageQuestions,
       });
+
+      // If material doesn't exist in storage, create it with the same ID
+      if (!updated && testData) {
+        const newMaterial = addMaterial({
+          type: "test",
+          title: testData.title,
+          questions: storageQuestions,
+          subject: testData.subject,
+          className: testData.className,
+          topicName: testData.topicName,
+          courseId: courseId,
+          classId: classId ?? undefined,
+          teacherId: id,
+        });
+        // Navigate to the new material's URL so refreshKey picks it up
+        navigate(`/teacher/${id}/test/${newMaterial.id}`, { replace: true });
+        return;
+      }
 
       // Trigger re-fetch of test data
       setRefreshKey((prev) => prev + 1);
     },
-    [testId]
+    [testId, testData, courseId, classId, id, navigate]
   );
 
   if (!testData) {

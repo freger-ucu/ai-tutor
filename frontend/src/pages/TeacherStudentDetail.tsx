@@ -189,6 +189,7 @@ const TeacherStudentDetail = () => {
               <Breadcrumbs
                 items={[
                   { label: subjectName || "Предмет", href: backToStudentsHref },
+                  { label: classLabel || "Клас", href: backToClassHref },
                   { label: `Учень ${apiStudentId ?? studentId}` },
                 ]}
               />

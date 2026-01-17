@@ -203,7 +203,7 @@ const Student = () => {
               <div
                 key={topic.id}
                 onClick={() => handleTopicClick(topic.title)}
-                className="flex flex-wrap items-center justify-between gap-6 rounded-[24px] bg-white px-8 py-5 shadow-sm cursor-pointer transition hover:shadow-md"
+                className="flex flex-wrap items-center justify-between gap-6 rounded-[24px] bg-white px-8 py-5 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 hover:bg-slate-50/80"
               >
                 <div className="min-w-[180px] font-semibold text-slate-900">
                   {topic.title}
