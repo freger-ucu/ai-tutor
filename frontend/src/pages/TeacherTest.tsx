@@ -190,7 +190,7 @@ const TeacherTest = () => {
             <Breadcrumbs
               items={[
                 { label: "Матеріали", href: backToClassHref },
-                { label: testData.className || "Клас", href: backToClassHref },
+                { label: `${subjectName}. ${testData.className}. id-${classId}` || "Клас", href: backToClassHref },
                 { label: testData.topicName || "Тема", href: backToTopicHref },
                 { label: testData.title },
               ]}
@@ -229,8 +229,8 @@ const TeacherTest = () => {
             </button>
           </div>
 
-          {/* Test content - same layout as student view */}
-          <div className="mt-6 flex-1 min-h-0 overflow-y-auto">
+          {/* Test content - same layout as student view with custom scrollbar */}
+          <div className="mt-6 flex-1 min-h-0 overflow-y-auto teacher-scrollbar pr-4">
              <TestContainer
                testData={testData}
                statistics={statistics}

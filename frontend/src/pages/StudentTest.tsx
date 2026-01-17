@@ -184,27 +184,26 @@ const StudentTest = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#1E73F7] text-slate-900">
-      <div className="flex min-h-screen">
-        {/* Static sidebar - always shows only subjects list */}
-        <StudentSidebar
-          studentId={studentId || ""}
-          classLabel={classLabel || testData?.className || undefined}
-          subjects={availableSubjects}
-          activeSubjectId={subjectSlug}
-        />
-        <main className="flex-1 px-8 py-10">
-          <div className="flex items-center gap-4 mb-6">
-            <BackButton fallbackPath={backToTopicHref} />
-            <Breadcrumbs
-              items={[
-                { label: subjectName || "Предмет", href: backToSubjectHref },
-                { label: testData.topicName || "Тема", href: backToTopicHref },
-                { label: testData.title },
-              ]}
-            />
-          </div>
-          <div>
+    <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
+      {/* Static sidebar - always shows only subjects list */}
+      <StudentSidebar
+        studentId={studentId || ""}
+        classLabel={classLabel || testData?.className || undefined}
+        subjects={availableSubjects}
+        activeSubjectId={subjectSlug}
+      />
+      <main className="flex-1 px-8 py-10 flex flex-col h-full overflow-hidden">
+        <div className="flex items-center gap-4 mb-6 shrink-0">
+          <BackButton fallbackPath={backToTopicHref} />
+          <Breadcrumbs
+            items={[
+              { label: subjectName || "Предмет", href: backToSubjectHref },
+              { label: testData.topicName || "Тема", href: backToTopicHref },
+              { label: testData.title },
+            ]}
+          />
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto student-scrollbar pr-2">
             <TestContainer
               testData={testData}
               showStatistics={false}
@@ -331,9 +330,8 @@ const StudentTest = () => {
                 }
               }}
             />
-          </div>
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 };

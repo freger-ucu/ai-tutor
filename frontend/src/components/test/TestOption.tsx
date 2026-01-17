@@ -1,3 +1,5 @@
+import MarkdownContent from "../MarkdownContent";
+
 interface TestOptionProps {
   id: string;
   text: string;
@@ -86,7 +88,9 @@ const TestOption = ({
             </svg>
           ))}
       </span>
-      <span className="leading-relaxed">{text}</span>
+      <span className="leading-relaxed flex-1">
+        <MarkdownContent content={text} className="[&>p]:mt-0" />
+      </span>
     </button>
   );
 };

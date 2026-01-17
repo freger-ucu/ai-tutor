@@ -401,18 +401,34 @@ const TestContainer = ({
         >
           ← Попереднє
         </button>
-        <button
-          type="button"
-          onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
-          disabled={currentQuestionIndex >= testData.questions.length - 1}
-          className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
-            currentQuestionIndex >= testData.questions.length - 1
-              ? "cursor-not-allowed bg-white/60 text-slate-300"
-              : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
-          }`}
-        >
-          Наступне →
-        </button>
+        {/* On last question for student: show "Завершити тест" button instead of "Наступне" */}
+        {viewMode === "student" && !isFinished && currentQuestionIndex >= testData.questions.length - 1 ? (
+          <button
+            type="button"
+            onClick={handleFinish}
+            disabled={!isReadyToFinish || isSubmitting}
+            className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
+              isReadyToFinish && !isSubmitting
+                ? "cursor-pointer bg-[#E63C3C] text-white hover:-translate-y-0.5 hover:shadow-lg"
+                : "cursor-not-allowed bg-[#E63C3C]/60 text-white/80"
+            }`}
+          >
+            {isSubmitting ? "Перевіряємо..." : "Завершити тест"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
+            disabled={currentQuestionIndex >= testData.questions.length - 1}
+            className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
+              currentQuestionIndex >= testData.questions.length - 1
+                ? "cursor-not-allowed bg-white/60 text-slate-300"
+                : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
+            }`}
+          >
+            Наступне →
+          </button>
+        )}
       </div>
     </div>
   );

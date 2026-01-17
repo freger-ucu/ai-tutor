@@ -205,7 +205,7 @@ const TeacherTopic = () => {
             <Breadcrumbs
               items={[
                 { label: "Матеріали", href: `/teacher/${id}` },
-                { label: classLabel || "Клас", href: `/teacher/${id}` },
+                { label: `${subjectName}. ${classLabel}. id-${decodedClassId}` || "Клас", href: `/teacher/${id}` },
                 { label: decodedTopic || "Тема" },
               ]}
             />
@@ -238,31 +238,28 @@ const TeacherTopic = () => {
               </div>
             </div>
           </Panel>
-          <div className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-            <section>
+          <div className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_0.95fr] overflow-visible">
+            <section className="overflow-visible">
               <h2 className="text-xl font-semibold text-white">Конспекти</h2>
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 space-y-4 overflow-visible">
                 {notes.map((item) => (
                   <Card
                     key={item.id}
-                    className="flex items-center justify-between px-5 py-4"
+                    className="flex items-center justify-between px-5 py-4 cursor-pointer transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]"
                   >
                     <Link
                       to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
-                      className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900 cursor-pointer"
+                      className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
                     >
-                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
-                        <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
-                          <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
-                          <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
-                        </svg>
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 transition-all duration-300 group-hover:bg-[#1E73F7]/25">
+                        <img src="/src/assets/Vector.svg" alt="" className="h-4 w-5" />
                       </span>
                       {item.title}
                     </Link>
                     <button
                       type="button"
                       onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "conspect" })}
-                      className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
                       title="Видалити"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -285,25 +282,25 @@ const TeacherTopic = () => {
                 }}
               />
             </section>
-            <section>
+            <section className="overflow-visible">
               <h2 className="text-xl font-semibold text-white">Тести</h2>
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 space-y-4 overflow-visible">
                 {tests.map((item) => (
                   <Card
                     key={item.id}
-                    className="flex items-center justify-between px-5 py-4"
+                    className="flex items-center justify-between px-5 py-4 cursor-pointer transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]"
                   >
                     <Link
                       to={`/teacher/${id}/test/${item.id}`}
-                      className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900 cursor-pointer"
+                      className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
                     >
-                      <img src="/src/assets/Group.svg" alt="" className="h-6 w-6" />
+                      <img src="/src/assets/Group.svg" alt="" className="h-6 w-6 transition-transform duration-300" />
                       {item.title}
                     </Link>
                     <button
                       type="button"
                       onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "test" })}
-                      className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
                       title="Видалити"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

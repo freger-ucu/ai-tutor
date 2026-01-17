@@ -182,7 +182,7 @@ const TeacherNote = () => {
   }, [noteId, navigate, backToTopicHref]);
 
   return (
-    <div className="min-h-screen bg-[#1E73F7] text-slate-900 flex">
+    <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
       {/* Static sidebar - always shows only "Materials" and "Students" links */}
       <TeacherSidebar
         teacherName={teacherId ? `Вчитель ${teacherId}` : "Вчитель"}
@@ -191,29 +191,29 @@ const TeacherNote = () => {
         onStudentsClick={() => navigate(`/teacher/${teacherId}?view=students`)}
       />
 
-      <main className="flex-1 px-10 py-6 w-full">
-          <div className="flex items-center gap-4 mb-4">
+      <main className="flex-1 px-10 py-6 w-full flex flex-col h-full overflow-hidden">
+          <div className="flex items-center gap-4 mb-4 shrink-0">
             <BackButton fallbackPath={backToTopicHref} />
             <Breadcrumbs
               items={[
                 { label: "Матеріали", href: backToClassHref },
-                { label: classLabel || "Клас", href: backToClassHref },
+                { label: `${subjectName}. ${classLabel}. id-${decodedClassId}` || "Клас", href: backToClassHref },
                 { label: sidebarTopicName || "Тема", href: backToTopicHref },
                 { label: noteTitle },
               ]}
             />
           </div>
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold text-white shrink-0">
             Конспект. {noteTitle}
           </h1>
 
-          <div className="mt-5 rounded-[28px] bg-white p-6 shadow-sm">
+          <div className="mt-5 flex-1 min-h-0 rounded-[28px] bg-white p-6 shadow-sm overflow-y-auto note-scrollbar">
             <div className="grid gap-6 lg:grid-cols-[1fr_260px]">
               <div className="rounded-[20px] bg-white">
                 <h2 className="text-lg font-semibold text-slate-900">
                   {sidebarTopicName || noteTitle}
                 </h2>
-                <div className="mt-4">
+                <div className="mt-4 break-words">
                   {isEditMode ? (
                     <div className="space-y-6">
                       {/* Content editing */}
@@ -250,6 +250,7 @@ const TeacherNote = () => {
                       content={noteMaterial.content}
                       sources={noteMaterial.sources ?? []}
                       userRole="teacher"
+                      skipFirstHeading
                     />
                   ) : (
                     <div className="space-y-6 text-sm leading-relaxed text-slate-800">
@@ -333,7 +334,7 @@ const TeacherNote = () => {
                 </div>
               </div>
 
-              <div className="rounded-[20px] bg-[#E9F1FF] p-6">
+              <div className="rounded-[20px] bg-[#E9F1FF] p-6 h-fit max-h-full overflow-y-auto">
                 <h3 className="text-sm font-bold text-slate-900">Нотатки</h3>
                 <div className="mt-3">
                   {isEditMode ? (
@@ -344,7 +345,7 @@ const TeacherNote = () => {
                       placeholder="Нотатки для вчителя..."
                     />
                   ) : teacherNotes ? (
-                    <div className="text-xs leading-relaxed text-slate-700 whitespace-pre-wrap">
+                    <div className="text-xs leading-relaxed text-slate-700 whitespace-pre-wrap break-words">
                       {teacherNotes}
                     </div>
                   ) : (

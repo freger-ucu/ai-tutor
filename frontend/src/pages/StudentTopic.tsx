@@ -248,23 +248,20 @@ const StudentTopic = () => {
             </div>
           </Panel>
 
-          <div className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-            <section>
+          <div className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_0.95fr] overflow-visible">
+            <section className="overflow-visible">
               <h2 className="text-xl font-semibold text-white">Конспекти</h2>
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 flex flex-col gap-5 overflow-visible">
                 {notes.length > 0 ? notes.map((item) => (
                   <Link
                     key={item.id}
                     to={`/student/${studentId}/note/${courseId}/${topicId}/${item.id}`}
                   >
-                    <Card className="flex items-center gap-3 px-5 py-4 cursor-pointer transition hover:shadow-md">
-                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1E73F7]/15 text-[#1E73F7]">
-                        <svg width="14" height="16" viewBox="0 0 16 20" fill="currentColor">
-                          <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM14 18H2V2H9V7H14V18Z" opacity="0.5"/>
-                          <path d="M10 0H2C0.9 0 0 0.9 0 2V18C0 19.1 0.9 20 2 20H14C15.1 20 16 19.1 16 18V6L10 0ZM9 7V2L14 7H9Z"/>
-                        </svg>
+                    <Card className="flex items-center gap-3 px-6 py-5 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98]">
+                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#1E73F7]/15 transition-all duration-300">
+                        <img src="/src/assets/Vector.svg" alt="" className="h-4 w-5" />
                       </span>
-                      <span className="text-sm font-semibold text-slate-900">{item.title}</span>
+                      <span className="text-base font-semibold text-slate-900">{item.title}</span>
                     </Card>
                   </Link>
                 )) : (
@@ -275,23 +272,23 @@ const StudentTopic = () => {
               </div>
             </section>
 
-            <section>
+            <section className="overflow-visible">
               <h2 className="text-xl font-semibold text-white">Тести</h2>
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 flex flex-col gap-5 overflow-visible">
                 {tests.length > 0 ? tests.map((item) => {
                   const filledSegments = Math.round(item.percent / 10);
                   return (
                     <Link key={item.id} to={`/student/${studentId}/test/${item.id}`}>
-                      <Card className="px-5 py-5 cursor-pointer transition hover:shadow-md">
-                        <div className="flex items-center gap-3 text-sm font-semibold text-slate-900">
+                      <Card className="px-6 py-6 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98]">
+                        <div className="flex items-center gap-3 text-base font-semibold text-slate-900">
                           <img
                             src="/src/assets/Group.svg"
                             alt=""
-                            className="h-6 w-6"
+                            className="h-6 w-6 transition-transform duration-300"
                           />
                           {item.title}
                         </div>
-                        <div className="mt-4 flex items-center justify-between">
+                        <div className="mt-5 flex items-center justify-between">
                           <div className="flex items-center gap-1.5">
                             {Array.from({ length: 10 }).map((_, index) => (
                               <span
@@ -299,12 +296,14 @@ const StudentTopic = () => {
                                 className={`h-4 w-2.5 rounded-full ${
                                   index < filledSegments
                                     ? "bg-[#68E2B0]"
-                                    : "bg-[#E6EEF9]"
+                                    : item.isCompleted
+                                      ? "bg-[#FF6B6B]"
+                                      : "bg-[#E6EEF9]"
                                 }`}
                               />
                             ))}
                           </div>
-                          <div className="text-sm text-slate-600">
+                          <div className="text-sm text-slate-500">
                             Остання спроба: {item.scoreText}
                           </div>
                         </div>

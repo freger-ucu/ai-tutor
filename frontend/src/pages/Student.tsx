@@ -34,7 +34,8 @@ const Student = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const subjectParam = searchParams.get("subject");
-  const [activeSubjectId, setActiveSubjectId] = useState(subjectParam || "ukr-lang");
+  // Default to first subject (Subjects[0].id) if no URL param
+  const [activeSubjectId, setActiveSubjectId] = useState(subjectParam || Subjects[0].id);
   const [apiSubjects, setApiSubjects] = useState<string[]>([]);
   const [studentGrade, setStudentGrade] = useState<number | null>(null);
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
@@ -185,7 +186,7 @@ const Student = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#1E73F7] font-sans text-slate-900">
+    <div className="min-h-screen bg-[#1E73F7] text-slate-900">
       <div className="flex min-h-screen">
         <StudentSidebar
           studentId={studentId || ""}

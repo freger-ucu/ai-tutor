@@ -51,8 +51,8 @@ const TeacherSidebar = ({
 }: TeacherSidebarProps) => {
   // Static CSS classes for navigation buttons
   const baseClass =
-    "flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-sm cursor-pointer";
-  const activeClass = "bg-[#E9F1FF] font-semibold text-[#1E73F7]";
+    "flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-sm cursor-pointer transition";
+  const activeClass = "bg-[#E9F1FF] font-semibold text-[#1E73F7] hover:bg-[#dce8fd]";
   const inactiveClass = "font-medium text-slate-800 hover:bg-slate-100";
 
   return (
@@ -91,7 +91,7 @@ const TeacherSidebar = ({
           <span className={`flex items-center justify-center ${activeItem === "materials" ? "text-[#1E73F7]" : "text-slate-600"}`}>
             <MaterialsIcon />
           </span>
-          <span className="text-left leading-5 whitespace-nowrap">Навчальні&nbsp;матеріали</span>
+          <span className="text-left leading-5">Навчальні матеріали</span>
         </button>
         <button
           type="button"
@@ -103,7 +103,7 @@ const TeacherSidebar = ({
           <span className={`flex items-center justify-center ${activeItem === "students" ? "text-[#1E73F7]" : "text-slate-600"}`}>
             <StudentsIcon />
           </span>
-          <span className="flex-1 text-left leading-5">Учні</span>
+          <span className="text-left leading-5">Учні</span>
         </button>
       </div>
     </aside>

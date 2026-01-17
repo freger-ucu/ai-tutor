@@ -225,19 +225,37 @@ interface MarkdownContentProps {
 
 const removeFirstHeading = (markdown: string): string => {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
-  let foundFirstHeading = false;
+  let foundFirstContent = false;
   const filteredLines: string[] = [];
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!foundFirstHeading && (trimmed.startsWith("# ") || trimmed.startsWith("## ") || trimmed.startsWith("### "))) {
-      foundFirstHeading = true;
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+
+    // Skip leading empty lines
+    if (!foundFirstContent && trimmed === "") {
       continue;
     }
-    filteredLines.push(line);
+
+    // Check if this is the first content (heading or paragraph to skip)
+    if (!foundFirstContent) {
+      // If it's a markdown heading, skip it
+      if (trimmed.startsWith("# ") || trimmed.startsWith("## ") || trimmed.startsWith("### ")) {
+        foundFirstContent = true;
+        continue;
+      }
+
+      // If it's a regular paragraph (not a list item or numbered item), skip it
+      // This handles cases like "Коротке нагадування ключових понять..."
+      if (!trimmed.startsWith("- ") && !trimmed.match(/^\d+[\.\)]\s/)) {
+        foundFirstContent = true;
+        continue;
+      }
+    }
+
+    filteredLines.push(lines[i]);
   }
 
-  // Remove leading empty lines after removing the heading
+  // Remove leading empty lines after removing the heading/paragraph
   while (filteredLines.length > 0 && filteredLines[0].trim() === "") {
     filteredLines.shift();
   }

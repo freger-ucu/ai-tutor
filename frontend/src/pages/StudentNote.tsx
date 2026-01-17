@@ -66,9 +66,16 @@ const StudentNote = () => {
     [noteId]
   );
   const noteTitle = noteMaterial?.title ?? "Конспект";
-  const availableSubjects = apiSubjects.length
-    ? subjects.filter((subject) => apiSubjects.includes(subject.label))
-    : subjects;
+  const availableSubjects = useMemo(() => {
+    if (!apiSubjects.length) {
+      return subjects;
+    }
+    const matches = subjects.filter(
+      (subject) =>
+        apiSubjects.includes(subject.label) || apiSubjects.includes(subject.id)
+    );
+    return matches.length ? matches : subjects;
+  }, [apiSubjects]);
 
   useEffect(() => {
     const apiId = toNumericId(studentId);
@@ -98,8 +105,7 @@ const StudentNote = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#1E73F7] text-slate-900">
-      <div className="flex min-h-screen">
+    <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
         {/* Static sidebar - always shows only subjects list */}
         <StudentSidebar
           studentId={studentId || ""}
@@ -108,8 +114,8 @@ const StudentNote = () => {
           activeSubjectId={subjectSlug}
         />
 
-        <main className="flex-1 px-8 py-10">
-          <div className="flex items-center gap-4 mb-4">
+        <main className="flex-1 px-8 py-10 flex flex-col h-full overflow-hidden">
+          <div className="flex items-center gap-4 mb-4 shrink-0">
             <BackButton fallbackPath={backToTopicHref} />
             <Breadcrumbs
               items={[
@@ -119,16 +125,16 @@ const StudentNote = () => {
               ]}
             />
           </div>
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold text-white shrink-0">
             Конспект. {noteTitle}
           </h1>
 
-          <div className="mt-5 rounded-[28px] bg-white p-6 shadow-sm min-h-[70vh]">
+          <div className="mt-5 flex-1 min-h-0 rounded-[28px] bg-white p-6 shadow-sm overflow-y-auto note-scrollbar">
             <div className="rounded-[20px] bg-white">
               <h2 className="text-lg font-semibold text-slate-900">
                 {decodedTopic || noteTitle}
               </h2>
-              <div className="mt-4">
+              <div className="mt-4 break-words">
                 {noteMaterial?.content ? (
                   <LectureContent
                     content={noteMaterial.content}
@@ -204,7 +210,6 @@ const StudentNote = () => {
           </div>
 
         </main>
-      </div>
     </div>
   );
 };

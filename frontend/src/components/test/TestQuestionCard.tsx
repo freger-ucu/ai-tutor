@@ -1,6 +1,7 @@
 import type { TestQuestion, DifficultyLevel } from "../../types/testTypes";
 import TestOption from "./TestOption";
 import TestExplanation from "./TestExplanation";
+import MarkdownContent from "../MarkdownContent";
 
 interface TestQuestionCardProps {
   question: TestQuestion;
@@ -109,7 +110,9 @@ const TestQuestionCard = ({
           </span>
         )}
       </div>
-      <p className="mt-5 text-base text-slate-700 leading-relaxed">{question.text}</p>
+      <div className="mt-5">
+        <MarkdownContent content={question.text} className="text-base text-slate-700" />
+      </div>
 
       {/* Answer options - inside white block */}
       {question.type === "open" ? (

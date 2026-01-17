@@ -1,7 +1,97 @@
 @import "tailwindcss";
 
+/* e-Ukraine font - Ukrainian national font */
+@font-face {
+  font-family: "e-Ukraine";
+  src: url("https://db.onlinewebfonts.com/t/a44207bfe4040f536c824dbbf82f5ed1.woff2") format("woff2"),
+       url("https://db.onlinewebfonts.com/t/a44207bfe4040f536c824dbbf82f5ed1.woff") format("woff"),
+       url("https://db.onlinewebfonts.com/t/a44207bfe4040f536c824dbbf82f5ed1.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 html,
 body {
   overscroll-behavior: none;
   overflow: hidden;
+  font-family: "e-Ukraine", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Apply e-Ukraine font globally */
+* {
+  font-family: inherit;
+}
+
+/* Custom scrollbar for teacher test view - positioned on the side */
+.teacher-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.4) transparent;
+}
+
+.teacher-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.teacher-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+.teacher-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+}
+
+.teacher-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+/* Custom scrollbar for student test view - more subtle */
+.student-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.student-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.student-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.student-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.student-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Custom scrollbar for notes/content on white background - visible gray */
+.note-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.4) transparent;
+}
+
+.note-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.note-scrollbar::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.5);
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+.note-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border-radius: 4px;
+}
+
+.note-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
 }
