@@ -8,9 +8,9 @@ FEEDBACK_SYSTEM_PROMPT = """Ти — експерт з аналізу навча
 
 Формат відповіді:
 - Українською мовою
-- Максимально стисло
+- Дуже коротко і по суті
 - БЕЗ привітань, звертань, прощань
-- Рівно 4 секції (див. нижче)"""
+- Рівно 3 секції (див. нижче)"""
 
 
 def build_feedback_prompt(
@@ -35,20 +35,18 @@ def build_feedback_prompt(
     """
     score_percent = (correct_count / total_count * 100) if total_count > 0 else 0
 
-    # Format incorrect topics
+    # Format incorrect topics (list each focus)
     if incorrect_by_topic:
         incorrect_topics_text = "\n".join([
-            f"- {topic}: {len(questions)} помилок"
-            for topic, questions in incorrect_by_topic.items()
+            f"- {focus}" for focus in incorrect_by_topic.keys()
         ])
     else:
         incorrect_topics_text = "Помилок немає!"
 
-    # Format correct topics
+    # Format correct topics (list each focus)
     if correct_by_topic:
         correct_topics_text = "\n".join([
-            f"- {topic}: {len(questions)} правильних"
-            for topic, questions in correct_by_topic.items()
+            f"- {focus}" for focus in correct_by_topic.keys()
         ])
     else:
         correct_topics_text = "Немає правильних відповідей"
@@ -75,15 +73,12 @@ def build_feedback_prompt(
 Дай відповідь у форматі:
 
 **Результат**
-1 речення: загальна оцінка.
+1 коротке речення: оцінка {score_percent:.0f}% і загальний висновок.
 
-**Вдалося добре**
-1-2 речення: що учень знає.
-
-**Потрібно опрацювати**
-1-2 речення: де прогалини.
+**Аналіз**
+2 речення: що вдалося + де прогалини (в одному блоці).
 
 **Рекомендації**
-2-3 речення загалом: що робити далі. Без нумерації, без кількості вправ."""
+1-2 речення: конкретна порада що робити далі."""
 
     return prompt

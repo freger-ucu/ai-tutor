@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
@@ -42,12 +42,15 @@ const TeacherStudentDetail = () => {
   const recommendationRequestIdRef = useRef(0);
   const recommendationKeyRef = useRef<string | null>(null);
 
-  const subjectSlug = decodedCourseId.split("-").slice(0, -1).join("-");
-  const gradeMatch = decodedCourseId.match(/-(\d+)$/);
-  const grade = gradeMatch ? Number(gradeMatch[1]) : null;
-  const subjectName = subjectLabelMap[subjectSlug] ?? subjectSlug;
-  const classLabel =
-    grade && decodedClassId ? classIdToLabel(grade, decodedClassId) : "";
+  const { subjectName, classLabel } = useMemo(() => {
+    const subjectSlug = decodedCourseId.split("-").slice(0, -1).join("-");
+    const gradeMatch = decodedCourseId.match(/-(\d+)$/);
+    const grade = gradeMatch ? Number(gradeMatch[1]) : null;
+    const subjectName = subjectLabelMap[subjectSlug] ?? subjectSlug;
+    const classLabel =
+      grade && decodedClassId ? classIdToLabel(grade, decodedClassId) : "";
+    return { subjectName, classLabel };
+  }, [decodedCourseId, decodedClassId]);
 
   useEffect(() => {
     if (

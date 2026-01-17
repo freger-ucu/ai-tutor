@@ -36,6 +36,7 @@ from app.models.domain import Question, AnswerOption
 from app.models.enums import QuestionType, Difficulty
 from app.services.data_loader import get_data_loader
 from app.rag.utils.llm_client import get_llm_client
+from app.config import settings
 from app.prompts.recommendation import (
     RECOMMENDATION_SYSTEM_PROMPT,
     build_recommendation_prompt,
@@ -157,10 +158,12 @@ async def generate_recommendation(
     full_prompt = f"{RECOMMENDATION_SYSTEM_PROMPT}\n\n{prompt}"
 
     llm_client = get_llm_client()
+    provider = settings.get_provider_for_task("recommendation")
     response = await llm_client.generate(
         prompt=full_prompt,
         temperature=0.7,
-        max_tokens=2500
+        max_tokens=2500,
+        provider=provider,
     )
 
     return response
@@ -623,7 +626,8 @@ async def generate_test_endpoint(
                 answer_options=answer_options,
                 explanation=q.get("explanation", ""),
                 topic=q.get("topic", ""),
-                subtopics=[]
+                subtopics=[],
+                focus=q.get("focus", ""),
             )
             questions.append(question)
         except Exception as e:

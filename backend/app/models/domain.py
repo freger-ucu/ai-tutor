@@ -46,6 +46,7 @@ class Question(BaseModel):
     explanation: str
     topic: str
     subtopics: list[str] = Field(default_factory=list)
+    focus: str = Field(default="", description="Specific aspect being tested")
 
 
 class SkippedLesson(BaseModel):
@@ -67,6 +68,7 @@ class QuestionResult(BaseModel):
     correct: bool
     topic: str
     subtopics: list[str] = Field(default_factory=list)
+    focus: str = Field(default="", description="Specific aspect being tested")
 
 
 # =============================================================================

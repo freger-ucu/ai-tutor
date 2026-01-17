@@ -348,16 +348,16 @@ const StudentTest = () => {
                       Підсумковий фідбек
                     </div>
                     {isViewingCompleted && completion?.feedback && (
-                      <MarkdownContent content={completion.feedback} className="mt-3" />
+                      <MarkdownContent content={completion.feedback} className="mt-3 text-xs" />
                     )}
                     {!isViewingCompleted && isFeedbackLoading && (
-                      <div className="mt-3 text-slate-500">Формуємо фідбек...</div>
+                      <div className="mt-3 text-xs text-slate-500">Формуємо фідбек...</div>
                     )}
                     {!isViewingCompleted && feedbackError && (
-                      <div className="mt-3 text-rose-500">{feedbackError}</div>
+                      <div className="mt-3 text-xs text-rose-500">{feedbackError}</div>
                     )}
                     {!isViewingCompleted && testFeedback && (
-                      <MarkdownContent content={testFeedback} className="mt-3" />
+                      <MarkdownContent content={testFeedback} className="mt-3 text-xs" />
                     )}
                   </div>
                 ) : null
@@ -399,14 +399,12 @@ const StudentTest = () => {
                 setFeedbackError(null);
                 setTestFeedback(null);
 
-                const questions = result.answers
-                  .map((answer) => {
-                    const question = testData.questions.find(
-                      (item) => item.id === answer.questionId
-                    );
-                    if (!question) {
-                      return null;
-                    }
+                // Include ALL questions, marking unanswered ones as incorrect
+                const questions = testData.questions.map((question) => {
+                  const answer = result.answers.find(
+                    (a) => a.questionId === question.id
+                  );
+                  if (answer) {
                     const selectedText = answer.selectedOptionIds
                       .map(
                         (optionId) =>
@@ -425,9 +423,19 @@ const StudentTest = () => {
                       correct: answer.isCorrect,
                       topic: question.topic ?? testData.topicName ?? testData.title,
                       subtopics: question.subtopics ?? [],
+                      focus: question.focus ?? "",
                     };
-                  })
-                  .filter((item): item is NonNullable<typeof item> => Boolean(item));
+                  }
+                  // Unanswered question - mark as incorrect
+                  return {
+                    question: question.text,
+                    answer: "",
+                    correct: false,
+                    topic: question.topic ?? testData.topicName ?? testData.title,
+                    subtopics: question.subtopics ?? [],
+                    focus: question.focus ?? "",
+                  };
+                });
 
                 try {
                   const feedback = await getTestFeedback({

@@ -74,6 +74,7 @@ async def get_test_feedback(request: TestFeedbackRequest) -> TestFeedbackRespons
             "topic": q.topic,
             "subtopics": q.subtopics,
             "correct": q.correct,
+            "focus": q.focus,
         }
         for q in request.questions
     ]

@@ -19,6 +19,7 @@ from typing import TypedDict, List, Dict, Any, Optional
 
 from app.services.tracing import trace_chain
 from app.rag.utils.llm_client import get_llm_client
+from app.config import settings
 from app.prompts.feedback import (
     FEEDBACK_SYSTEM_PROMPT,
     build_feedback_prompt,
@@ -72,7 +73,8 @@ class FeedbackState(TypedDict, total=False):
 
 def aggregate_topics_node(state: FeedbackState) -> Dict[str, Any]:
     """
-    Aggregate questions by topic and count correct/incorrect.
+    Aggregate questions by focus/topic and count correct/incorrect.
+    Uses 'focus' if available (more specific), otherwise falls back to 'topic'.
     """
     questions = state.get("questions", [])
 
@@ -82,14 +84,10 @@ def aggregate_topics_node(state: FeedbackState) -> Dict[str, Any]:
     correct_by_topic: Dict[str, List[str]] = {}
 
     for q in questions:
-        # Build topic key including subtopics if present
+        # Prefer focus (specific aspect) over topic (general)
+        focus = q.get("focus", "")
         topic = q.get("topic", "Unknown")
-        subtopics = q.get("subtopics", [])
-
-        if subtopics:
-            topic_key = f"{topic} > {', '.join(subtopics)}"
-        else:
-            topic_key = topic
+        topic_key = focus if focus else topic
 
         question_text = q.get("question", "")
 
@@ -126,6 +124,7 @@ async def generate_feedback_node(state: FeedbackState) -> Dict[str, Any]:
     Creates constructive, motivating feedback based on test performance.
     """
     client = get_llm_client()
+    provider = settings.get_provider_for_task("feedback")
 
     subject = state.get("subject", "")
     correct_count = state.get("correct_count", 0)
@@ -149,6 +148,7 @@ async def generate_feedback_node(state: FeedbackState) -> Dict[str, Any]:
         prompt=full_prompt,
         temperature=0.7,
         max_tokens=1500,
+        provider=provider,
     )
 
     return {

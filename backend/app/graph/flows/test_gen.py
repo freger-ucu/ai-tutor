@@ -5,17 +5,20 @@ Generates a pool of validated test questions using batch processing
 with an intelligent planning phase for question diversity.
 
 Flow:
-    retrieve_context → plan_test (assigns difficulty) → batch_generate
-                                                              ↓
-                                                        batch_validate
-                                                              ↓
-                                                        prepare_retry ──┐
-                                                              ↓         │
-                                                      finalize (sort) ◄─┘
+    retrieve_context → plan_test (planner assigns focus+difficulty) → batch_generate
+                                                                           ↓
+                                                                     batch_validate
+                                                                           ↓
+                                                                     prepare_retry ──┐
+                                                                           ↓         │
+                                                                   finalize (sort) ◄─┘
 
 Key Design:
-- Planning phase: 1 LLM call to design test structure with focus areas
-- CPU-based difficulty distribution: Assigned at planning based on student level
+- Planning phase: 1 LLM call to design test structure with focus areas AND difficulty
+  - Planner is told the expected distribution upfront (e.g., "6 easy, 4 medium, 2 hard")
+  - Planner assigns appropriate focus areas for each difficulty level
+  - This ensures focus complexity matches difficulty (e.g., "basic definition" = easy)
+- Difficulty distribution based on student level:
   - weak students: 6 easy, 4 medium, 2 hard
   - medium students: 4 easy, 4 medium, 4 hard
   - strong students: 2 easy, 4 medium, 6 hard
@@ -65,9 +68,9 @@ MIN_FAILED_FOR_RETRY = 3  # Only retry if 3+ questions failed
 # =============================================================================
 
 
-def compute_difficulty_distribution(level: str) -> List[str]:
+def compute_difficulty_counts(level: str) -> Dict[str, int]:
     """
-    Compute difficulty distribution for 12 questions based on student level.
+    Compute difficulty distribution counts based on student level.
 
     Uses "easy", "medium", "hard" internally.
     Converted to "difficult" at API layer (teacher.py).
@@ -76,17 +79,17 @@ def compute_difficulty_distribution(level: str) -> List[str]:
         level: Student level ("weak", "medium", "strong")
 
     Returns:
-        List of 12 difficulty strings
+        Dict with counts per difficulty level
     """
     if level == "weak":
         # More easy questions for weaker students: 6 easy, 4 medium, 2 hard
-        return ["easy"] * 6 + ["medium"] * 4 + ["hard"] * 2
+        return {"easy": 6, "medium": 4, "hard": 2}
     elif level == "strong":
         # More hard questions for stronger students: 2 easy, 4 medium, 6 hard
-        return ["easy"] * 2 + ["medium"] * 4 + ["hard"] * 6
+        return {"easy": 2, "medium": 4, "hard": 6}
     else:  # medium (default)
         # Balanced distribution: 4 easy, 4 medium, 4 hard
-        return ["easy"] * 4 + ["medium"] * 4 + ["hard"] * 4
+        return {"easy": 4, "medium": 4, "hard": 4}
 
 
 # =============================================================================
@@ -228,8 +231,9 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     """
     Plan test structure using LLM.
 
-    Creates question specifications with focus areas.
-    Difficulty is assigned here using CPU-based distribution based on student level.
+    Creates question specifications with focus areas and difficulty.
+    The planner is given the expected difficulty distribution upfront
+    and assigns appropriate focus areas for each difficulty level.
     """
     start_time = time.time()
 
@@ -239,7 +243,13 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     context = state.get("rag_context", "")
     level = state.get("level", "medium")
 
-    logger.info(f"Planning test: {TARGET_QUESTION_COUNT} questions, level={level}")
+    # Compute difficulty distribution to pass to planner
+    difficulty_counts = compute_difficulty_counts(level)
+
+    logger.info(
+        f"Planning test: {TARGET_QUESTION_COUNT} questions, level={level}, "
+        f"distribution: {difficulty_counts}"
+    )
 
     client = get_llm_client()
 
@@ -249,6 +259,7 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
         topic_definition=topic,
         context=context,
         level=level,
+        difficulty_counts=difficulty_counts,
     )
 
     response = await client.generate(
@@ -264,16 +275,15 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
         context="TestPlanner",
     )
 
-    # Normalize and validate specs
+    # Normalize and validate specs - use difficulty from planner output
     question_specs = parsed.get("question_specs", [])
-
-    # Compute difficulty distribution based on student level
-    difficulties = compute_difficulty_distribution(level)
 
     normalized_specs: List[QuestionSpec] = []
     for i, spec in enumerate(question_specs):
-        # Assign difficulty from CPU distribution
-        difficulty = difficulties[i] if i < len(difficulties) else "medium"
+        # Use difficulty from planner, fallback to "medium" if missing/invalid
+        difficulty = spec.get("difficulty", "medium")
+        if difficulty not in ["easy", "medium", "hard"]:
+            difficulty = "medium"
         normalized_specs.append({
             "spec_id": spec.get("spec_id", i + 1),
             "question_type": spec.get("question_type", "single_choice"),
@@ -345,7 +355,13 @@ def _generate_fallback_specs(
     random.shuffle(types)
 
     # Get difficulty distribution based on level
-    difficulties = compute_difficulty_distribution(level)
+    difficulty_counts = compute_difficulty_counts(level)
+    # Convert counts to list for fallback assignment
+    difficulties = (
+        ["easy"] * difficulty_counts["easy"] +
+        ["medium"] * difficulty_counts["medium"] +
+        ["hard"] * difficulty_counts["hard"]
+    )
 
     for i in range(count):
         q_type = types[i % len(types)]
@@ -489,6 +505,7 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
                 question["type"] = spec["question_type"]
                 question["spec_id"] = spec["spec_id"]
                 question["difficulty"] = spec.get("difficulty", "medium")
+                question["focus"] = spec.get("focus", "")
 
                 # Ensure correct_answer_index(es) for choice questions
                 if spec["question_type"] == "single_choice":

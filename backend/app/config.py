@@ -102,6 +102,12 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_max_tokens: int = 500
 
+    # Task-specific provider overrides (None = use global llm_provider)
+    task_provider_test_gen: Optional[LLMProvider] = None
+    task_provider_notes_gen: Optional[LLMProvider] = None
+    task_provider_feedback: Optional[LLMProvider] = None
+    task_provider_recommendation: Optional[LLMProvider] = None
+
     @property
     def llm_api_key(self) -> str:
         """Get API key for current provider."""
@@ -153,6 +159,26 @@ class Settings(BaseSettings):
     def embedding_model(self) -> str:
         """Get embedding model name."""
         return self.llm_embedding_model
+
+    def get_provider_for_task(self, task: str) -> "LLMProvider":
+        """Get provider for a specific task, falling back to global."""
+        task_map = {
+            "test_gen": self.task_provider_test_gen,
+            "notes_gen": self.task_provider_notes_gen,
+            "feedback": self.task_provider_feedback,
+            "recommendation": self.task_provider_recommendation,
+        }
+        return task_map.get(task) or self.llm_provider
+
+    def get_config_for_provider(self, provider: "LLMProvider") -> tuple:
+        """Get (api_key, base_url, model) for a specific provider."""
+        if provider in (LLMProvider.LAPA, LLMProvider.MAMAY):
+            return self.lapa_api_key, self.lapa_base_url, self.lapa_model
+        elif provider == LLMProvider.OPENAI:
+            return self.openai_api_key, PROVIDER_CONFIGS[provider]["base_url"], self.openai_model
+        elif provider == LLMProvider.GEMINI:
+            return self.gemini_api_key, PROVIDER_CONFIGS[provider]["base_url"], self.gemini_model
+        return "", "", ""
 
     # RAG Configuration
     rag_embedding_type: str = "qwen"  # "qwen" or "gemini"

@@ -14,6 +14,7 @@ interface GeneratedQuestion {
   explanation: string;
   topic: string;
   subtopics: string[];
+  focus: string;
 }
 
 const toDifficulty = (difficulty: GeneratedQuestion["difficulty"]): DifficultyLevel => {
@@ -66,6 +67,7 @@ export const mapGeneratedQuestions = (questions: GeneratedQuestion[]): TestQuest
       type,
       topic: question.topic,
       subtopics: question.subtopics ?? [],
+      focus: question.focus ?? "",
     };
   });
 };
