@@ -324,25 +324,33 @@ const TestContainer = ({
     <div ref={containerRef} tabIndex={-1} className="flex flex-col outline-none h-full">
       {/* Title - only shown for students */}
       {viewMode === "student" && (
-        <h1 className="text-xl font-bold text-white mb-2">{testData.title}</h1>
+        <h1 className="hidden lg:block text-lg font-bold text-white mb-2 lg:text-xl">
+          {testData.title}
+        </h1>
       )}
 
       {/* Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3 overflow-visible">
-        <TestNavigation
-          totalQuestions={testData.questions.length}
-          currentQuestionIndex={currentQuestionIndex}
-          answeredQuestions={answeredQuestionIndices}
-          onQuestionSelect={handleQuestionSelect}
-          showResult={viewMode === "student" && isFinished}
-          resultMap={resultMap}
-        />
+        <div className="hidden lg:block">
+          <TestNavigation
+            totalQuestions={testData.questions.length}
+            currentQuestionIndex={currentQuestionIndex}
+            answeredQuestions={answeredQuestionIndices}
+            onQuestionSelect={handleQuestionSelect}
+            showResult={viewMode === "student" && isFinished}
+            resultMap={resultMap}
+          />
+        </div>
+        <div className="flex w-full items-center justify-between rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-white lg:hidden">
+          <span>Питання {currentQuestionIndex + 1} з {totalQuestions}</span>
+          <span>{answeredCount}/{totalQuestions} відповіли</span>
+        </div>
         {viewMode === "student" && !isFinished && (
           <button
             type="button"
             onClick={handleFinish}
             disabled={isSubmitting}
-            className={`w-full rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all lg:w-[220px] ${
+            className={`hidden w-full rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all lg:inline-flex lg:w-[220px] ${
               isSubmitting
                 ? "cursor-not-allowed bg-[#E63C3C]/60"
                 : "cursor-pointer bg-[#E63C3C] hover:-translate-y-0.5 hover:shadow-lg"
@@ -352,7 +360,7 @@ const TestContainer = ({
           </button>
         )}
         {viewMode === "student" && isFinished && (
-          <div className="w-full rounded-xl bg-[#6FDB9B] px-4 py-2 text-center text-xs font-semibold text-white lg:w-[220px]">
+          <div className="hidden w-full rounded-xl bg-[#6FDB9B] px-4 py-2 text-center text-xs font-semibold text-white lg:block lg:w-[220px]">
             {totalQuestions > 0
               ? `${Math.round((correctAnswersCount / totalQuestions) * 100)}% правильних відповідей`
               : "0% правильних відповідей"}
@@ -379,7 +387,7 @@ const TestContainer = ({
           </div>
 
           {/* Navigation buttons - attached to bottom of question card */}
-          <div className="flex items-center justify-between pt-3 shrink-0">
+          <div className="flex flex-col gap-3 pt-3 shrink-0 lg:flex-row lg:items-center lg:justify-between">
             <button
               type="button"
               onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
@@ -404,6 +412,27 @@ const TestContainer = ({
             >
               Наступне →
             </button>
+            {viewMode === "student" && !isFinished && (
+              <button
+                type="button"
+                onClick={handleFinish}
+                disabled={isSubmitting}
+                className={`w-full rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all lg:hidden ${
+                  isSubmitting
+                    ? "cursor-not-allowed bg-[#E63C3C]/60"
+                    : "cursor-pointer bg-[#E63C3C]"
+                }`}
+              >
+                {isSubmitting ? "Перевіряємо..." : "Завершити тест"}
+              </button>
+            )}
+            {viewMode === "student" && isFinished && (
+              <div className="w-full rounded-xl bg-[#6FDB9B] px-4 py-2 text-center text-xs font-semibold text-white lg:hidden">
+                {totalQuestions > 0
+                  ? `${Math.round((correctAnswersCount / totalQuestions) * 100)}% правильних відповідей`
+                  : "0% правильних відповідей"}
+              </div>
+            )}
           </div>
         </div>
 

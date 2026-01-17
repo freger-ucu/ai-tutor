@@ -63,12 +63,12 @@ const Modal = ({
       <div
         role="dialog"
         aria-modal="true"
-        className={`relative z-10 max-w-[90vw] rounded-2xl bg-white p-6 shadow-2xl ${sizeClasses[size]} ${className}`}
+        className={`relative z-10 max-w-[90vw] rounded-2xl bg-white p-6 text-sm shadow-2xl lg:text-base ${sizeClasses[size]} ${className}`}
       >
         {((title && title.length > 0) || showCloseButton) && (
           <div className="relative flex items-center justify-center">
             {title ? (
-              <div className="text-3xl font-semibold text-slate-900">
+              <div className="text-xl font-semibold text-slate-900 lg:text-3xl">
                 {title}
               </div>
             ) : null}
@@ -76,7 +76,7 @@ const Modal = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="absolute right-0 rounded-full px-2 py-1 text-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+                className="absolute right-0 rounded-full px-2 py-1 text-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 cursor-pointer lg:text-2xl"
                 aria-label="Close modal"
               >
                 ×

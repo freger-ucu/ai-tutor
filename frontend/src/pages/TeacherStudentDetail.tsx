@@ -142,13 +142,18 @@ const TeacherStudentDetail = () => {
     return (
       <div className="min-h-screen bg-[#1E73F7] text-slate-900">
         <div className="flex min-h-screen">
-          <TeacherSidebar
-            teacherName={id ? `Вчитель ${id}` : "Вчитель"}
-            activeItem="students"
-            onMaterialsClick={() => navigate(backToMaterialsHref)}
-            onStudentsClick={() => navigate(backToStudentsHref)}
+          <div className="hidden lg:flex">
+            <TeacherSidebar
+              teacherName={id ? `Вчитель ${id}` : "Вчитель"}
+              activeItem="students"
+              onMaterialsClick={() => navigate(backToMaterialsHref)}
+              onStudentsClick={() => navigate(backToStudentsHref)}
           />
-          <main className="flex-1 px-8 py-10 flex items-center justify-center">
+          </div>
+          <main
+            className="flex-1 px-4 py-6 flex items-center justify-center lg:px-8 lg:py-10"
+            data-scroll-root="mobile"
+          >
             <div className="text-xl text-white">Завантаження...</div>
           </main>
         </div>
@@ -160,13 +165,18 @@ const TeacherStudentDetail = () => {
     return (
       <div className="min-h-screen bg-[#1E73F7] text-slate-900">
         <div className="flex min-h-screen">
-          <TeacherSidebar
-            teacherName={id ? `Вчитель ${id}` : "Вчитель"}
-            activeItem="students"
-            onMaterialsClick={() => navigate(backToMaterialsHref)}
-            onStudentsClick={() => navigate(backToStudentsHref)}
+          <div className="hidden lg:flex">
+            <TeacherSidebar
+              teacherName={id ? `Вчитель ${id}` : "Вчитель"}
+              activeItem="students"
+              onMaterialsClick={() => navigate(backToMaterialsHref)}
+              onStudentsClick={() => navigate(backToStudentsHref)}
           />
-          <main className="flex-1 px-8 py-10 flex items-center justify-center">
+          </div>
+          <main
+            className="flex-1 px-4 py-6 flex items-center justify-center lg:px-8 lg:py-10"
+            data-scroll-root="mobile"
+          >
             <div className="text-xl text-white">
               {fetchError ?? "Учня не знайдено"}
             </div>
@@ -179,23 +189,30 @@ const TeacherStudentDetail = () => {
   return (
     <div className="min-h-screen bg-[#1E73F7] text-slate-900">
       <div className="flex min-h-screen">
-        <TeacherSidebar
+        <div className="hidden lg:flex">
+            <TeacherSidebar
           teacherName={id ? `Вчитель ${id}` : "Вчитель"}
           activeItem="students"
           onMaterialsClick={() => navigate(backToMaterialsHref)}
           onStudentsClick={() => navigate(backToStudentsHref)}
         />
-        <main className="flex-1 px-8 py-10 overflow-hidden">
-          <div className="flex h-[calc(100vh-5rem)] flex-col">
+        </div>
+        <main
+          className="flex-1 px-4 py-6 overflow-y-auto lg:px-8 lg:py-10 lg:overflow-hidden"
+          data-scroll-root="mobile"
+        >
+          <div className="flex flex-col lg:h-[calc(100vh-5rem)]">
             <div className="flex items-center gap-4 mb-6 shrink-0">
               <BackButton fallbackPath={backToClassHref} />
-              <Breadcrumbs
-                items={[
-                  { label: subjectName || "Предмет", href: backToStudentsHref },
-                  { label: classLabel || "Клас", href: backToClassHref },
-                  { label: `Учень ${apiStudentId ?? studentId}` },
-                ]}
-              />
+              <div className="hidden lg:flex">
+                <Breadcrumbs
+                  items={[
+                    { label: subjectName || "Предмет", href: backToStudentsHref },
+                    { label: classLabel || "Клас", href: backToClassHref },
+                    { label: `Учень ${apiStudentId ?? studentId}` },
+                  ]}
+                />
+              </div>
             </div>
 
             <div className="flex items-center gap-4 mb-8 shrink-0">
@@ -203,7 +220,7 @@ const TeacherStudentDetail = () => {
                 {apiStudentId ?? studentId}
               </div>
               <div className="text-left">
-                <h1 className="text-3xl font-bold text-white">
+                <h1 className="text-2xl font-bold text-white lg:text-3xl">
                   Учень {apiStudentId ?? studentId}
                 </h1>
                 <p className="text-white/70 text-sm">
@@ -223,9 +240,9 @@ const TeacherStudentDetail = () => {
             </div>
 
             <div className="grid flex-1 min-h-0 gap-6 lg:grid-cols-2">
-              <div className="flex h-full flex-col overflow-hidden rounded-[22px] bg-white p-6 text-slate-900 shadow-sm">
-                <h2 className="text-xl font-semibold text-slate-900">Рекомендації</h2>
-                <div className="mt-4 flex-1 min-h-0 overflow-y-auto pr-1 scroll-smooth">
+              <div className="flex h-full flex-col overflow-visible lg:overflow-hidden rounded-[22px] bg-white p-6 text-slate-900 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">Рекомендації</h2>
+                <div className="mt-4 flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto lg:pr-1 scroll-smooth">
                   {isRecommendationLoading ? (
                     <p className="text-sm text-slate-500">
                       Завантаження рекомендацій...
@@ -245,9 +262,9 @@ const TeacherStudentDetail = () => {
                 </div>
               </div>
 
-              <div className="flex h-full flex-col overflow-hidden rounded-[22px] bg-white p-6 text-slate-900 shadow-sm">
-                <h2 className="text-xl font-semibold text-slate-900">Проблемні теми</h2>
-                <div className="mt-4 flex-1 min-h-0 overflow-y-auto pr-1 scroll-smooth">
+              <div className="flex h-full flex-col overflow-visible lg:overflow-hidden rounded-[22px] bg-white p-6 text-slate-900 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">Проблемні теми</h2>
+                <div className="mt-4 flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto lg:pr-1 scroll-smooth">
                   <div className="space-y-6">
                     <div>
                       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">

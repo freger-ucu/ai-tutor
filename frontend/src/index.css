@@ -14,8 +14,15 @@
 html,
 body {
   overscroll-behavior: none;
-  overflow: hidden;
+  overflow: auto;
   font-family: "e-Ukraine", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (min-width: 1024px) {
+  html,
+  body {
+    overflow: hidden;
+  }
 }
 
 /* Apply e-Ukraine font globally */
