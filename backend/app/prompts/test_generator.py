@@ -96,44 +96,43 @@ TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{
 
 ## ВИМОГИ ДО ТЕСТУ:
 - Створи рівно 12 специфікацій питань
-- Покрий 3-5 ключових концепцій теми
-- Розподіли питання рівномірно по концепціях
+- Кожне питання має УНІКАЛЬНИЙ фокус — різні аспекти теми
 - ~50% single_choice, ~20% multiple_choice, ~30% open
 
 ## ПРАВИЛА ПЛАНУВАННЯ:
 
-### 1. Виділи ключові концепції (3-5 концепцій)
-Проаналізуй тему та визнач основні концепції/підтеми, які потрібно перевірити.
-
-### 2. Розподіли питання по концепціях
-Кожна концепція має бути покрита 2-4 питаннями.
-
-### 3. Обери типи питань для кожної позиції:
+### 1. Обери типи питань для кожної позиції:
 - **single_choice**: для перевірки фактів, визначень, простих правил
 - **multiple_choice**: для перевірки розуміння зв'язків, вибору кількох правильних варіантів
 - **open**: для перевірки вміння пояснювати, обчислювати, формулювати
 
-### 4. Уникай:
-- Однотипних питань підряд на ту саму концепцію
-- Питань, що перевіряють абсолютно те саме
-- Занадто схожих формулювань
+### 2. КРИТИЧНО — Визнач УНІКАЛЬНИЙ фокус для кожного питання:
+- Фокус — це КОНКРЕТНИЙ аспект теми: формула, властивість, метод, застосування
+- ⚠️ ЗАБОРОНЕНО повторювати однаковий фокус у різних питаннях!
+- ⚠️ Якщо фокус "формула дискримінанта" вже є — НЕ МОЖНА створювати інше питання про формулу дискримінанта
+- Приклади РІЗНИХ фокусів для однієї теми:
+  - "формула дискримінанта" (1 питання)
+  - "знак дискримінанта та кількість коренів" (інше питання)
+  - "обчислення дискримінанта для конкретного рівняння" (ще інше)
+  - "формула коренів через дискримінант" (ще інше)
+
+### 3. Перевір перед завершенням:
+- Переглянь всі 12 фокусів — вони мають бути РІЗНИМИ
+- Жодні два питання не повинні перевіряти те саме знання
 
 ## ФОРМАТ ВІДПОВІДІ (JSON):
 ```json
 {{
-    "concepts": ["концепція1", "концепція2", "концепція3"],
     "question_specs": [
         {{
             "spec_id": 1,
             "question_type": "single_choice",
-            "concept": "концепція1",
-            "focus": "конкретний аспект для перевірки цим питанням"
+            "focus": "конкретний аспект: формула/властивість/метод"
         }},
         {{
             "spec_id": 2,
             "question_type": "open",
-            "concept": "концепція2",
-            "focus": "інший аспект"
+            "focus": "ІНШИЙ конкретний аспект"
         }}
     ],
     "rationale": "Коротке пояснення логіки розподілу (1-2 речення)"
@@ -143,7 +142,8 @@ TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{
 ВАЖЛИВО:
 - Створи рівно 12 специфікацій питань
 - Кожна специфікація має унікальний spec_id (від 1 до 12)
-- НЕ вказуй difficulty - складність визначається автоматично після генерації
+- ⚠️ Кожен focus має бути УНІКАЛЬНИМ — не повторюй однакові аспекти!
+- НЕ вказуй difficulty — складність визначається автоматично
 - Надай ТІЛЬКИ JSON, без додаткового тексту."""
 
 
@@ -262,7 +262,6 @@ def build_single_question_prompt(
     topic: str,
     context: str,
     question_type: str,
-    concept: Optional[str] = None,
     focus: Optional[str] = None,
     level: str = "medium",
     difficulty: str = "medium",
@@ -276,7 +275,6 @@ def build_single_question_prompt(
         topic: Topic description
         context: Retrieved textbook context
         question_type: "multiple_choice", "single_choice", or "open"
-        concept: Specific concept to assess (from planner)
         focus: Specific aspect to test (from planner)
         level: Student level for subtle guidance ("weak", "medium", "strong")
         difficulty: Target difficulty level ("easy", "medium", "hard")
@@ -298,20 +296,13 @@ def build_single_question_prompt(
     # Get subject-specific difficulty criteria
     subject_criteria = get_subject_difficulty_criteria(subject, grade)
 
-    # Build concept-focused instruction if provided
-    concept_instruction = ""
-    if concept and focus:
-        concept_instruction = f"""
+    # Build focus instruction if provided
+    focus_instruction = ""
+    if focus:
+        focus_instruction = f"""
 ## ФОКУС ПИТАННЯ:
-- Концепція: {concept}
 - Аспект для перевірки: {focus}
-- Питання ПОВИННО перевіряти саме цей аспект концепції!
-"""
-    elif concept:
-        concept_instruction = f"""
-## ФОКУС ПИТАННЯ:
-- Концепція: {concept}
-- Питання має перевіряти розуміння цієї концепції.
+- Питання ПОВИННО перевіряти саме цей аспект теми!
 """
 
     # Build difficulty instruction
@@ -474,7 +465,7 @@ def build_single_question_prompt(
 
 ## ТЕМА (питання ТІЛЬКИ по цій темі!):
 {topic}
-{concept_instruction}{difficulty_instruction}
+{focus_instruction}{difficulty_instruction}
 ## РЕКОМЕНДАЦІЇ ДО СТИЛЮ:
 {level_guidance}
 

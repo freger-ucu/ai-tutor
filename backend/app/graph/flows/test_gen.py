@@ -2,24 +2,24 @@
 Test Generation Flow (EP4) - Parallel Architecture with Planning.
 
 Generates a pool of validated test questions using batch processing
-with an intelligent planning phase for concept coverage.
+with an intelligent planning phase for question diversity.
 
 Flow:
-    retrieve_context → plan_test (assigns difficulty) → retrieve_concepts → batch_generate
-                                                                                  ↓
-                                                                            batch_validate
-                                                                                  ↓
-                                                                            prepare_retry ──┐
-                                                                                  ↓         │
-                                                                          finalize (sort) ◄─┘
+    retrieve_context → plan_test (assigns difficulty) → batch_generate
+                                                              ↓
+                                                        batch_validate
+                                                              ↓
+                                                        prepare_retry ──┐
+                                                              ↓         │
+                                                      finalize (sort) ◄─┘
 
 Key Design:
-- Planning phase: 1 LLM call to design entire test structure
+- Planning phase: 1 LLM call to design test structure with focus areas
 - CPU-based difficulty distribution: Assigned at planning based on student level
   - weak students: 6 easy, 4 medium, 2 hard
   - medium students: 4 easy, 4 medium, 4 hard
   - strong students: 2 easy, 4 medium, 6 hard
-- Per-concept RAG: Parallel retrieval for each identified concept
+- Topic-level RAG: Single retrieval used for all questions
 - Batch generation: All questions generated in parallel with difficulty-aware prompts
 - Solver-based validation: Independent solver validates each question
 - Smart retry: Only retry if 3+ questions fail, max 1 retry iteration
@@ -98,14 +98,12 @@ class QuestionSpec(TypedDict):
     """Specification for a question from planner."""
     spec_id: int
     question_type: Literal["single_choice", "multiple_choice", "open"]
-    concept: str  # What concept to assess
     focus: str    # Specific aspect to test
     difficulty: Literal["easy", "medium", "hard"]  # Assigned by CPU distribution
 
 
 class TestPlan(TypedDict):
     """Output of planning phase."""
-    concepts: List[str]
     question_specs: List[QuestionSpec]
     rationale: str
 
@@ -144,8 +142,6 @@ class TestGenState(TypedDict, total=False):
 
     # === PLANNING ===
     test_plan: Optional[TestPlan]
-    concepts: List[str]
-    concept_contexts: Dict[str, str]  # concept → RAG context
 
     # === BATCH PROCESSING ===
     pending_specs: List[QuestionSpec]
@@ -232,7 +228,7 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     """
     Plan test structure using LLM.
 
-    Identifies key concepts and creates question specifications.
+    Creates question specifications with focus areas.
     Difficulty is assigned here using CPU-based distribution based on student level.
     """
     start_time = time.time()
@@ -270,7 +266,6 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
 
     # Normalize and validate specs
     question_specs = parsed.get("question_specs", [])
-    concepts = parsed.get("concepts", [topic])
 
     # Compute difficulty distribution based on student level
     difficulties = compute_difficulty_distribution(level)
@@ -282,7 +277,6 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
         normalized_specs.append({
             "spec_id": spec.get("spec_id", i + 1),
             "question_type": spec.get("question_type", "single_choice"),
-            "concept": spec.get("concept", topic),
             "focus": spec.get("focus", ""),
             "difficulty": difficulty,
         })
@@ -300,7 +294,6 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
         )
 
     test_plan: TestPlan = {
-        "concepts": concepts,
         "question_specs": normalized_specs,
         "rationale": parsed.get("rationale", ""),
     }
@@ -319,7 +312,6 @@ async def plan_test_node(state: TestGenState) -> Dict[str, Any]:
     return {
         "test_plan": test_plan,
         "pending_specs": normalized_specs,
-        "concepts": concepts,
         "llm_calls_count": state.get("llm_calls_count", 0) + 1,
         "planning_time_ms": planning_time,
     }
@@ -329,7 +321,6 @@ def _generate_fallback_plan(topic: str, level: str = "medium") -> Dict[str, Any]
     """Generate fallback plan if LLM fails."""
     specs = _generate_fallback_specs(topic, TARGET_QUESTION_COUNT, 1, level)
     return {
-        "concepts": [topic],
         "question_specs": specs,
         "rationale": "Fallback plan (LLM planning failed)",
     }
@@ -364,65 +355,11 @@ def _generate_fallback_specs(
         specs.append({
             "spec_id": start_id + i,
             "question_type": q_type,
-            "concept": topic,
             "focus": "",
             "difficulty": difficulty,
         })
 
     return specs
-
-
-# =============================================================================
-# Node: Retrieve Concepts (Per-Concept RAG)
-# =============================================================================
-
-
-@trace_chain(name="retrieve_concepts")
-async def retrieve_concepts_node(state: TestGenState) -> Dict[str, Any]:
-    """
-    Retrieve RAG context for each concept identified by planner.
-
-    Parallel retrieval for all concepts to provide targeted context
-    for question generation.
-    """
-    start_time = time.time()
-
-    concepts = state.get("concepts", [])
-    subject = state.get("subject", "")
-    grade = state.get("grade", 9)
-    base_context = state.get("rag_context", "")
-
-    if not concepts:
-        logger.warning("No concepts to retrieve, using base context")
-        return {"concept_contexts": {}}
-
-    logger.info(f"Retrieving RAG context for {len(concepts)} concepts")
-
-    retriever = get_retriever()
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT_RAG)
-
-    async def retrieve_for_concept(concept: str) -> tuple:
-        async with semaphore:
-            try:
-                docs = await retriever.retrieve(
-                    query=concept,
-                    subject=subject,
-                    grade=grade,
-                    top_k=3,
-                )
-                context, _ = format_context(docs, max_chars=4000, subject=subject)
-                return concept, context if context else base_context
-            except Exception as e:
-                logger.error(f"RAG failed for concept '{concept}': {e}")
-                return concept, base_context
-
-    results = await asyncio.gather(*[retrieve_for_concept(c) for c in concepts])
-    concept_contexts = {concept: ctx for concept, ctx in results}
-
-    retrieval_time = int((time.time() - start_time) * 1000)
-    logger.info(f"Retrieved context for {len(concept_contexts)} concepts in {retrieval_time}ms")
-
-    return {"concept_contexts": concept_contexts}
 
 
 # =============================================================================
@@ -435,14 +372,13 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
     """
     Generate all pending questions in parallel.
 
-    Uses concept-specific context for each question.
+    Uses topic-level RAG context for all questions.
     Difficulty is assigned from spec (set during planning phase).
     """
     start_time = time.time()
 
     pending_specs = state.get("pending_specs", [])
-    concept_contexts = state.get("concept_contexts", {})
-    base_context = state.get("rag_context", "")
+    context = state.get("rag_context", "")
     subject = state.get("subject", "")
     grade = state.get("grade", 9)
     topic = state.get("topic_definition", "")
@@ -460,9 +396,6 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
     async def generate_one(spec: QuestionSpec) -> GenerationResult:
         async with semaphore:
             try:
-                # Get concept-specific context
-                context = concept_contexts.get(spec["concept"], base_context)
-
                 # Pass actual question type and difficulty for differentiated prompts
                 # single_choice: 4 options, 1 correct (correct_answer_index)
                 # multiple_choice: 4 options, 2-3 correct (correct_answer_indices)
@@ -473,7 +406,6 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
                     topic=topic,
                     context=context,
                     question_type=spec["question_type"],
-                    concept=spec["concept"],
                     focus=spec["focus"],
                     level=level,
                     difficulty=spec.get("difficulty", "medium"),
@@ -481,9 +413,9 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
 
                 # Token limits per question type
                 TOKEN_LIMITS = {
-                    "single_choice": 3500,
-                    "multiple_choice": 3500,
-                    "open": 4000,
+                    "single_choice": 4500,
+                    "multiple_choice": 4500,
+                    "open": 4500,
                 }
                 max_tokens = TOKEN_LIMITS.get(spec["question_type"], 2500)
 
@@ -556,7 +488,6 @@ async def batch_generate_node(state: TestGenState) -> Dict[str, Any]:
                 question = parsed
                 question["type"] = spec["question_type"]
                 question["spec_id"] = spec["spec_id"]
-                question["concept"] = spec["concept"]
                 question["difficulty"] = spec.get("difficulty", "medium")
 
                 # Ensure correct_answer_index(es) for choice questions
@@ -638,15 +569,11 @@ async def batch_validate_node(state: TestGenState) -> Dict[str, Any]:
     Validate generated questions using hybrid approach.
 
     1. CPU validation (format, dedup) - instant
-    2. LLM validation (parallel):
-       - MC: reuses concept_context (no extra RAG)
-       - Open: retrieves fresh context per question
+    2. LLM validation (parallel) - solver-based correctness check
     """
     start_time = time.time()
 
     generated = state.get("generated_questions", [])
-    concept_contexts = state.get("concept_contexts", {})
-    base_context = state.get("rag_context", "")
     subject = state.get("subject", "")
     grade = state.get("grade", 9)
 
@@ -833,7 +760,6 @@ def prepare_retry_node(state: TestGenState) -> Dict[str, Any]:
             retry_specs.append({
                 "spec_id": spec_id + 1000 * (retry_count + 1),
                 "question_type": original["question_type"],
-                "concept": original["concept"],
                 "focus": f"{original.get('focus', '')} (retry {retry_count + 1})".strip(),
                 "difficulty": original.get("difficulty", "medium"),
             })
@@ -918,13 +844,13 @@ def build_test_gen_graph():
     Build the LangGraph workflow for parallel test generation.
 
     Flow:
-        retrieve_context → plan_test (assigns difficulty) → retrieve_concepts → batch_generate
-                                                                                      ↓
-                                                                                batch_validate
-                                                                                      ↓
-                                                                                prepare_retry ──┐
-                                                                                      ↓         │
-                                                                              finalize (sort) ◄─┘
+        retrieve_context → plan_test (assigns difficulty) → batch_generate
+                                                                   ↓
+                                                             batch_validate
+                                                                   ↓
+                                                             prepare_retry ──┐
+                                                                   ↓         │
+                                                           finalize (sort) ◄─┘
 
     Note: Difficulty is assigned at planning time (CPU-based distribution),
     not classified post-factum. Retry only happens if 3+ questions fail.
@@ -936,7 +862,6 @@ def build_test_gen_graph():
     # Add nodes
     workflow.add_node("retrieve_context", retrieve_context_node)
     workflow.add_node("plan_test", plan_test_node)
-    workflow.add_node("retrieve_concepts", retrieve_concepts_node)
     workflow.add_node("batch_generate", batch_generate_node)
     workflow.add_node("batch_validate", batch_validate_node)
     workflow.add_node("prepare_retry", prepare_retry_node)
@@ -945,8 +870,7 @@ def build_test_gen_graph():
     # Setup edges
     workflow.set_entry_point("retrieve_context")
     workflow.add_edge("retrieve_context", "plan_test")
-    workflow.add_edge("plan_test", "retrieve_concepts")
-    workflow.add_edge("retrieve_concepts", "batch_generate")
+    workflow.add_edge("plan_test", "batch_generate")
     workflow.add_edge("batch_generate", "batch_validate")
     workflow.add_edge("batch_validate", "prepare_retry")
 
@@ -1013,10 +937,6 @@ class GenerationStats:
         self.validation_time_ms = state.get("validation_time_ms", 0)
         self.retry_count = state.get("retry_count", 0)
 
-        # Planning info
-        test_plan = state.get("test_plan") or {}
-        self.concepts_covered = test_plan.get("concepts", [])
-
         # Failed questions for debugging
         self.failed_questions = state.get("failed_questions", [])
 
@@ -1032,12 +952,10 @@ async def generate_test_pool(
 
     Architecture:
     1. Retrieve RAG context (1 call)
-    2. Plan test structure (1 LLM call) - creates 12 question specs
-    3. Retrieve per-concept context (N parallel RAG)
-    4. Batch generate questions (N parallel LLM)
-    5. Batch validate questions (hybrid: MC reuse context, Open fresh RAG)
-    6. Retry failed questions (max 1 iteration)
-    7. Classify difficulty post-factum (N parallel LLM)
+    2. Plan test structure (1 LLM call) - creates 12 question specs with focus areas
+    3. Batch generate questions (N parallel LLM)
+    4. Batch validate questions (hybrid: CPU format check + LLM solver)
+    5. Retry failed questions (max 1 iteration)
 
     Args:
         subject: Subject name (Алгебра, Українська мова, etc.)
@@ -1056,8 +974,6 @@ async def generate_test_pool(
         "rag_context": "",
         "rag_references": [],
         "test_plan": None,
-        "concepts": [],
-        "concept_contexts": {},
         "pending_specs": [],
         "generated_questions": [],
         "retry_count": 0,
