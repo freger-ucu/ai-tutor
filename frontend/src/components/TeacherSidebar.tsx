@@ -56,7 +56,7 @@ const TeacherSidebar = ({
   const inactiveClass = "font-medium text-slate-800 hover:bg-slate-100";
 
   return (
-    <aside className="w-64 min-w-64 max-w-64 shrink-0 flex-shrink-0 flex-grow-0 bg-white px-6 py-8">
+    <aside className="w-72 min-w-72 max-w-72 shrink-0 flex-shrink-0 flex-grow-0 bg-white px-6 py-8">
       {/* Teacher profile section */}
       <div className="flex items-center gap-3">
         <div
@@ -91,7 +91,7 @@ const TeacherSidebar = ({
           <span className={`flex items-center justify-center ${activeItem === "materials" ? "text-[#1E73F7]" : "text-slate-600"}`}>
             <MaterialsIcon />
           </span>
-          <span className="text-left leading-5">Навчальні матеріали</span>
+          <span className="text-left leading-5 whitespace-nowrap">Навчальні матеріали</span>
         </button>
         <button
           type="button"
