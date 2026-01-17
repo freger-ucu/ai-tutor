@@ -179,7 +179,6 @@ backend/
 | `LLM_MAX_TOKENS` | `500` | Max output tokens |
 | `BACKEND_PORT` | `8000` | Server port |
 | `DEBUG` | `true` | Debug mode |
-| `REDIS_URL` | `redis://localhost:6379` | Redis connection URL |
 | `PHOENIX_ENABLED` | `false` | Enable Phoenix telemetry |
 | `LANGSMITH_ENABLED` | `false` | Enable LangSmith tracing |
 
@@ -282,16 +281,3 @@ OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 ### Missing Data Files
 
 Ensure all required parquet files and embeddings are in the `data/` directory. The application will fail to start without them.
-
-### Redis Connection Errors
-
-Redis is optional. If not available, caching will be disabled. To install Redis:
-```bash
-# macOS
-brew install redis
-brew services start redis
-
-# Ubuntu/Debian
-sudo apt-get install redis-server
-sudo systemctl start redis
-```

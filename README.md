@@ -15,7 +15,6 @@ Personalized learning platform for Ukrainian schools. Helps teachers prepare les
 
 - Python 3.11+
 - Node.js 20+ (for frontend)
-- Redis (for caching)
 
 ### Backend
 
@@ -24,7 +23,6 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env      # Configure your API keys
 uvicorn app.main:app --reload
 ```
 
@@ -36,17 +34,6 @@ API docs: http://localhost:8000/docs
 cd frontend
 npm install
 npm run dev
-```
-
-### Redis Setup
-
-```bash
-# Using Docker (recommended)
-docker run -d -p 6379:6379 redis:latest
-
-# Or install locally
-# macOS: brew install redis
-# Ubuntu: sudo apt-get install redis-server
 ```
 
 ## Configuration

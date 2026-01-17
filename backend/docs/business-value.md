@@ -211,7 +211,6 @@ The AI Tutor backend serves two primary user personas:
 **Business Value:**
 - Checks data files are loaded
 - Verifies LLM configuration
-- Confirms Redis connectivity
 - Ensures RAG system is ready
 
 ---
