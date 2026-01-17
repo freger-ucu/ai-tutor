@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import LectureContent from "../components/LectureContent";
@@ -200,15 +200,38 @@ const StudentNote = () => {
 
   if (accessDenied) {
     return (
-      <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
-        <StudentSidebar
+      <div className="min-h-screen lg:h-screen bg-[#1E73F7] text-slate-900 overflow-y-auto lg:overflow-hidden flex flex-col lg:flex-row">
+        <div className="hidden lg:flex">
+<StudentSidebar
           studentId={studentId || ""}
           classLabel={classLabel || undefined}
           subjects={availableSubjects}
           activeSubjectId={subjectSlug}
         />
-        <main className="flex-1 px-8 py-10 flex flex-col h-full overflow-hidden">
-          <div className="flex items-center gap-4 mb-4 shrink-0">
+        </div>
+        <main
+          className="flex-1 px-4 py-6 flex flex-col overflow-y-auto lg:px-8 lg:py-10 lg:h-full lg:overflow-hidden"
+          data-scroll-root="mobile"
+        >
+          <div className="mb-4 rounded-2xl bg-white/95 px-4 py-3 shadow-md lg:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <Link
+                to={backToTopicHref}
+                className="text-sm font-semibold text-[#1E73F7]"
+              >
+                ← Назад
+              </Link>
+              <Link
+                to="/"
+                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
+              >
+                Вийти
+              </Link>
+            </div>
+            <div className="mt-2 text-sm font-semibold text-slate-800">{noteTitle}</div>
+            <div className="mt-1 text-xs text-slate-500">{decodedTopic || "Тема"}</div>
+          </div>
+          <div className="hidden items-center gap-4 mb-4 shrink-0 lg:flex">
             <BackButton fallbackPath={backToTopicHref} />
             <Breadcrumbs
               items={[
@@ -220,7 +243,7 @@ const StudentNote = () => {
           </div>
           <div className="flex-1 flex items-center justify-center">
             <div className="rounded-[28px] bg-white p-8 shadow-sm max-w-md text-center">
-              <div className="text-5xl mb-4">🔒</div>
+              <div className="text-2xl font-semibold text-slate-700 mb-4">Упс</div>
               <h2 className="text-xl font-bold text-slate-900 mb-2">Доступ обмежено</h2>
               <p className="text-slate-600">{accessDenied}</p>
             </div>
@@ -231,17 +254,40 @@ const StudentNote = () => {
   }
 
   return (
-    <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
+    <div className="min-h-screen lg:h-screen bg-[#1E73F7] text-slate-900 overflow-y-auto lg:overflow-hidden flex flex-col lg:flex-row">
         {/* Static sidebar - always shows only subjects list */}
-        <StudentSidebar
+        <div className="hidden lg:flex">
+<StudentSidebar
           studentId={studentId || ""}
           classLabel={classLabel || undefined}
           subjects={availableSubjects}
           activeSubjectId={subjectSlug}
         />
+        </div>
 
-        <main className="flex-1 px-8 py-10 flex flex-col h-full overflow-hidden">
-          <div className="flex items-center gap-4 mb-4 shrink-0">
+        <main
+          className="flex-1 px-4 py-6 flex flex-col overflow-y-auto lg:px-8 lg:py-10 lg:h-full lg:overflow-hidden"
+          data-scroll-root="mobile"
+        >
+          <div className="mb-4 rounded-2xl bg-white/95 px-4 py-3 shadow-md lg:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <Link
+                to={backToTopicHref}
+                className="text-sm font-semibold text-[#1E73F7]"
+              >
+                ← Назад
+              </Link>
+              <Link
+                to="/"
+                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
+              >
+                Вийти
+              </Link>
+            </div>
+            <div className="mt-2 text-sm font-semibold text-slate-800">{noteTitle}</div>
+            <div className="mt-1 text-xs text-slate-500">{decodedTopic || "Тема"}</div>
+          </div>
+          <div className="hidden items-center gap-4 mb-4 shrink-0 lg:flex">
             <BackButton fallbackPath={backToTopicHref} />
             <Breadcrumbs
               items={[
@@ -251,22 +297,19 @@ const StudentNote = () => {
               ]}
             />
           </div>
-          <h1 className="text-2xl font-bold text-white shrink-0">
+          <h1 className="text-xl font-bold text-white shrink-0 lg:text-2xl">
             Конспект. {noteTitle}
           </h1>
 
-          <div className="mt-5 flex-1 min-h-0 rounded-[28px] bg-white p-6 shadow-sm overflow-y-auto note-scrollbar">
+          <div className="mt-4 flex-1 min-h-0 rounded-[28px] bg-white p-4 shadow-sm overflow-y-visible lg:mt-5 lg:p-6 lg:overflow-y-auto">
             <div className="rounded-[20px] bg-white">
-              <h2 className="text-lg font-semibold text-slate-900">
-                {decodedTopic || noteTitle}
-              </h2>
-              <div className="mt-4 break-words">
+              <div className="break-words">
                 {noteMaterial?.content ? (
                   <LectureContent
                     content={noteMaterial.content}
                     sources={noteMaterial.sources ?? []}
                     userRole="student"
-                    skipFirstHeading
+                    title={noteTitle}
                   />
                 ) : (
                   <div className="space-y-6">

@@ -10,6 +10,7 @@ import { getStudentData } from "../api/student";
 import { getStudentDetails } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
 import { classIdToLabel } from "../data/classUtils";
+import { getStudentTestCompletionMap } from "../data/studentProgress";
 
 // Cache student class label in localStorage for stable sidebar display
 const getStudentClassCache = (studentId: string | undefined): string | null => {
@@ -106,6 +107,12 @@ const StudentTopic = () => {
   
   const [notes, setNotes] = useState<{ id: string; title: string }[]>([]);
   const [tests, setTests] = useState<{ id: string; title: string }[]>([]);
+
+  // Get test completion data for current student
+  const testCompletionMap = useMemo(
+    () => getStudentTestCompletionMap(studentId),
+    [studentId]
+  );
 
   useEffect(() => {
     const apiId = toNumericId(studentId);
@@ -231,15 +238,40 @@ const StudentTopic = () => {
     <div className="min-h-screen bg-[#1E73F7] text-slate-900">
       <div className="flex min-h-screen">
         {/* Static sidebar - always shows only subjects list */}
-        <StudentSidebar
-          studentId={studentId || ""}
-          classLabel={classLabel || undefined}
-          subjects={availableSubjects}
-          activeSubjectId={subjectSlug}
-        />
+        <div className="hidden lg:flex">
+          <StudentSidebar
+            studentId={studentId || ""}
+            classLabel={classLabel || undefined}
+            subjects={availableSubjects}
+            activeSubjectId={subjectSlug}
+          />
+        </div>
 
-        <main className="flex-1 px-8 py-10">
-          <div className="flex items-center gap-4 mb-6">
+        <main
+          className="flex-1 px-4 py-6 overflow-y-auto lg:px-8 lg:py-10 lg:overflow-visible"
+          data-scroll-root="mobile"
+        >
+          <div className="mb-4 rounded-2xl bg-white/95 px-4 py-3 shadow-md lg:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <Link
+                to={backToSubjectHref}
+                className="text-sm font-semibold text-[#1E73F7]"
+              >
+                ← {subjectName || "Предмет"}
+              </Link>
+              <Link
+                to="/"
+                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
+              >
+                Вийти
+              </Link>
+            </div>
+            <div className="mt-2 text-sm font-semibold text-slate-800 break-words">
+              {decodedTopic || "Тема"}
+            </div>
+            <div className="mt-1 text-xs text-slate-500">{courseLabel}</div>
+          </div>
+          <div className="hidden items-center gap-4 mb-6 lg:flex">
             <BackButton fallbackPath={backToSubjectHref} />
             <Breadcrumbs
               items={[
@@ -252,26 +284,26 @@ const StudentTopic = () => {
           <Panel>
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">{decodedTopic}</h1>
+                    <h1 className="text-xl font-bold text-slate-900 lg:text-2xl w-full break-words">{decodedTopic}</h1>
                     <div className="mt-1 text-sm text-slate-500">{courseLabel}</div>
                 </div>
             </div>
           </Panel>
 
-          <div className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_0.95fr] overflow-visible">
+          <div className="mt-6 grid gap-6 lg:mt-8 lg:grid-cols-[1.05fr_0.95fr] overflow-visible">
             <section className="overflow-visible">
-              <h2 className="text-xl font-semibold text-white">Конспекти</h2>
-              <div className="mt-4 flex flex-col gap-5 overflow-visible">
+              <h2 className="text-lg font-semibold text-white lg:text-xl">Конспекти</h2>
+              <div className="mt-4 flex flex-col gap-4 overflow-visible lg:gap-5">
                 {notes.length > 0 ? notes.map((item) => (
                   <Link
                     key={item.id}
                     to={`/student/${studentId}/note/${courseId}/${topicId}/${item.id}`}
                   >
-                    <Card className="flex items-center gap-3 px-6 py-5 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98]">
+                    <Card className="flex items-center gap-3 px-5 py-4 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98] lg:px-6 lg:py-5">
                       <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-sm transition-all duration-300">
                         <img src="/src/assets/Vector.svg" alt="" className="h-4 w-4" />
                       </span>
-                      <span className="text-base font-semibold text-slate-900">{item.title}</span>
+                      <span className="text-sm font-semibold text-slate-900 lg:text-base">{item.title}</span>
                     </Card>
                   </Link>
                 )) : (
@@ -283,20 +315,64 @@ const StudentTopic = () => {
             </section>
 
             <section className="overflow-visible">
-              <h2 className="text-xl font-semibold text-white">Тести</h2>
-              <div className="mt-4 flex flex-col gap-5 overflow-visible">
-                {tests.length > 0 ? tests.map((item) => (
+              <h2 className="text-lg font-semibold text-white lg:text-xl">Тести</h2>
+              <div className="mt-4 flex flex-col gap-4 overflow-visible lg:gap-5">
+                {tests.length > 0 ? tests.map((item) => {
+                  const completion = testCompletionMap.get(item.id);
+                  const barSegments = 10;
+                  const correctSegments = completion?.totalQuestions
+                    ? Math.round((completion.correctAnswers / completion.totalQuestions) * barSegments)
+                    : 0;
+                  const clampedCorrectSegments = Math.min(
+                    barSegments,
+                    Math.max(0, correctSegments)
+                  );
+                  const isCompleted = Boolean(completion);
+
+                  return (
                     <Link key={item.id} to={`/student/${studentId}/test/${item.id}`}>
-                      <Card className="flex items-center gap-3 px-6 py-5 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98]">
-                        <img
-                          src="/src/assets/Group.svg"
-                          alt=""
-                          className="h-6 w-6 transition-transform duration-300"
-                        />
-                        <span className="text-base font-semibold text-slate-900">{item.title}</span>
+                      <Card className="flex flex-col gap-4 px-5 py-4 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98] lg:px-6 lg:py-5">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <img
+                              src="/src/assets/Group.svg"
+                              alt=""
+                              className="h-6 w-6 transition-transform duration-300"
+                            />
+                            <span className="text-sm font-semibold text-slate-900 lg:text-base break-words">
+                              {item.title}
+                            </span>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-[#E9F1FF] px-4 py-1.5 text-xs font-semibold text-[#1E73F7]">
+                            Пройти
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-1">
+                            {Array.from({ length: barSegments }).map((_, index) => (
+                              <span
+                                key={index}
+                                className={`h-2 w-5 rounded-full ${
+                                  isCompleted
+                                    ? index < clampedCorrectSegments
+                                      ? "bg-[#6FDB9B]"
+                                      : "bg-[#E63C3C]"
+                                    : "bg-slate-200"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <div className="text-xs font-semibold text-slate-500">
+                            {"\u041e\u0441\u0442\u0430\u043d\u043d\u044f \u0441\u043f\u0440\u043e\u0431\u0430:"}{" "}
+                            {completion
+                              ? `${completion.correctAnswers}/${completion.totalQuestions}`
+                              : "—"}
+                          </div>
+                        </div>
                       </Card>
                     </Link>
-                  )) : (
+                  );
+                }) : (
                      <div className="rounded-2xl border border-white/10 px-6 py-8 text-center text-sm text-white/40">
                         Немає тестів
                     </div>

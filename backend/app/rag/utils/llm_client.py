@@ -16,7 +16,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from ..config import get_settings
-from app.config import settings as app_settings
+from app.config import settings as app_settings, LLMProvider
 from app.services.tracing import trace_llm, is_tracing_enabled
 from app.utils.json_parser import parse_json_response
 
@@ -76,6 +76,24 @@ class LLMClient:
             self.embedding_model,
         )
 
+    def _get_client_for_provider(
+        self, provider: Optional[LLMProvider] = None
+    ) -> tuple:
+        """Get client and model for a specific provider (or use default).
+
+        Args:
+            provider: Optional provider override. If None, uses default client.
+
+        Returns:
+            Tuple of (client, model_name)
+        """
+        if provider is None:
+            return self.client, self.model
+
+        api_key, base_url, model = app_settings.get_config_for_provider(provider)
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        return client, model
+
     async def _throttle(self) -> None:
         """Throttle requests for providers with strict RPM limits (e.g., Gemini free tier)."""
         if self._min_request_interval <= 0:
@@ -93,15 +111,21 @@ class LLMClient:
         prompt: str,
         temperature: float = 0.0,
         max_tokens: int = 500,  # Reduced default
-        json_mode: bool = False
+        json_mode: bool = False,
+        provider: Optional[LLMProvider] = None,
     ) -> str:
-        """Generate text from LLM."""
+        """Generate text from LLM.
+
+        Args:
+            provider: Optional provider override. If None, uses default provider.
+        """
         await self._throttle()
+        client, model = self._get_client_for_provider(provider)
         kwargs = {
-            "model": self.model,
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
         }
-        if "gpt-5" in self.model:
+        if "gpt-5" in model:
             # GPT-5 models only support default temperature (1).
             kwargs["temperature"] = 1
             kwargs["max_completion_tokens"] = max_tokens
@@ -113,12 +137,12 @@ class LLMClient:
             kwargs["response_format"] = {"type": "json_object"}
 
         try:
-            response = await self.client.chat.completions.create(**kwargs)
+            response = await client.chat.completions.create(**kwargs)
         except Exception as e:
             if json_mode and "response_format" in kwargs and "response_format" in str(e):
                 self._supports_response_format = False
                 kwargs.pop("response_format", None)
-                response = await self.client.chat.completions.create(**kwargs)
+                response = await client.chat.completions.create(**kwargs)
             else:
                 raise
 
@@ -127,7 +151,7 @@ class LLMClient:
 
         if not content:
             logger.warning(
-                f"LLM returned empty content: model={self.model}, "
+                f"LLM returned empty content: model={model}, "
                 f"finish_reason={finish_reason}, max_tokens={max_tokens}"
             )
 
@@ -138,9 +162,12 @@ class LLMClient:
         prompt: str,
         temperature: float = 0.0,
         max_tokens: int = 500,  # Short response for JSON
+        provider: Optional[LLMProvider] = None,
     ) -> Dict[str, Any]:
         """Generate JSON with robust parsing."""
-        text = await self.generate(prompt, temperature, max_tokens=max_tokens, json_mode=True)
+        text = await self.generate(
+            prompt, temperature, max_tokens=max_tokens, json_mode=True, provider=provider
+        )
         return parse_json_response(
             text,
             fallback={"error": "JSON parsing failed", "raw_text": text[:200]},
@@ -154,6 +181,7 @@ class LLMClient:
         response_schema: Type[BaseModel],
         temperature: float = 0.0,
         max_tokens: int = 1000,
+        provider: Optional[LLMProvider] = None,
     ) -> Dict[str, Any]:
         """
         Generate with guaranteed schema compliance using structured outputs.
@@ -166,11 +194,13 @@ class LLMClient:
             response_schema: Pydantic model defining the response schema
             temperature: Sampling temperature (default 0.0 for deterministic)
             max_tokens: Maximum tokens in response
+            provider: Optional provider override. If None, uses default provider.
 
         Returns:
             Parsed dict matching the schema
         """
         await self._throttle()
+        client, model = self._get_client_for_provider(provider)
 
         # Build JSON schema from Pydantic model
         schema = response_schema.model_json_schema()
@@ -178,7 +208,7 @@ class LLMClient:
         schema["additionalProperties"] = False
 
         kwargs = {
-            "model": self.model,
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": max_tokens,
             "response_format": {
@@ -191,7 +221,7 @@ class LLMClient:
             }
         }
 
-        if "gpt-5" in self.model:
+        if "gpt-5" in model:
             kwargs["temperature"] = 1
             kwargs["max_completion_tokens"] = max_tokens
             kwargs.pop("max_tokens", None)
@@ -202,10 +232,10 @@ class LLMClient:
         for attempt in range(max_retries + 1):
             try:
                 # On retry, slightly increase temperature to encourage response
-                if attempt > 0 and "gpt-5" not in self.model:
+                if attempt > 0 and "gpt-5" not in model:
                     kwargs["temperature"] = min(0.3, temperature + 0.1 * attempt)
 
-                response = await self.client.chat.completions.create(**kwargs)
+                response = await client.chat.completions.create(**kwargs)
                 content = response.choices[0].message.content
                 if not content or not content.strip():
                     if attempt < max_retries:
@@ -214,7 +244,9 @@ class LLMClient:
                         continue
                     # Last resort: try json_mode fallback
                     logger.warning("[LLMClient.generate_structured] Empty response, trying json_mode fallback")
-                    text = await self.generate(prompt, temperature, max_tokens=max_tokens, json_mode=True)
+                    text = await self.generate(
+                        prompt, temperature, max_tokens=max_tokens, json_mode=True, provider=provider
+                    )
                     if text and text.strip():
                         # Try to extract letter if it's a simple answer
                         parsed = _try_parse_letter_answer(text)
@@ -238,7 +270,9 @@ class LLMClient:
                     continue
                 # Fall back to basic json_mode if structured outputs fail
                 logger.warning(f"Structured output failed, falling back to json_mode: {e}")
-                text = await self.generate(prompt, temperature, max_tokens=max_tokens, json_mode=True)
+                text = await self.generate(
+                    prompt, temperature, max_tokens=max_tokens, json_mode=True, provider=provider
+                )
                 return parse_json_response(
                     text,
                     fallback={"answer": 0, "error": "JSON parsing failed"},

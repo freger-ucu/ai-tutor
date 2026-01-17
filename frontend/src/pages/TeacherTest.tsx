@@ -189,33 +189,40 @@ const TeacherTest = () => {
   }
 
   return (
-    <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
+    <div className="min-h-screen lg:h-screen bg-[#1E73F7] text-slate-900 overflow-y-auto lg:overflow-hidden flex flex-col lg:flex-row">
       {/*
         Teacher Sidebar - Static navigation
         Per requirements: Only shows "Навчальні матеріали" and "Учні" links.
         No dynamic content is displayed regardless of current page state.
       */}
-      <TeacherSidebar
-        teacherName={id ? `Вчитель ${id}` : "Вчитель"}
-        activeItem="materials"
-        onMaterialsClick={() => navigate(`/teacher/${id}`)}
-        onStudentsClick={() => navigate(`/teacher/${id}?view=students`)}
-      />
+      <div className="hidden lg:flex">
+        <TeacherSidebar
+          teacherName={id ? `Вчитель ${id}` : "Вчитель"}
+          activeItem="materials"
+          onMaterialsClick={() => navigate(`/teacher/${id}`)}
+          onStudentsClick={() => navigate(`/teacher/${id}?view=students`)}
+        />
+      </div>
 
-      <main className="flex-1 px-10 py-4 flex flex-col h-full">
+      <main
+        className="flex-1 px-4 py-4 flex flex-col overflow-y-auto lg:px-10 lg:py-4 lg:h-full lg:overflow-hidden"
+        data-scroll-root="mobile"
+      >
           <div className="flex items-center gap-4 mb-4 shrink-0">
             <BackButton fallbackPath={backToTopicHref} />
-            <Breadcrumbs
-              items={[
-                { label: subjectName || "Предмет", href: backToClassHref },
-                { label: testData.className || "Клас", href: backToClassHref },
-                { label: testData.topicName || "Тема", href: backToTopicHref },
-                { label: testData.title },
-              ]}
-            />
+            <div className="hidden lg:flex">
+              <Breadcrumbs
+                items={[
+                  { label: subjectName || "Предмет", href: backToClassHref },
+                  { label: testData.className || "Клас", href: backToClassHref },
+                  { label: testData.topicName || "Тема", href: backToTopicHref },
+                  { label: testData.title },
+                ]}
+              />
+            </div>
           </div>
           <div className="flex items-center gap-4 shrink-0">
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className="text-lg font-bold text-white lg:text-2xl">
               {testData.title}
             </h1>
 
@@ -229,7 +236,7 @@ const TeacherTest = () => {
                 <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
                 <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
-              Редагувати тест
+              <span className="hidden lg:inline">Редагувати тест</span>
             </button>
 
             {/* Delete button */}
@@ -237,18 +244,18 @@ const TeacherTest = () => {
               type="button"
               onClick={() => setIsDeleteModalOpen(true)}
               className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 hover:border-red-500"
+              aria-label="Видалити тест"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 6h18" />
                 <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
                 <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
               </svg>
-              Видалити
             </button>
           </div>
 
           {/* Test content - same layout as student view with custom scrollbar */}
-          <div className="mt-4 flex-1 min-h-0 overflow-y-auto teacher-scrollbar pr-4">
+          <div className="mt-4 flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto lg:pr-4">
              <TestContainer
                testData={testData}
                statistics={statistics}

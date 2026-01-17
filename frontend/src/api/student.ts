@@ -26,6 +26,7 @@ export interface TestFeedbackQuestion {
   correct: boolean;
   topic: string;
   subtopics: string[];
+  focus: string;
 }
 
 export interface TestFeedbackRequest {

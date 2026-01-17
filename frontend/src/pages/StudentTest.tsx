@@ -278,15 +278,40 @@ const StudentTest = () => {
 
   if (accessDenied) {
     return (
-      <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
-        <StudentSidebar
+      <div className="min-h-screen lg:h-screen bg-[#1E73F7] text-slate-900 overflow-y-auto lg:overflow-hidden flex flex-col lg:flex-row">
+        <div className="hidden lg:flex">
+<StudentSidebar
           studentId={studentId || ""}
           classLabel={classLabel || testData?.className || undefined}
           subjects={availableSubjects}
           activeSubjectId={subjectSlug}
         />
-        <main className="flex-1 px-8 py-4 flex flex-col h-full overflow-hidden">
-          <div className="flex items-center gap-4 mb-3 shrink-0">
+        </div>
+        <main
+          className="flex-1 px-4 py-4 flex flex-col overflow-y-auto lg:px-8 lg:py-4 lg:h-full lg:overflow-hidden"
+          data-scroll-root="mobile"
+        >
+          <div className="mb-3 rounded-2xl bg-white/95 px-4 py-3 shadow-md lg:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => navigate(backToTopicHref)}
+                className="text-sm font-semibold text-[#1E73F7]"
+              >
+                ← Назад
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/")}
+                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
+              >
+                Вийти
+              </button>
+            </div>
+            <div className="mt-2 text-sm font-semibold text-slate-800">{testData.title}</div>
+            <div className="mt-1 text-xs text-slate-500">{testData.topicName || subjectName}</div>
+          </div>
+          <div className="hidden items-center gap-4 mb-3 shrink-0 lg:flex">
             <BackButton fallbackPath={backToTopicHref} />
             <Breadcrumbs
               items={[
@@ -298,7 +323,7 @@ const StudentTest = () => {
           </div>
           <div className="flex-1 flex items-center justify-center">
             <div className="rounded-[28px] bg-white p-8 shadow-sm max-w-md text-center">
-              <div className="text-5xl mb-4">🔒</div>
+              <div className="text-2xl font-semibold text-slate-700 mb-4">Упс</div>
               <h2 className="text-xl font-bold text-slate-900 mb-2">Доступ обмежено</h2>
               <p className="text-slate-600">{accessDenied}</p>
             </div>
@@ -309,26 +334,51 @@ const StudentTest = () => {
   }
 
   return (
-    <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
+    <div className="min-h-screen lg:h-screen bg-[#1E73F7] text-slate-900 overflow-y-auto lg:overflow-hidden flex flex-col lg:flex-row">
       {/* Static sidebar - always shows only subjects list */}
-      <StudentSidebar
+      <div className="hidden lg:flex">
+<StudentSidebar
         studentId={studentId || ""}
         classLabel={classLabel || testData?.className || undefined}
         subjects={availableSubjects}
         activeSubjectId={subjectSlug}
       />
-      <main className="flex-1 px-8 py-4 flex flex-col h-full overflow-hidden">
-        <div className="flex items-center gap-4 mb-3 shrink-0">
+      </div>
+      <main
+        className="flex-1 px-4 py-4 flex flex-col overflow-y-auto lg:px-8 lg:py-4 lg:h-full lg:overflow-hidden"
+        data-scroll-root="mobile"
+      >
+        <div className="mb-3 rounded-2xl bg-white/95 px-4 py-3 shadow-md lg:hidden">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(backToTopicHref)}
+              className="text-sm font-semibold text-[#1E73F7]"
+            >
+              ← Назад
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
+            >
+              Вийти
+            </button>
+          </div>
+          <div className="mt-2 text-sm font-semibold text-slate-800">{testData.title}</div>
+          <div className="mt-1 text-xs text-slate-500">{testData.topicName || subjectName}</div>
+        </div>
+        <div className="hidden items-center gap-4 mb-3 shrink-0 lg:flex">
           <BackButton fallbackPath={backToTopicHref} />
           <Breadcrumbs
-            items={[
+          items={[
               { label: subjectName || "Предмет", href: backToSubjectHref },
               { label: testData.topicName || "Тема", href: backToTopicHref },
               { label: testData.title },
             ]}
           />
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto student-scrollbar pr-2">
+        <div className="flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto lg:pr-2">
             <TestContainer
               testData={testData}
               showStatistics={false}
@@ -348,16 +398,16 @@ const StudentTest = () => {
                       Підсумковий фідбек
                     </div>
                     {isViewingCompleted && completion?.feedback && (
-                      <MarkdownContent content={completion.feedback} className="mt-3" />
+                      <MarkdownContent content={completion.feedback} className="mt-3 text-xs" />
                     )}
                     {!isViewingCompleted && isFeedbackLoading && (
-                      <div className="mt-3 text-slate-500">Формуємо фідбек...</div>
+                      <div className="mt-3 text-xs text-slate-500">Формуємо фідбек...</div>
                     )}
                     {!isViewingCompleted && feedbackError && (
-                      <div className="mt-3 text-rose-500">{feedbackError}</div>
+                      <div className="mt-3 text-xs text-rose-500">{feedbackError}</div>
                     )}
                     {!isViewingCompleted && testFeedback && (
-                      <MarkdownContent content={testFeedback} className="mt-3" />
+                      <MarkdownContent content={testFeedback} className="mt-3 text-xs" />
                     )}
                   </div>
                 ) : null
@@ -399,14 +449,12 @@ const StudentTest = () => {
                 setFeedbackError(null);
                 setTestFeedback(null);
 
-                const questions = result.answers
-                  .map((answer) => {
-                    const question = testData.questions.find(
-                      (item) => item.id === answer.questionId
-                    );
-                    if (!question) {
-                      return null;
-                    }
+                // Include ALL questions, marking unanswered ones as incorrect
+                const questions = testData.questions.map((question) => {
+                  const answer = result.answers.find(
+                    (a) => a.questionId === question.id
+                  );
+                  if (answer) {
                     const selectedText = answer.selectedOptionIds
                       .map(
                         (optionId) =>
@@ -425,9 +473,19 @@ const StudentTest = () => {
                       correct: answer.isCorrect,
                       topic: question.topic ?? testData.topicName ?? testData.title,
                       subtopics: question.subtopics ?? [],
+                      focus: question.focus ?? "",
                     };
-                  })
-                  .filter((item): item is NonNullable<typeof item> => Boolean(item));
+                  }
+                  // Unanswered question - mark as incorrect
+                  return {
+                    question: question.text,
+                    answer: "",
+                    correct: false,
+                    topic: question.topic ?? testData.topicName ?? testData.title,
+                    subtopics: question.subtopics ?? [],
+                    focus: question.focus ?? "",
+                  };
+                });
 
                 try {
                   const feedback = await getTestFeedback({

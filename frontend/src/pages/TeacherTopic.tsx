@@ -52,6 +52,8 @@ const TeacherTopic = () => {
 
   const [materialName, setMaterialName] = useState("");
   const [testName, setTestName] = useState("");
+  const [materialError, setMaterialError] = useState<string | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
   const [classStudents, setClassStudents] = useState<number[]>([]);
   const decodedClassId = classId ? Number(decodeURIComponent(classId)) : null;
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
@@ -228,22 +230,29 @@ const TeacherTopic = () => {
     <div className="min-h-screen bg-[#1E73F7] text-slate-900">
       <div className="flex min-h-screen">
         {/* Static sidebar - always shows only "Materials" and "Students" links */}
-        <TeacherSidebar
-          teacherName={id ? `Вчитель ${id}` : "Вчитель"}
-          activeItem="materials"
-          onMaterialsClick={() => navigate(`/teacher/${id}`)}
-          onStudentsClick={() => navigate(`/teacher/${id}?view=students`)}
-        />
-        <main className="flex-1 px-10 py-10">
+        <div className="hidden lg:flex">
+          <TeacherSidebar
+            teacherName={id ? `Вчитель ${id}` : "Вчитель"}
+            activeItem="materials"
+            onMaterialsClick={() => navigate(`/teacher/${id}`)}
+            onStudentsClick={() => navigate(`/teacher/${id}?view=students`)}
+          />
+        </div>
+        <main
+          className="flex-1 px-4 py-6 overflow-y-auto lg:px-10 lg:py-10 lg:overflow-visible"
+          data-scroll-root="mobile"
+        >
           <div className="flex items-center gap-4 mb-6">
             <BackButton fallbackPath={`/teacher/${id}`} />
-            <Breadcrumbs
-              items={[
-                { label: subjectName || "Предмет", href: `/teacher/${id}` },
-                { label: classLabel || "Клас", href: `/teacher/${id}` },
-                { label: decodedTopic || "Тема" },
-              ]}
-            />
+            <div className="hidden lg:flex">
+              <Breadcrumbs
+                items={[
+                  { label: subjectName || "Предмет", href: `/teacher/${id}` },
+                  { label: classLabel || "Клас", href: `/teacher/${id}` },
+                  { label: decodedTopic || "Тема" },
+                ]}
+              />
+            </div>
           </div>
           <Panel>
             <div className="grid gap-6 md:grid-cols-[1fr_1fr_1fr_auto]">
@@ -273,9 +282,9 @@ const TeacherTopic = () => {
               </div>
             </div>
           </Panel>
-          <div className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_0.95fr] overflow-visible">
+          <div className="mt-6 grid gap-6 lg:mt-8 lg:grid-cols-[1.05fr_0.95fr] overflow-visible">
             <section className="overflow-visible">
-              <h2 className="text-xl font-semibold text-white">Конспекти</h2>
+              <h2 className="text-lg font-semibold text-white lg:text-xl">Конспекти</h2>
               <div className="mt-4 space-y-4 overflow-visible">
                 {notes.map((item) => (
                   <Card
@@ -355,7 +364,7 @@ const TeacherTopic = () => {
               />
             </section>
             <section className="overflow-visible">
-              <h2 className="text-xl font-semibold text-white">Тести</h2>
+              <h2 className="text-lg font-semibold text-white lg:text-xl">Тести</h2>
               <div className="mt-4 space-y-4 overflow-visible">
                 {tests.map((item) => (
                   <Card
@@ -437,6 +446,7 @@ const TeacherTopic = () => {
         isOpen={isMaterialModalOpen}
         onClose={() => {
           setActiveModal(null);
+          setTestError(null);
         }}
         size="xl"
         title="Опишіть тему"
@@ -444,12 +454,19 @@ const TeacherTopic = () => {
         <GenerateModalContent
           placeholder="Детально опишіть тему"
           value={materialName}
-          onChange={setMaterialName}
+          onChange={(value) => {
+            setMaterialName(value);
+            if (materialError) {
+              setMaterialError(null);
+            }
+          }}
           primaryLabel="Згенерувати"
           isLoading={false}
           onSecondaryClick={() => handleOpenAudience("material")}
+          errorText={materialError ?? undefined}
           onPrimaryClick={() => {
             if (!materialName.trim()) {
+              setMaterialError("Напишіть тему");
               return;
             }
             const topicDefinition = materialName.trim();
@@ -458,6 +475,7 @@ const TeacherTopic = () => {
             // Close modal immediately
             setActiveModal(null);
             setMaterialName("");
+            setMaterialError(null);
 
             // Start generation in context (runs in background)
             startNoteGeneration({
@@ -482,6 +500,7 @@ const TeacherTopic = () => {
         isOpen={isTestModalOpen}
         onClose={() => {
           setActiveModal(null);
+          setTestError(null);
         }}
         size="xl"
         title="Опишіть тему"
@@ -489,12 +508,19 @@ const TeacherTopic = () => {
         <GenerateModalContent
           placeholder="Детально опишіть тему"
           value={testName}
-          onChange={setTestName}
+          onChange={(value) => {
+            setTestName(value);
+            if (testError) {
+              setTestError(null);
+            }
+          }}
           primaryLabel="Згенерувати"
           isLoading={false}
           onSecondaryClick={() => handleOpenAudience("test")}
+          errorText={testError ?? undefined}
           onPrimaryClick={() => {
             if (!testName.trim()) {
+              setTestError("Напишіть тему");
               return;
             }
             const topicDefinition = testName.trim();
@@ -503,6 +529,7 @@ const TeacherTopic = () => {
             // Close modal immediately
             setActiveModal(null);
             setTestName("");
+            setTestError(null);
 
             // Start generation in context (runs in background)
             startTestGeneration({

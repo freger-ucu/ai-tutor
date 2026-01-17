@@ -17,6 +17,7 @@ export interface TestQuestion {
     type: QuestionType;
     topic?: string;
     subtopics?: string[];
+    focus?: string;
 }
 
 export interface TestData {

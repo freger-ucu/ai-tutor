@@ -23,7 +23,20 @@ TEST_GENERATOR_SYSTEM_PROMPT = """Ти — досвідчений українс
 - НЕ виходь за межі теми
 - Пиши українською мовою
 - Формулюй чітко та однозначно
-- НЕ обгортай відповідь у "questions", "title" чи інші структури"""
+- НЕ обгортай відповідь у "questions", "title" чи інші структури
+
+МАТЕМАТИЧНІ ФОРМУЛИ (для Алгебри та математичних предметів):
+- ЗАВЖДИ використовуй LaTeX для формул, виразів, рівнянь
+- ОБОВ'ЯЗКОВО обгортай формули в \\(...\\) — інакше вони НЕ відобразяться!
+- КРИТИЧНО: НЕ змішуй делімітери! \\( закривається ТІЛЬКИ \\), НЕ $$, НЕ \\]
+- Дроби: \\(\\frac{чисельник}{знаменник}\\)
+- Степені: \\(x^2\\), \\(a^{n+1}\\)
+- Корені: \\(\\sqrt{x}\\), \\(\\sqrt[3]{x}\\)
+- Грецькі літери: \\(\\alpha\\), \\(\\beta\\), \\(\\Delta\\)
+- Індекси: \\(a_n\\), \\(x_{i+1}\\)
+- НЕ пиши формули звичайним текстом — ТІЛЬКИ LaTeX!
+- НЕ використовуй \\\\ для переносу рядків
+- ВАРІАНТИ ВІДПОВІДЕЙ: обгортай формули в \\(...\\)"""
 
 TEST_PLANNER_SYSTEM_PROMPT = """Ти — експерт з педагогічного дизайну тестів для української школи.
 Твоя роль — планувати структуру тесту, який ефективно перевіряє знання учнів.
@@ -67,7 +80,7 @@ LEVEL_GUIDANCE = {
 
 
 # =============================================================================
-# Test Planner Prompt (Level-Aware, No Difficulty Counts)
+# Test Planner Prompt (Difficulty-Aware)
 # =============================================================================
 
 TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{subject}" для учнів {grade} класу.
@@ -81,46 +94,53 @@ TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{
 ## РІВЕНЬ УЧНІВ: {level}
 {level_guidance}
 
+## РОЗПОДІЛ СКЛАДНОСТІ (ОБОВ'ЯЗКОВО дотримуйся!):
+{difficulty_distribution}
+
+## КРИТЕРІЇ СКЛАДНОСТІ:
+{difficulty_criteria}
+
 ## ВИМОГИ ДО ТЕСТУ:
 - Створи рівно 12 специфікацій питань
-- Покрий 3-5 ключових концепцій теми
-- Розподіли питання рівномірно по концепціях
+- Кожне питання має УНІКАЛЬНИЙ фокус — різні аспекти теми
 - ~50% single_choice, ~20% multiple_choice, ~30% open
+- ОБОВ'ЯЗКОВО дотримуйся розподілу складності вище!
 
 ## ПРАВИЛА ПЛАНУВАННЯ:
 
-### 1. Виділи ключові концепції (3-5 концепцій)
-Проаналізуй тему та визнач основні концепції/підтеми, які потрібно перевірити.
-
-### 2. Розподіли питання по концепціях
-Кожна концепція має бути покрита 2-4 питаннями.
-
-### 3. Обери типи питань для кожної позиції:
+### 1. Обери типи питань для кожної позиції:
 - **single_choice**: для перевірки фактів, визначень, простих правил
 - **multiple_choice**: для перевірки розуміння зв'язків, вибору кількох правильних варіантів
 - **open**: для перевірки вміння пояснювати, обчислювати, формулювати
 
-### 4. Уникай:
-- Однотипних питань підряд на ту саму концепцію
-- Питань, що перевіряють абсолютно те саме
-- Занадто схожих формулювань
+### 2. КРИТИЧНО — Визнач УНІКАЛЬНИЙ фокус для кожного питання:
+- Фокус — це КОНКРЕТНИЙ аспект теми: формула, властивість, метод, застосування
+- ⚠️ ЗАБОРОНЕНО повторювати однаковий фокус у різних питаннях!
+- Фокус має ВІДПОВІДАТИ складності:
+  - **easy**: базові визначення, прості формули, впізнавання понять
+  - **medium**: застосування формул, типові задачі, алгоритми
+  - **hard**: нестандартні задачі, комбінування понять, доведення
+
+### 3. Перевір перед завершенням:
+- Переглянь всі 12 фокусів — вони мають бути РІЗНИМИ
+- Жодні два питання не повинні перевіряти те саме знання
+- Розподіл складності відповідає вимогам
 
 ## ФОРМАТ ВІДПОВІДІ (JSON):
 ```json
 {{
-    "concepts": ["концепція1", "концепція2", "концепція3"],
     "question_specs": [
         {{
             "spec_id": 1,
             "question_type": "single_choice",
-            "concept": "концепція1",
-            "focus": "конкретний аспект для перевірки цим питанням"
+            "difficulty": "easy",
+            "focus": "базовий аспект теми"
         }},
         {{
             "spec_id": 2,
             "question_type": "open",
-            "concept": "концепція2",
-            "focus": "інший аспект"
+            "difficulty": "hard",
+            "focus": "складний аспект теми"
         }}
     ],
     "rationale": "Коротке пояснення логіки розподілу (1-2 речення)"
@@ -130,7 +150,9 @@ TEST_PLANNER_PROMPT = """Створи план тесту з предмету "{
 ВАЖЛИВО:
 - Створи рівно 12 специфікацій питань
 - Кожна специфікація має унікальний spec_id (від 1 до 12)
-- НЕ вказуй difficulty - складність визначається автоматично після генерації
+- ⚠️ Кожен focus має бути УНІКАЛЬНИМ — не повторюй однакові аспекти!
+- ОБОВ'ЯЗКОВО вкажи difficulty для кожного питання (easy/medium/hard)
+- Дотримуйся розподілу: {difficulty_summary}
 - Надай ТІЛЬКИ JSON, без додаткового тексту."""
 
 
@@ -140,6 +162,7 @@ def build_planner_prompt(
     topic_definition: str,
     context: str,
     level: str = "medium",
+    difficulty_counts: Optional[Dict[str, int]] = None,
 ) -> str:
     """
     Build the test planning prompt.
@@ -150,11 +173,36 @@ def build_planner_prompt(
         topic_definition: Topic description
         context: Retrieved textbook context
         level: Student level for guidance ("weak", "medium", "strong")
+        difficulty_counts: Dict with counts per difficulty {"easy": 6, "medium": 4, "hard": 2}
 
     Returns:
         Formatted prompt string for test planning
     """
     level_guidance = LEVEL_GUIDANCE.get(level, LEVEL_GUIDANCE["medium"])
+
+    # Default distribution if not provided
+    if difficulty_counts is None:
+        if level == "weak":
+            difficulty_counts = {"easy": 6, "medium": 4, "hard": 2}
+        elif level == "strong":
+            difficulty_counts = {"easy": 2, "medium": 4, "hard": 6}
+        else:
+            difficulty_counts = {"easy": 4, "medium": 4, "hard": 4}
+
+    # Build difficulty distribution text
+    easy_count = difficulty_counts.get("easy", 4)
+    medium_count = difficulty_counts.get("medium", 4)
+    hard_count = difficulty_counts.get("hard", 4)
+
+    difficulty_distribution = f"""Створи РІВНО:
+- {easy_count} ЛЕГКИХ питань (difficulty: "easy") — базові поняття, визначення
+- {medium_count} СЕРЕДНІХ питань (difficulty: "medium") — застосування знань
+- {hard_count} СКЛАДНИХ питань (difficulty: "hard") — аналіз, нестандартні задачі"""
+
+    difficulty_summary = f"{easy_count} easy, {medium_count} medium, {hard_count} hard"
+
+    # Get subject-specific difficulty criteria
+    difficulty_criteria = get_subject_difficulty_criteria(subject, grade)
 
     return TEST_PLANNER_PROMPT.format(
         subject=subject,
@@ -163,6 +211,9 @@ def build_planner_prompt(
         context=context if context else "Контекст не знайдено. Використовуй власні знання про тему.",
         level=level,
         level_guidance=level_guidance,
+        difficulty_distribution=difficulty_distribution,
+        difficulty_criteria=difficulty_criteria,
+        difficulty_summary=difficulty_summary,
     )
 
 
@@ -249,7 +300,6 @@ def build_single_question_prompt(
     topic: str,
     context: str,
     question_type: str,
-    concept: Optional[str] = None,
     focus: Optional[str] = None,
     level: str = "medium",
     difficulty: str = "medium",
@@ -263,7 +313,6 @@ def build_single_question_prompt(
         topic: Topic description
         context: Retrieved textbook context
         question_type: "multiple_choice", "single_choice", or "open"
-        concept: Specific concept to assess (from planner)
         focus: Specific aspect to test (from planner)
         level: Student level for subtle guidance ("weak", "medium", "strong")
         difficulty: Target difficulty level ("easy", "medium", "hard")
@@ -285,20 +334,13 @@ def build_single_question_prompt(
     # Get subject-specific difficulty criteria
     subject_criteria = get_subject_difficulty_criteria(subject, grade)
 
-    # Build concept-focused instruction if provided
-    concept_instruction = ""
-    if concept and focus:
-        concept_instruction = f"""
+    # Build focus instruction if provided
+    focus_instruction = ""
+    if focus:
+        focus_instruction = f"""
 ## ФОКУС ПИТАННЯ:
-- Концепція: {concept}
 - Аспект для перевірки: {focus}
-- Питання ПОВИННО перевіряти саме цей аспект концепції!
-"""
-    elif concept:
-        concept_instruction = f"""
-## ФОКУС ПИТАННЯ:
-- Концепція: {concept}
-- Питання має перевіряти розуміння цієї концепції.
+- Питання ПОВИННО перевіряти саме цей аспект теми!
 """
 
     # Build difficulty instruction
@@ -461,7 +503,7 @@ def build_single_question_prompt(
 
 ## ТЕМА (питання ТІЛЬКИ по цій темі!):
 {topic}
-{concept_instruction}{difficulty_instruction}
+{focus_instruction}{difficulty_instruction}
 ## РЕКОМЕНДАЦІЇ ДО СТИЛЮ:
 {level_guidance}
 

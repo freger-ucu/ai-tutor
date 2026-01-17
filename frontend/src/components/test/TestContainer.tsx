@@ -243,8 +243,6 @@ const TestContainer = ({
 
   const totalQuestions = testData.questions.length;
   const answeredCount = answeredQuestionIndices.size;
-  // Student can finish test at any time - unanswered questions count as incorrect
-  const isReadyToFinish = viewMode === "student";
 
   const resultMap = useMemo(() => {
     const map = new Map<number, "correct" | "incorrect" | "partial">();
@@ -361,7 +359,7 @@ const TestContainer = ({
       </div>
 
       {/* Question card with feedback on the side - flex to fill available space */}
-      <div className="flex gap-4 flex-1 min-h-0">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 min-h-0">
         <div className="flex-1 min-w-0 flex flex-col">
           {/* Scrollable question area */}
           <div className="flex-1 min-h-0 overflow-y-auto student-scrollbar">
@@ -384,7 +382,7 @@ const TestContainer = ({
               type="button"
               onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
               disabled={currentQuestionIndex === 0}
-              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-300 ease-in-out ${
+              className={`rounded-full px-3 py-1.5 md:px-4 text-xs font-semibold transition-all duration-300 ease-in-out ${
                 currentQuestionIndex === 0
                   ? "cursor-not-allowed bg-white/60 text-slate-300"
                   : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
@@ -396,7 +394,7 @@ const TestContainer = ({
               type="button"
               onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
               disabled={currentQuestionIndex >= testData.questions.length - 1}
-              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-300 ease-in-out ${
+              className={`rounded-full px-3 py-1.5 md:px-4 text-xs font-semibold transition-all duration-300 ease-in-out ${
                 currentQuestionIndex >= testData.questions.length - 1
                   ? "cursor-not-allowed bg-white/60 text-slate-300"
                   : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
@@ -405,11 +403,18 @@ const TestContainer = ({
               Наступне →
             </button>
           </div>
+
+          {/* Mobile: Feedback below question card */}
+          {feedbackNode && viewMode === "student" && isFinished && (
+            <div className="mt-3 md:hidden overflow-y-auto student-scrollbar max-h-48">
+              {feedbackNode}
+            </div>
+          )}
         </div>
 
-        {/* Feedback on the side - shown after test completion for student */}
+        {/* Desktop: Feedback on the side - shown after test completion for student */}
         {feedbackNode && viewMode === "student" && isFinished && (
-          <div className="w-72 shrink-0 overflow-y-auto student-scrollbar">
+          <div className="hidden md:block w-72 shrink-0 overflow-y-auto student-scrollbar">
             {feedbackNode}
           </div>
         )}

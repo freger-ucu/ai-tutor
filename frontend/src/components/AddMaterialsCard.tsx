@@ -17,11 +17,16 @@ const AddMaterialsCard = ({
   return (
     <Card
       variant="glass"
-      className={`px-6 py-6 text-center text-sm font-semibold text-white ${className}`}
+      className={`px-3 py-3 text-center text-sm font-semibold text-white border-0 bg-transparent shadow-none lg:px-6 lg:py-6 lg:border lg:border-white/30 lg:bg-white/10 ${className}`}
     >
-      {title}
+      <span className="sr-only">{title}</span>
       <div className="mt-3">
-        <PillButton label={buttonLabel} variant="white" onClick={onClick} />
+        <PillButton
+          label={buttonLabel}
+          variant="white"
+          onClick={onClick}
+          className="w-full justify-center lg:w-auto"
+        />
       </div>
     </Card>
   );
