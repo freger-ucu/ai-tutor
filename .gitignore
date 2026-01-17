@@ -11,7 +11,7 @@ env/
 .env
 
 # Data (added separately, not in repo)
-# backend/data/
+backend/data/
 
 # Node
 node_modules/
