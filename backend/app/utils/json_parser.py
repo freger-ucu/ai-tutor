@@ -155,8 +155,9 @@ def fix_latex_escapes(json_str: str) -> str:
                         i += 1
                         continue
                 elif next_char in {'(', ')', '[', ']'}:
-                    # LaTeX delimiters \( \) \[ \] - keep as-is, they're valid
-                    result.append(char)
+                    # LaTeX delimiters \( \) \[ \] - these are NOT valid JSON escapes
+                    # They need to be double-escaped for valid JSON
+                    result.append('\\\\')
                     i += 1
                     continue
                 elif next_char in ambiguous_escapes:
