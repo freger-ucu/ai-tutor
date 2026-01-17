@@ -147,8 +147,12 @@ export const getMaterials = (filters?: {
     } else if (filters.className && item.className !== filters.className) {
       return false;
     }
-    if (filters.topicName && item.topicName !== filters.topicName) {
-      return false;
+    if (filters.topicName) {
+      // If topicName filter is set, item must have a matching topicName
+      // Items without topicName should not match
+      if (!item.topicName || item.topicName !== filters.topicName) {
+        return false;
+      }
     }
     if (filters.type && item.type !== filters.type) {
       return false;

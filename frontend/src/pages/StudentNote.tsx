@@ -4,10 +4,30 @@ import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import LectureContent from "../components/LectureContent";
 import StudentSidebar from "../components/StudentSidebar";
-import { getMaterials } from "../data/materialsStorage";
+import { getMaterials, isVisibleToStudent } from "../data/materialsStorage";
 import { getStudentData } from "../api/student";
+import { getStudentDetails } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
 import { classIdToLabel } from "../data/classUtils";
+
+// Cache student class label in localStorage for stable sidebar display
+const getStudentClassCache = (studentId: string | undefined): string | null => {
+  if (!studentId) return null;
+  try {
+    return localStorage.getItem(`student_class_${studentId}`);
+  } catch {
+    return null;
+  }
+};
+
+const setStudentClassCache = (studentId: string | undefined, classLabel: string) => {
+  if (!studentId || !classLabel) return;
+  try {
+    localStorage.setItem(`student_class_${studentId}`, classLabel);
+  } catch {
+    // Ignore localStorage errors
+  }
+};
 
 const subjects = [
   { id: "algebra", label: "Алгебра", icon: <span className="text-xl">√x</span> },
@@ -43,6 +63,8 @@ const StudentNote = () => {
   const [studentGrade, setStudentGrade] = useState<number | null>(null);
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
   const [studentError, setStudentError] = useState<string | null>(null);
+  const [studentLevel, setStudentLevel] = useState<"weak" | "medium" | "strong" | null>(null);
+  const [isLevelLoading, setIsLevelLoading] = useState(true);
 
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
@@ -54,12 +76,25 @@ const StudentNote = () => {
     courseId && encodedTopic
       ? `/student/${studentId}/topic/${courseId}/${encodedTopic}`
       : backToSubjectHref;
-  const classLabel =
+
+  // Use cached classLabel for stable sidebar display, update cache when data is loaded
+  const cachedClassLabel = getStudentClassCache(studentId);
+  const computedClassLabel =
     studentGrade && studentClassId
       ? classIdToLabel(studentGrade, studentClassId)
       : studentGrade
       ? String(studentGrade)
       : "";
+
+  // Update cache when we have a valid classLabel
+  useEffect(() => {
+    if (computedClassLabel) {
+      setStudentClassCache(studentId, computedClassLabel);
+    }
+  }, [studentId, computedClassLabel]);
+
+  // Use cached value while loading, computed value when available
+  const classLabel = computedClassLabel || cachedClassLabel || "";
 
   const noteMaterial = useMemo(
     () => getMaterials({ type: "note" }).find((item) => item.id === noteId),
@@ -96,10 +131,101 @@ const StudentNote = () => {
       });
   }, [studentId]);
 
+  // Get teacher ID from the material to look up the correct level
+  const teacherIdForLevel = useMemo(() => {
+    const tid = toNumericId(noteMaterial?.teacherId);
+    return tid ?? 1; // Fallback to teacher 1
+  }, [noteMaterial?.teacherId]);
+
+  // Fetch student level for visibility check
+  useEffect(() => {
+    const apiId = toNumericId(studentId);
+    if (!apiId || !studentClassId || !subjectName) {
+      setStudentLevel(null);
+      setIsLevelLoading(false);
+      return;
+    }
+    setIsLevelLoading(true);
+    getStudentDetails({
+      class_id: studentClassId,
+      subject: subjectName,
+      teacher_id: teacherIdForLevel,
+      student_id: apiId,
+    })
+      .then((response) => {
+        setStudentLevel(response.level);
+      })
+      .catch(() => {
+        setStudentLevel(null);
+      })
+      .finally(() => {
+        setIsLevelLoading(false);
+      });
+  }, [studentId, studentClassId, subjectName, teacherIdForLevel]);
+
+  // Check if student can see this material
+  const accessDenied = useMemo(() => {
+    if (!noteMaterial) return null; // Material doesn't exist - different error
+    if (isLevelLoading) return null; // Still loading
+
+    const apiId = toNumericId(studentId);
+    if (!apiId) return null;
+
+    const canSee = isVisibleToStudent(noteMaterial, apiId, studentLevel ?? undefined);
+    if (canSee) return null;
+
+    // Determine reason for denial
+    if (noteMaterial.assignmentScope === "levels" && noteMaterial.assignedLevels?.length) {
+      const levelNames: Record<string, string> = {
+        weak: "початкового",
+        medium: "середнього",
+        strong: "високого",
+      };
+      const levelList = noteMaterial.assignedLevels.map(l => levelNames[l] || l).join(", ");
+      return `Цей конспект призначений для учнів ${levelList} рівня.`;
+    }
+    if (noteMaterial.assignmentScope === "students") {
+      return "Цей конспект призначений для інших учнів.";
+    }
+    return "У вас немає доступу до цього конспекту.";
+  }, [noteMaterial, studentId, studentLevel, isLevelLoading]);
+
   if (studentError) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#1E73F7]">
         <div className="text-xl text-white">Учня не знайдено</div>
+      </div>
+    );
+  }
+
+  if (accessDenied) {
+    return (
+      <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
+        <StudentSidebar
+          studentId={studentId || ""}
+          classLabel={classLabel || undefined}
+          subjects={availableSubjects}
+          activeSubjectId={subjectSlug}
+        />
+        <main className="flex-1 px-8 py-10 flex flex-col h-full overflow-hidden">
+          <div className="flex items-center gap-4 mb-4 shrink-0">
+            <BackButton fallbackPath={backToTopicHref} />
+            <Breadcrumbs
+              items={[
+                { label: subjectName, href: backToSubjectHref },
+                { label: decodedTopic || "Тема", href: backToTopicHref },
+                { label: noteTitle },
+              ]}
+            />
+          </div>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="rounded-[28px] bg-white p-8 shadow-sm max-w-md text-center">
+              <div className="text-5xl mb-4">🔒</div>
+              <h2 className="text-xl font-bold text-slate-900 mb-2">Доступ обмежено</h2>
+              <p className="text-slate-600">{accessDenied}</p>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }

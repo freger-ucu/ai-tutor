@@ -7,46 +7,9 @@ import LectureContent from "../components/LectureContent";
 import SelectStudentsModal from "../components/SelectStudentsModal";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { deleteMaterial, getMaterials, updateMaterial } from "../data/materialsStorage";
-import type { Source } from "../components/LectureContent";
 import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
 import { getTeacherStudents } from "../api/teacher";
-
-/**
- * Converts a Source (string or SourceItem) to a display string for editing.
- * Format: "Name: pages" or just "Name" if no pages.
- */
-const sourceToEditString = (source: Source): string => {
-  if (typeof source === "string") {
-    return source;
-  }
-  // Structured source object
-  if (source.pages && source.pages.trim()) {
-    return `${source.name}: ${source.pages}`;
-  }
-  return source.name;
-};
-
-/**
- * Parses an edit string back to a Source object.
- * Format: "Name: pages" → { name: "Name", pages: "pages" }
- * Or just "Name" → { name: "Name" }
- */
-const parseEditStringToSource = (str: string): Source => {
-  const trimmed = str.trim();
-  // Check if it contains ": " which indicates "name: pages" format
-  const colonIndex = trimmed.indexOf(": ");
-  if (colonIndex > 0) {
-    const name = trimmed.substring(0, colonIndex).trim();
-    const pages = trimmed.substring(colonIndex + 2).trim();
-    if (pages) {
-      return { name, pages };
-    }
-    return { name };
-  }
-  // No colon found, treat as simple name
-  return { name: trimmed };
-};
 
 const PencilIcon = () => (
   <svg
@@ -71,9 +34,6 @@ const TeacherNote = () => {
   const [isAudienceModalOpen, setIsAudienceModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editContent, setEditContent] = useState("");
-  const [editTeacherNotes, setEditTeacherNotes] = useState("");
-  // Sources editing state - stored as newline-separated string for easier textarea editing
-  const [editSources, setEditSources] = useState("");
   const [materialVersion, setMaterialVersion] = useState(0);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
@@ -137,40 +97,22 @@ const TeacherNote = () => {
 
   const handleStartEdit = useCallback(() => {
     setEditContent(noteMaterial?.content ?? "");
-    setEditTeacherNotes(noteMaterial?.teacherNotes ?? "");
-    // Convert sources array to newline-separated string for editing
-    // Handles both string sources and structured { name, pages } objects
-    const sourcesText = (noteMaterial?.sources ?? [])
-      .map(sourceToEditString)
-      .join("\n");
-    setEditSources(sourcesText);
     setIsEditMode(true);
-  }, [noteMaterial?.content, noteMaterial?.teacherNotes, noteMaterial?.sources]);
+  }, [noteMaterial?.content]);
 
   const handleCancelEdit = useCallback(() => {
     setIsEditMode(false);
     setEditContent("");
-    setEditTeacherNotes("");
-    setEditSources("");
   }, []);
 
   const handleSaveEdit = useCallback(() => {
     if (!noteId) return;
-    // Parse sources from newline-separated string, filtering out empty lines
-    // Each line is parsed as "Name: pages" or just "Name"
-    const sourcesArray = editSources
-      .split("\n")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-      .map(parseEditStringToSource);
     updateMaterial(noteId, {
       content: editContent,
-      teacherNotes: editTeacherNotes,
-      sources: sourcesArray,
     });
     setMaterialVersion((v) => v + 1);
     setIsEditMode(false);
-  }, [noteId, editContent, editTeacherNotes, editSources]);
+  }, [noteId, editContent]);
 
   const handleDelete = useCallback(() => {
     if (!noteId) return;
@@ -260,35 +202,16 @@ const TeacherNote = () => {
               <div className="rounded-[20px] bg-white overflow-y-auto note-scrollbar pr-2">
                 <div className="break-words">
                   {isEditMode ? (
-                    <div className="space-y-6">
-                      {/* Content editing */}
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 mb-2 block">
-                          Зміст конспекту
-                        </label>
-                        <textarea
-                          value={editContent}
-                          onChange={(e) => setEditContent(e.target.value)}
-                          className="min-h-[300px] w-full rounded-xl border border-slate-200 p-4 text-sm text-slate-800 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
-                          placeholder="Введіть зміст конспекту..."
-                        />
-                      </div>
-
-                      {/* Sources editing - teacher-only feature */}
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 mb-2 block">
-                          Джерела
-                          <span className="ml-2 text-xs text-slate-400 font-normal">
-                            (видимі тільки для вчителя, кожне джерело з нового рядка)
-                          </span>
-                        </label>
-                        <textarea
-                          value={editSources}
-                          onChange={(e) => setEditSources(e.target.value)}
-                          className="min-h-[100px] w-full rounded-xl border border-slate-200 p-4 text-sm text-slate-800 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
-                          placeholder="Підручник з алгебри, 7 клас&#10;Стаття про квадратні рівняння&#10;https://example.com/math"
-                        />
-                      </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-2 block">
+                        Зміст конспекту
+                      </label>
+                      <textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        className="min-h-[400px] w-full rounded-xl border border-slate-200 p-4 text-sm text-slate-800 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
+                        placeholder="Введіть зміст конспекту..."
+                      />
                     </div>
                   ) : noteMaterial?.content ? (
                     <LectureContent
@@ -338,14 +261,7 @@ const TeacherNote = () => {
               <div className="rounded-[20px] bg-[#E9F1FF] p-5 h-full flex flex-col overflow-hidden">
                 <h3 className="text-sm font-bold text-slate-900 shrink-0">Нотатки</h3>
                 <div className="mt-2 flex-1 min-h-0 overflow-hidden">
-                  {isEditMode ? (
-                    <textarea
-                      value={editTeacherNotes}
-                      onChange={(e) => setEditTeacherNotes(e.target.value)}
-                      className="h-full w-full rounded-xl border border-slate-200 bg-white p-3 text-sm leading-relaxed text-slate-700 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
-                      placeholder="Нотатки для вчителя..."
-                    />
-                  ) : teacherNotes ? (
+                  {teacherNotes ? (
                     <div className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap overflow-y-auto h-full note-scrollbar">
                       {teacherNotes}
                     </div>

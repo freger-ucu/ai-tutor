@@ -1,11 +1,31 @@
 import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { getMaterials, getTopics } from "../data/materialsStorage";
+import { getMaterials, getTopics, isVisibleToStudent } from "../data/materialsStorage";
 import StudentSidebar from "../components/StudentSidebar";
 import { getStudentData } from "../api/student";
+import { getStudentDetails } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
 import { getStudentCompletedTestIds } from "../data/studentProgress";
 import { classIdToLabel } from "../data/classUtils";
+
+// Cache student class label in localStorage for stable sidebar display
+const getStudentClassCache = (studentId: string | undefined): string | null => {
+  if (!studentId) return null;
+  try {
+    return localStorage.getItem(`student_class_${studentId}`);
+  } catch {
+    return null;
+  }
+};
+
+const setStudentClassCache = (studentId: string | undefined, classLabel: string) => {
+  if (!studentId || !classLabel) return;
+  try {
+    localStorage.setItem(`student_class_${studentId}`, classLabel);
+  } catch {
+    // Ignore localStorage errors
+  }
+};
 
 const Subjects = [
   { id: "algebra", label: "Алгебра", icon: <span className="text-xl">√x</span> },
@@ -40,23 +60,23 @@ const Student = () => {
   const [studentGrade, setStudentGrade] = useState<number | null>(null);
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
   const [studentError, setStudentError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [studentLevel, setStudentLevel] = useState<"weak" | "medium" | "strong" | null>(null);
 
+  // Sync activeSubjectId with URL param (only when URL changes externally)
   useEffect(() => {
     if (subjectParam && subjectParam !== activeSubjectId) {
       setActiveSubjectId(subjectParam);
     }
-  }, [subjectParam, activeSubjectId]);
-
-  const handleSubjectChange = (subjectId: string) => {
-    setActiveSubjectId(subjectId);
-    setSearchParams({ subject: subjectId });
-  };
+  }, [subjectParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const apiId = toNumericId(studentId);
     if (!apiId) {
+      setIsLoading(false);
       return;
     }
+    setIsLoading(true);
     getStudentData(apiId)
       .then((response) => {
         setApiSubjects(response.subjects);
@@ -67,6 +87,9 @@ const Student = () => {
       .catch((error) => {
         console.error(error);
         setStudentError("Учня не знайдено");
+      })
+      .finally(() => {
+        setIsLoading(false);
       });
   }, [studentId]);
 
@@ -81,8 +104,9 @@ const Student = () => {
     return matches.length ? matches : Subjects;
   }, [apiSubjects]);
 
+  // Validate activeSubjectId against available subjects (only after loading)
   useEffect(() => {
-    if (!availableSubjects.length) {
+    if (isLoading || !availableSubjects.length) {
       return;
     }
     if (!availableSubjects.find((subject) => subject.id === activeSubjectId)) {
@@ -90,7 +114,7 @@ const Student = () => {
       setActiveSubjectId(newSubject);
       setSearchParams({ subject: newSubject });
     }
-  }, [availableSubjects, activeSubjectId, setSearchParams]);
+  }, [availableSubjects, activeSubjectId, setSearchParams, isLoading]);
 
   const gradeSuffix = studentGrade ?? 8;
   const courseIdMap: Record<string, string> = {
@@ -100,12 +124,61 @@ const Student = () => {
   };
   const activeSubjectLabel =
     Subjects.find((subject) => subject.id === activeSubjectId)?.label ?? "";
-  const classLabel =
+
+  // Use cached classLabel for stable sidebar display, update cache when data is loaded
+  const cachedClassLabel = getStudentClassCache(studentId);
+  const computedClassLabel =
     studentGrade && studentClassId
       ? classIdToLabel(studentGrade, studentClassId)
       : studentGrade
       ? String(studentGrade)
       : "";
+
+  // Update cache when we have a valid classLabel
+  useEffect(() => {
+    if (computedClassLabel) {
+      setStudentClassCache(studentId, computedClassLabel);
+    }
+  }, [studentId, computedClassLabel]);
+
+  // Use cached value while loading, computed value when available
+  const classLabel = computedClassLabel || cachedClassLabel || "";
+
+  // Get teacher ID from existing materials to look up the correct level
+  const teacherIdForLevel = useMemo(() => {
+    const targetCourseId = courseIdMap[activeSubjectId] || activeSubjectId;
+    const materials = getMaterials({
+      courseId: targetCourseId,
+      subject: activeSubjectLabel,
+      ...(studentClassId ? { classId: studentClassId } : classLabel ? { className: classLabel } : {}),
+    });
+    for (const m of materials) {
+      const tid = toNumericId(m.teacherId);
+      if (tid) return tid;
+    }
+    return 1; // Fallback to teacher 1 if no materials found
+  }, [activeSubjectId, activeSubjectLabel, studentClassId, classLabel]);
+
+  // Fetch student level for visibility filtering
+  useEffect(() => {
+    const apiId = toNumericId(studentId);
+    if (!apiId || !studentClassId || !activeSubjectLabel) {
+      setStudentLevel(null);
+      return;
+    }
+    getStudentDetails({
+      class_id: studentClassId,
+      subject: activeSubjectLabel,
+      teacher_id: teacherIdForLevel,
+      student_id: apiId,
+    })
+      .then((response) => {
+        setStudentLevel(response.level);
+      })
+      .catch(() => {
+        setStudentLevel(null);
+      });
+  }, [studentId, studentClassId, activeSubjectLabel, teacherIdForLevel]);
 
   const formatDate = (value?: string) => {
     if (!value) {
@@ -123,6 +196,10 @@ const Student = () => {
   };
 
   const topics = useMemo(() => {
+    // Don't compute topics while loading to prevent flickering
+    if (isLoading) {
+      return [];
+    }
     const targetCourseId = courseIdMap[activeSubjectId] || activeSubjectId;
     const className = classLabel;
     if (!className) {
@@ -137,12 +214,19 @@ const Student = () => {
       subject: activeSubjectLabel,
       ...classFilter,
     });
-    const tests = getMaterials({
+    const allTests = getMaterials({
       courseId: targetCourseId,
       subject: activeSubjectLabel,
       ...classFilter,
       type: "test",
     });
+
+    // Filter tests by visibility - only show tests assigned to this student
+    const apiId = toNumericId(studentId);
+    const tests = apiId
+      ? allTests.filter((test) => isVisibleToStudent(test, apiId, studentLevel ?? undefined))
+      : allTests;
+
     const testsByTopic = new Map<string, typeof tests>();
     tests.forEach((test) => {
       if (!test.topicName) {
@@ -170,7 +254,7 @@ const Student = () => {
         percent,
       };
     });
-  }, [activeSubjectId, classLabel, studentClassId, studentId, activeSubjectLabel]);
+  }, [activeSubjectId, classLabel, studentClassId, studentId, activeSubjectLabel, isLoading, studentLevel]);
   
   const handleTopicClick = (topicTitle: string) => {
     const targetCourseId = courseIdMap[activeSubjectId] || activeSubjectId;
@@ -190,6 +274,7 @@ const Student = () => {
       <div className="flex min-h-screen">
         <StudentSidebar
           studentId={studentId || ""}
+          classLabel={classLabel || undefined}
           subjects={availableSubjects}
           activeSubjectId={activeSubjectId}
         />

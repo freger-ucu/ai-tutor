@@ -65,8 +65,12 @@ const StudentSidebar = ({
   const activeClass = "bg-[#E9F1FF] font-semibold text-[#1E73F7]";
   const inactiveClass = "font-medium text-slate-800 hover:bg-slate-100";
 
+  const handleLogout = () => {
+    navigate("/");
+  };
+
   return (
-    <aside className="w-64 shrink-0 bg-white px-6 py-8">
+    <aside className="w-64 shrink-0 bg-white px-6 py-8 flex flex-col">
       {/* Student profile section */}
       <div className="flex items-center gap-3">
         <div
@@ -120,6 +124,22 @@ const StudentSidebar = ({
             </button>
           );
         })}
+      </div>
+
+      {/* Logout button at the bottom */}
+      <div className="mt-auto pt-6">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 cursor-pointer transition"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          <span className="text-left leading-5">Вийти</span>
+        </button>
       </div>
     </aside>
   );

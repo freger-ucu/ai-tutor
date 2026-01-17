@@ -14,6 +14,8 @@
  * and does not support dynamic content or additional links.
  */
 
+import { useNavigate } from "react-router-dom";
+
 interface TeacherSidebarProps {
   /** Teacher display name shown at top of sidebar */
   teacherName: string;
@@ -49,14 +51,20 @@ const TeacherSidebar = ({
   onMaterialsClick,
   onStudentsClick,
 }: TeacherSidebarProps) => {
+  const navigate = useNavigate();
+
   // Static CSS classes for navigation buttons
   const baseClass =
     "flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-sm cursor-pointer transition";
   const activeClass = "bg-[#E9F1FF] font-semibold text-[#1E73F7] hover:bg-[#dce8fd]";
   const inactiveClass = "font-medium text-slate-800 hover:bg-slate-100";
 
+  const handleLogout = () => {
+    navigate("/");
+  };
+
   return (
-    <aside className="w-72 min-w-72 max-w-72 shrink-0 flex-shrink-0 flex-grow-0 bg-white px-6 py-8">
+    <aside className="w-72 min-w-72 max-w-72 shrink-0 flex-shrink-0 flex-grow-0 bg-white px-6 py-8 flex flex-col">
       {/* Teacher profile section */}
       <div className="flex items-center gap-3">
         <div
@@ -104,6 +112,22 @@ const TeacherSidebar = ({
             <StudentsIcon />
           </span>
           <span className="text-left leading-5">Учні</span>
+        </button>
+      </div>
+
+      {/* Logout button at the bottom */}
+      <div className="mt-auto pt-6">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 cursor-pointer transition"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          <span className="text-left leading-5">Вийти</span>
         </button>
       </div>
     </aside>

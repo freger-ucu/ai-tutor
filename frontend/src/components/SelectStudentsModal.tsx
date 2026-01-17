@@ -6,6 +6,10 @@ interface SelectStudentsModalProps {
   onClose: () => void;
   students?: { id: number; label?: string }[];
   onSave?: (selection: { levels: string[]; students: string[] }) => void;
+  /** Initial level selection to restore when reopening */
+  initialLevels?: string[];
+  /** Initial student selection to restore when reopening */
+  initialStudents?: string[];
 }
 
 const SelectStudentsModal = ({
@@ -13,23 +17,43 @@ const SelectStudentsModal = ({
   onClose,
   students,
   onSave,
+  initialLevels,
+  initialStudents,
 }: SelectStudentsModalProps) => {
-  const [activeTab, setActiveTab] = useState<"levels" | "individual">("levels");
+  // Determine initial tab based on what was previously selected
+  const getInitialTab = (): "levels" | "individual" => {
+    if (initialStudents && initialStudents.length > 0) return "individual";
+    return "levels";
+  };
+
+  const [activeTab, setActiveTab] = useState<"levels" | "individual">(getInitialTab);
 
   // Level selections
-  const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
+  const [selectedLevels, setSelectedLevels] = useState<string[]>(initialLevels ?? []);
 
   // Student selections
-  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [selectedStudents, setSelectedStudents] = useState<string[]>(initialStudents ?? []);
 
-  // Reset all state when modal opens to prevent stale selections
+  // Restore state when modal opens with initial values
   useEffect(() => {
     if (isOpen) {
-      setActiveTab("levels");
-      setSelectedLevels([]);
-      setSelectedStudents([]);
+      // Restore previous selection if provided
+      if (initialStudents && initialStudents.length > 0) {
+        setActiveTab("individual");
+        setSelectedStudents(initialStudents);
+        setSelectedLevels([]);
+      } else if (initialLevels && initialLevels.length > 0) {
+        setActiveTab("levels");
+        setSelectedLevels(initialLevels);
+        setSelectedStudents([]);
+      } else {
+        // No previous selection - start fresh
+        setActiveTab("levels");
+        setSelectedLevels([]);
+        setSelectedStudents([]);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialLevels, initialStudents]);
 
   // Clear opposite selection when switching tabs to prevent mixed assignment
   const handleTabChange = (tab: "levels" | "individual") => {

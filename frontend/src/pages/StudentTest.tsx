@@ -4,7 +4,7 @@ import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import MarkdownContent from "../components/MarkdownContent";
 import StudentSidebar from "../components/StudentSidebar";
-import { getMaterials } from "../data/materialsStorage";
+import { getMaterials, isVisibleToStudent } from "../data/materialsStorage";
 import { getTestById, mockTestData } from "../data/mockTests";
 import { TestContainer } from "../components/test";
 import { withGeneratedQuestions } from "../data/testMapper";
@@ -13,8 +13,28 @@ import {
   markStudentTestCompleted,
 } from "../data/studentProgress";
 import { checkOpenQuestion, getStudentData, getTestFeedback } from "../api/student";
+import { getStudentDetails } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
 import { classIdToLabel } from "../data/classUtils";
+
+// Cache student class label in localStorage for stable sidebar display
+const getStudentClassCache = (studentId: string | undefined): string | null => {
+  if (!studentId) return null;
+  try {
+    return localStorage.getItem(`student_class_${studentId}`);
+  } catch {
+    return null;
+  }
+};
+
+const setStudentClassCache = (studentId: string | undefined, classLabel: string) => {
+  if (!studentId || !classLabel) return;
+  try {
+    localStorage.setItem(`student_class_${studentId}`, classLabel);
+  } catch {
+    // Ignore localStorage errors
+  }
+};
 
 const subjects = [
   { id: "algebra", label: "Алгебра", icon: <span className="text-xl">√x</span> },
@@ -54,6 +74,8 @@ const StudentTest = () => {
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
   const [hasJustCompleted, setHasJustCompleted] = useState(false);
+  const [studentLevel, setStudentLevel] = useState<"weak" | "medium" | "strong" | null>(null);
+  const [isLevelLoading, setIsLevelLoading] = useState(true);
 
   const storedTest = useMemo(
     () => getMaterials({ type: "test" }).find((item) => item.id === testId),
@@ -149,12 +171,24 @@ const StudentTest = () => {
       ? `/student/${studentId}/topic/${courseId}/${encodedTopic}`
       : backToSubjectHref;
 
-  const classLabel =
+  // Use cached classLabel for stable sidebar display, update cache when data is loaded
+  const cachedClassLabel = getStudentClassCache(studentId);
+  const computedClassLabel =
     studentGrade && studentClassId
       ? classIdToLabel(studentGrade, studentClassId)
       : studentGrade
       ? String(studentGrade)
       : "";
+
+  // Update cache when we have a valid classLabel
+  useEffect(() => {
+    if (computedClassLabel) {
+      setStudentClassCache(studentId, computedClassLabel);
+    }
+  }, [studentId, computedClassLabel]);
+
+  // Use cached value while loading, computed value when available
+  const classLabel = computedClassLabel || cachedClassLabel || "";
 
   const availableSubjects = useMemo(() => {
     if (!apiSubjects.length) {
@@ -166,6 +200,65 @@ const StudentTest = () => {
     );
     return matches.length ? matches : subjects;
   }, [apiSubjects]);
+
+  // Get teacher ID from the material to look up the correct level
+  const teacherIdForLevel = useMemo(() => {
+    const tid = toNumericId(storedTest?.teacherId);
+    return tid ?? 1; // Fallback to teacher 1
+  }, [storedTest?.teacherId]);
+
+  // Fetch student level for visibility check
+  useEffect(() => {
+    const apiId = toNumericId(studentId);
+    if (!apiId || !studentClassId || !subjectName) {
+      setStudentLevel(null);
+      setIsLevelLoading(false);
+      return;
+    }
+    setIsLevelLoading(true);
+    getStudentDetails({
+      class_id: studentClassId,
+      subject: subjectName,
+      teacher_id: teacherIdForLevel,
+      student_id: apiId,
+    })
+      .then((response) => {
+        setStudentLevel(response.level);
+      })
+      .catch(() => {
+        setStudentLevel(null);
+      })
+      .finally(() => {
+        setIsLevelLoading(false);
+      });
+  }, [studentId, studentClassId, subjectName, teacherIdForLevel]);
+
+  // Check if student can see this test
+  const accessDenied = useMemo(() => {
+    if (!storedTest) return null; // Test doesn't exist in storage - might be mock data
+    if (isLevelLoading) return null; // Still loading
+
+    const apiId = toNumericId(studentId);
+    if (!apiId) return null;
+
+    const canSee = isVisibleToStudent(storedTest, apiId, studentLevel ?? undefined);
+    if (canSee) return null;
+
+    // Determine reason for denial
+    if (storedTest.assignmentScope === "levels" && storedTest.assignedLevels?.length) {
+      const levelNames: Record<string, string> = {
+        weak: "початкового",
+        medium: "середнього",
+        strong: "високого",
+      };
+      const levelList = storedTest.assignedLevels.map(l => levelNames[l] || l).join(", ");
+      return `Цей тест призначений для учнів ${levelList} рівня.`;
+    }
+    if (storedTest.assignmentScope === "students") {
+      return "Цей тест призначений для інших учнів.";
+    }
+    return "У вас немає доступу до цього тесту.";
+  }, [storedTest, studentId, studentLevel, isLevelLoading]);
 
   if (studentError) {
     return (
@@ -179,6 +272,38 @@ const StudentTest = () => {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#1E73F7]">
         <div className="text-xl text-white">Тест не знайдено</div>
+      </div>
+    );
+  }
+
+  if (accessDenied) {
+    return (
+      <div className="h-screen bg-[#1E73F7] text-slate-900 overflow-hidden flex">
+        <StudentSidebar
+          studentId={studentId || ""}
+          classLabel={classLabel || testData?.className || undefined}
+          subjects={availableSubjects}
+          activeSubjectId={subjectSlug}
+        />
+        <main className="flex-1 px-8 py-4 flex flex-col h-full overflow-hidden">
+          <div className="flex items-center gap-4 mb-3 shrink-0">
+            <BackButton fallbackPath={backToTopicHref} />
+            <Breadcrumbs
+              items={[
+                { label: subjectName || "Предмет", href: backToSubjectHref },
+                { label: testData.topicName || "Тема", href: backToTopicHref },
+                { label: testData.title },
+              ]}
+            />
+          </div>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="rounded-[28px] bg-white p-8 shadow-sm max-w-md text-center">
+              <div className="text-5xl mb-4">🔒</div>
+              <h2 className="text-xl font-bold text-slate-900 mb-2">Доступ обмежено</h2>
+              <p className="text-slate-600">{accessDenied}</p>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }

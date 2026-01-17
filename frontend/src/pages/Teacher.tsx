@@ -173,14 +173,11 @@ const Teacher = () => {
   };
 
   useEffect(() => {
-    const subject =
-      courseSubjectMap[selectedCourseId] ?? subjectFromCourseId(selectedCourseId);
+    // Don't filter by teacherId - topics should be visible regardless of which teacher created them
+    // This matches how students see topics (without teacherId filter)
     const storedTopics = getTopics({
-      teacherId: id,
       courseId: selectedCourseId,
-      subject,
       classId: selectedClassId ?? undefined,
-      className: selectedClassLabel,
     });
     const nextTopicsByClass = storedTopics.reduce<Record<string, string[]>>(
       (acc, item) => {
@@ -197,7 +194,7 @@ const Teacher = () => {
       {}
     );
     setTopicsByClass(nextTopicsByClass);
-  }, [id, selectedCourseId, selectedClassId, selectedClassLabel, courseSubjectMap]);
+  }, [selectedCourseId, selectedClassId]);
 
   useEffect(() => {
     if (activeView !== "students") {

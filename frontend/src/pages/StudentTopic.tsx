@@ -6,11 +6,29 @@ import Card from "../components/Card";
 import Panel from "../components/Panel";
 import StudentSidebar from "../components/StudentSidebar";
 import { getMaterials, isVisibleToStudent } from "../data/materialsStorage";
-import { getStudentTestCompletionMap } from "../data/studentProgress";
 import { getStudentData } from "../api/student";
 import { getStudentDetails } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
 import { classIdToLabel } from "../data/classUtils";
+
+// Cache student class label in localStorage for stable sidebar display
+const getStudentClassCache = (studentId: string | undefined): string | null => {
+  if (!studentId) return null;
+  try {
+    return localStorage.getItem(`student_class_${studentId}`);
+  } catch {
+    return null;
+  }
+};
+
+const setStudentClassCache = (studentId: string | undefined, classLabel: string) => {
+  if (!studentId || !classLabel) return;
+  try {
+    localStorage.setItem(`student_class_${studentId}`, classLabel);
+  } catch {
+    // Ignore localStorage errors
+  }
+};
 
 const subjects = [
   { id: "algebra", label: "Алгебра", icon: <span className="text-xl">√x</span> },
@@ -58,6 +76,7 @@ const StudentTopic = () => {
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
   const [studentError, setStudentError] = useState<string | null>(null);
   const [studentLevel, setStudentLevel] = useState<"weak" | "medium" | "strong" | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
@@ -65,30 +84,37 @@ const StudentTopic = () => {
   const subjectSlug = decodedCourse.split("-").slice(0, -1).join("-") || decodedCourse;
   const subjectName = subjectLabelMap[subjectSlug] ?? courseLabel ?? "";
   const backToSubjectHref = `/student/${studentId}?subject=${subjectSlug}`;
-  const classLabel =
+
+  // Use cached classLabel for stable sidebar display, update cache when data is loaded
+  const cachedClassLabel = getStudentClassCache(studentId);
+  const computedClassLabel =
     studentGrade && studentClassId
       ? classIdToLabel(studentGrade, studentClassId)
       : studentGrade
       ? String(studentGrade)
       : "";
+
+  // Update cache when we have a valid classLabel
+  useEffect(() => {
+    if (computedClassLabel) {
+      setStudentClassCache(studentId, computedClassLabel);
+    }
+  }, [studentId, computedClassLabel]);
+
+  // Use cached value while loading, computed value when available
+  const classLabel = computedClassLabel || cachedClassLabel || "";
   
   const [notes, setNotes] = useState<{ id: string; title: string }[]>([]);
-  const [tests, setTests] = useState<
-    {
-      id: string;
-      title: string;
-      scoreText: string;
-      percent: number;
-      isCompleted: boolean;
-    }[]
-  >([]);
+  const [tests, setTests] = useState<{ id: string; title: string }[]>([]);
 
   useEffect(() => {
     const apiId = toNumericId(studentId);
     if (!apiId) {
       setStudentError("Учня не знайдено");
+      setIsLoading(false);
       return;
     }
+    setIsLoading(true);
     getStudentData(apiId)
       .then((response) => {
         setApiSubjects(response.subjects);
@@ -99,6 +125,9 @@ const StudentTopic = () => {
       .catch((error) => {
         console.error(error);
         setStudentError("Учня не знайдено");
+      })
+      .finally(() => {
+        setIsLoading(false);
       });
   }, [studentId]);
 
@@ -150,7 +179,8 @@ const StudentTopic = () => {
   }, [apiSubjects]);
 
   useEffect(() => {
-    if (studentError) return;
+    // Don't fetch materials while still loading student data to prevent flickering
+    if (studentError || isLoading) return;
 
     const apiId = toNumericId(studentId);
     // Fetch materials without teacherId filter - students should see all materials for their class
@@ -171,35 +201,15 @@ const StudentTopic = () => {
         .filter(m => m.type === "note")
         .map(m => ({ id: m.id, title: m.title }));
 
-    const completionMap = getStudentTestCompletionMap(studentId);
-
     const storedTests = visibleMaterials
         .filter(m => m.type === "test")
-        .map(m => {
-          const completion = completionMap.get(m.id);
-          const scoreText = completion
-            ? `${completion.correctAnswers}/${completion.totalQuestions}`
-            : "-";
-          const percent =
-            completion?.percent ??
-            (completion && completion.totalQuestions > 0
-              ? Math.round(
-                  (completion.correctAnswers / completion.totalQuestions) * 100
-                )
-              : 0);
-          return {
-            id: m.id,
-            title: m.title,
-            scoreText,
-            percent,
-            isCompleted: Boolean(completion),
-          };
-        });
+        .map(m => ({ id: m.id, title: m.title }));
 
     setNotes(storedNotes);
     setTests(storedTests);
   }, [
     studentError,
+    isLoading,
     classLabel,
     studentClassId,
     studentLevel,
@@ -275,42 +285,18 @@ const StudentTopic = () => {
             <section className="overflow-visible">
               <h2 className="text-xl font-semibold text-white">Тести</h2>
               <div className="mt-4 flex flex-col gap-5 overflow-visible">
-                {tests.length > 0 ? tests.map((item) => {
-                  const filledSegments = Math.round(item.percent / 10);
-                  return (
+                {tests.length > 0 ? tests.map((item) => (
                     <Link key={item.id} to={`/student/${studentId}/test/${item.id}`}>
-                      <Card className="px-6 py-6 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98]">
-                        <div className="flex items-center gap-3 text-base font-semibold text-slate-900">
-                          <img
-                            src="/src/assets/Group.svg"
-                            alt=""
-                            className="h-6 w-6 transition-transform duration-300"
-                          />
-                          {item.title}
-                        </div>
-                        <div className="mt-5 flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            {Array.from({ length: 10 }).map((_, index) => (
-                              <span
-                                key={index}
-                                className={`h-4 w-2.5 rounded-full ${
-                                  index < filledSegments
-                                    ? "bg-[#68E2B0]"
-                                    : item.isCompleted
-                                      ? "bg-[#FF6B6B]"
-                                      : "bg-[#E6EEF9]"
-                                }`}
-                              />
-                            ))}
-                          </div>
-                          <div className="text-sm text-slate-500">
-                            Остання спроба: {item.scoreText}
-                          </div>
-                        </div>
+                      <Card className="flex items-center gap-3 px-6 py-5 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98]">
+                        <img
+                          src="/src/assets/Group.svg"
+                          alt=""
+                          className="h-6 w-6 transition-transform duration-300"
+                        />
+                        <span className="text-base font-semibold text-slate-900">{item.title}</span>
                       </Card>
                     </Link>
-                  );
-                }) : (
+                  )) : (
                      <div className="rounded-2xl border border-white/10 px-6 py-8 text-center text-sm text-white/40">
                         Немає тестів
                     </div>

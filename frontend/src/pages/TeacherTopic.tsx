@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import AddMaterialsCard from "../components/AddMaterialsCard";
 import BackButton from "../components/BackButton";
@@ -10,15 +10,11 @@ import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import SelectStudentsModal from "../components/SelectStudentsModal";
 import TeacherSidebar from "../components/TeacherSidebar";
-import { addMaterial, deleteMaterial, getMaterials } from "../data/materialsStorage";
-import {
-  generateNotesByLevel,
-  generateNotesIndividual,
-  generateTest,
-  getTeacherStudents,
-} from "../api/teacher";
+import { deleteMaterial, getMaterials } from "../data/materialsStorage";
+import { getTeacherStudents } from "../api/teacher";
 import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
+import { useGeneration } from "../context/GenerationContext";
 
 const courseLabels: Record<string, string> = {
   "algebra-8": "Алгебра",
@@ -34,6 +30,14 @@ const courseLabels: Record<string, string> = {
 const TeacherTopic = () => {
   const { id, courseId, classId, topicId } = useParams();
   const navigate = useNavigate();
+  const {
+    startNoteGeneration,
+    startTestGeneration,
+    getGeneratingItemsForTopic,
+    getCompletedItemsForTopic,
+    clearCompletedItem,
+  } = useGeneration();
+
   const [activeModal, setActiveModal] = useState<"material" | "test" | "audience" | null>(
     null
   );
@@ -48,11 +52,6 @@ const TeacherTopic = () => {
 
   const [materialName, setMaterialName] = useState("");
   const [testName, setTestName] = useState("");
-  const [isGeneratingMaterial, setIsGeneratingMaterial] = useState(false);
-  const [isGeneratingTest, setIsGeneratingTest] = useState(false);
-  const [materialGenerationStarted, setMaterialGenerationStarted] = useState(false);
-  const [testGenerationStarted, setTestGenerationStarted] = useState(false);
-  const [materialError, setMaterialError] = useState<string | null>(null);
   const [classStudents, setClassStudents] = useState<number[]>([]);
   const decodedClassId = classId ? Number(decodeURIComponent(classId)) : null;
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
@@ -70,8 +69,69 @@ const TeacherTopic = () => {
   const apiTeacherId = toNumericId(id) ?? 0;
   const apiClassId = decodedClassId ?? 0;
 
-  const [notes, setNotes] = useState<{ id: string; title: string }[]>([]);
-  const [tests, setTests] = useState<{ id: string; title: string }[]>([]);
+  const [storedNotes, setStoredNotes] = useState<{ id: string; title: string }[]>([]);
+  const [storedTests, setStoredTests] = useState<{ id: string; title: string }[]>([]);
+
+  // Get generating items from context
+  const generatingNotes = getGeneratingItemsForTopic(decodedCourse, decodedTopic).filter(
+    (item) => item.type === "note"
+  );
+  const generatingTests = getGeneratingItemsForTopic(decodedCourse, decodedTopic).filter(
+    (item) => item.type === "test"
+  );
+  const completedItems = getCompletedItemsForTopic(decodedCourse, decodedTopic);
+
+  // Handle completed items - refresh from storage to get the real data
+  useEffect(() => {
+    if (completedItems.length === 0) return;
+
+    // Refresh materials from localStorage to get actual saved items
+    const fetchedNotes = getMaterials({
+      courseId: decodedCourse,
+      topicName: decodedTopic,
+      type: "note",
+    }).map((item) => ({ id: item.id, title: item.title }));
+    const fetchedTests = getMaterials({
+      courseId: decodedCourse,
+      topicName: decodedTopic,
+      type: "test",
+    }).map((item) => ({ id: item.id, title: item.title }));
+
+    setStoredNotes(fetchedNotes);
+    setStoredTests(fetchedTests);
+
+    // Clear completed items from context
+    completedItems.forEach((item) => {
+      clearCompletedItem(item.tempId);
+    });
+  }, [completedItems, clearCompletedItem, decodedCourse, decodedTopic]);
+
+  // Combine stored and generating items
+  const notes = useMemo(() => {
+    const generating = generatingNotes.map((item) => ({
+      id: item.tempId,
+      title: item.title,
+      isGenerating: true,
+    }));
+    const stored = storedNotes.map((item) => ({
+      ...item,
+      isGenerating: false,
+    }));
+    return [...stored, ...generating];
+  }, [storedNotes, generatingNotes]);
+
+  const tests = useMemo(() => {
+    const generating = generatingTests.map((item) => ({
+      id: item.tempId,
+      title: item.title,
+      isGenerating: true,
+    }));
+    const stored = storedTests.map((item) => ({
+      ...item,
+      isGenerating: false,
+    }));
+    return [...stored, ...generating];
+  }, [storedTests, generatingTests]);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     title: string;
@@ -83,27 +143,27 @@ const TeacherTopic = () => {
   const isDeleteModalOpen = deleteTarget !== null;
 
   useEffect(() => {
-    const storedNotes = getMaterials({
-      teacherId: id,
+    // Only filter by stable URL parameters to avoid re-fetching on derived value changes
+    // Use courseId and topicName as primary filters (from URL)
+    // Don't filter by teacherId - materials should be visible regardless of which teacher created them
+    // This matches how students see materials (without teacherId filter)
+    if (!decodedCourse || !decodedTopic) {
+      // Don't fetch until we have the required URL params
+      return;
+    }
+    const fetchedNotes = getMaterials({
       courseId: decodedCourse,
-      subject: subjectName,
-      classId: apiClassId || undefined,
-      className: classLabel,
       topicName: decodedTopic,
       type: "note",
     }).map((item) => ({ id: item.id, title: item.title }));
-    const storedTests = getMaterials({
-      teacherId: id,
+    const fetchedTests = getMaterials({
       courseId: decodedCourse,
-      subject: subjectName,
-      classId: apiClassId || undefined,
-      className: classLabel,
       topicName: decodedTopic,
       type: "test",
     }).map((item) => ({ id: item.id, title: item.title }));
-    setNotes(storedNotes);
-    setTests(storedTests);
-  }, [id, decodedCourse, classLabel, decodedTopic, apiClassId, subjectName]);
+    setStoredNotes(fetchedNotes);
+    setStoredTests(fetchedTests);
+  }, [decodedCourse, decodedTopic]);
 
   useEffect(() => {
     if (!apiTeacherId || !apiClassId || !subjectName) {
@@ -156,37 +216,12 @@ const TeacherTopic = () => {
     const success = deleteMaterial(deleteTarget.id);
     if (success) {
       if (deleteTarget.type === "conspect") {
-        setNotes((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+        setStoredNotes((prev) => prev.filter((item) => item.id !== deleteTarget.id));
       } else {
-        setTests((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+        setStoredTests((prev) => prev.filter((item) => item.id !== deleteTarget.id));
       }
     }
     setDeleteTarget(null);
-  };
-
-  const buildFallbackTest = (topicDefinition: string) => {
-    const fallbackTitle =
-      topicDefinition.trim() || decodedTopic || "Тест";
-    return {
-      title: `Тест. ${fallbackTitle}`,
-      questions: [
-        {
-          question: `Запитання за темою: ${fallbackTitle}`,
-          type: "single_choice",
-          difficulty: "easy",
-          answer_options: [
-            { answer: "Правильна відповідь", correct: true },
-            { answer: "Варіант 2", correct: false },
-            { answer: "Варіант 3", correct: false },
-            { answer: "Варіант 4", correct: false },
-          ],
-          explanation:
-            "Це демо-запитання. Додайте серверну генерацію для реальних тестів.",
-          topic: fallbackTitle,
-          subtopics: [],
-        },
-      ],
-    };
   };
 
   return (
@@ -245,29 +280,67 @@ const TeacherTopic = () => {
                 {notes.map((item) => (
                   <Card
                     key={item.id}
-                    className="flex items-center justify-between px-5 py-4 cursor-pointer transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]"
+                    className={`flex items-center justify-between px-5 py-4 transition-all duration-300 ease-in-out ${
+                      item.isGenerating
+                        ? "opacity-70"
+                        : "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]"
+                    }`}
                   >
-                    <Link
-                      to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
-                      className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
-                    >
-                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
-                        <img src="/src/assets/Vector.svg" alt="" className="h-4 w-4" />
-                      </span>
-                      {item.title}
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "conspect" })}
-                      className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
-                      title="Видалити"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 6h18" />
-                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                      </svg>
-                    </button>
+                    {item.isGenerating ? (
+                      <div className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-500">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
+                          <img src="/src/assets/Vector.svg" alt="" className="h-4 w-4" />
+                        </span>
+                        {item.title}
+                      </div>
+                    ) : (
+                      <Link
+                        to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
+                        className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
+                      >
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
+                          <img src="/src/assets/Vector.svg" alt="" className="h-4 w-4" />
+                        </span>
+                        {item.title}
+                      </Link>
+                    )}
+                    {item.isGenerating ? (
+                      <div className="flex h-9 w-9 items-center justify-center">
+                        <svg
+                          className="h-5 w-5 animate-spin text-[#1E73F7]"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "conspect" })}
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
+                        title="Видалити"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18" />
+                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                        </svg>
+                      </button>
+                    )}
                   </Card>
                 ))}
               </div>
@@ -276,7 +349,6 @@ const TeacherTopic = () => {
                 title="Додайте навчальні матеріали"
                 buttonLabel="Згенерувати конспект"
                 onClick={() => {
-                  setMaterialError(null);
                   setAudienceSelection(null);
                   setActiveModal("material");
                 }}
@@ -288,27 +360,63 @@ const TeacherTopic = () => {
                 {tests.map((item) => (
                   <Card
                     key={item.id}
-                    className="flex items-center justify-between px-5 py-4 cursor-pointer transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]"
+                    className={`flex items-center justify-between px-5 py-4 transition-all duration-300 ease-in-out ${
+                      item.isGenerating
+                        ? "opacity-70"
+                        : "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]"
+                    }`}
                   >
-                    <Link
-                      to={`/teacher/${id}/test/${item.id}`}
-                      className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
-                    >
-                      <img src="/src/assets/Group.svg" alt="" className="h-6 w-6 transition-transform duration-300" />
-                      {item.title}
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "test" })}
-                      className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
-                      title="Видалити"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 6h18" />
-                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                      </svg>
-                    </button>
+                    {item.isGenerating ? (
+                      <div className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-500">
+                        <img src="/src/assets/Group.svg" alt="" className="h-6 w-6 transition-transform duration-300" />
+                        {item.title}
+                      </div>
+                    ) : (
+                      <Link
+                        to={`/teacher/${id}/test/${item.id}`}
+                        className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
+                      >
+                        <img src="/src/assets/Group.svg" alt="" className="h-6 w-6 transition-transform duration-300" />
+                        {item.title}
+                      </Link>
+                    )}
+                    {item.isGenerating ? (
+                      <div className="flex h-9 w-9 items-center justify-center">
+                        <svg
+                          className="h-5 w-5 animate-spin text-[#1E73F7]"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "test" })}
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
+                        title="Видалити"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18" />
+                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                        </svg>
+                      </button>
+                    )}
                   </Card>
                 ))}
               </div>
@@ -329,139 +437,51 @@ const TeacherTopic = () => {
         isOpen={isMaterialModalOpen}
         onClose={() => {
           setActiveModal(null);
-          setMaterialGenerationStarted(false);
         }}
         size="xl"
         title="Опишіть тему"
       >
-        <div className="space-y-4">
-          {materialError && (
-            <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
-              {materialError}
-            </div>
-          )}
-          <GenerateModalContent
-            placeholder="Детально опишіть тему"
-            value={materialName}
-            onChange={(value) => {
-              setMaterialName(value);
-              if (materialError) {
-                setMaterialError(null);
-              }
-            }}
-            primaryLabel={isGeneratingMaterial ? "Генерується..." : "Згенерувати"}
-            isLoading={isGeneratingMaterial}
-            onSecondaryClick={() => handleOpenAudience("material")}
-            secondaryDisabled={materialGenerationStarted || isGeneratingMaterial}
-            onPrimaryClick={async () => {
-              if (!materialName.trim() || isGeneratingMaterial) {
-                return;
-              }
-              setMaterialError(null);
-              setMaterialGenerationStarted(true);
-              setIsGeneratingMaterial(true);
-              try {
-                const topicDefinition = materialName.trim();
+        <GenerateModalContent
+          placeholder="Детально опишіть тему"
+          value={materialName}
+          onChange={setMaterialName}
+          primaryLabel="Згенерувати"
+          isLoading={false}
+          onSecondaryClick={() => handleOpenAudience("material")}
+          onPrimaryClick={() => {
+            if (!materialName.trim()) {
+              return;
+            }
+            const topicDefinition = materialName.trim();
+            const tempId = `generating-note-${Date.now()}`;
 
-                // PRIORITY ORDER (highest to lowest):
-                // 1. Levels selected → assign to all students in those levels
-                // 2. Individual students selected → assign only to those students
-                // 3. No selection → assign to entire class (default)
-                const hasLevels = audienceSelection?.levels && audienceSelection.levels.length > 0;
-                const hasStudents = audienceSelection?.students && audienceSelection.students.length > 0;
+            // Close modal immediately
+            setActiveModal(null);
+            setMaterialName("");
 
-                let response;
-                let assignmentScope: "class" | "levels" | "students";
-                let assignedLevels: ("weak" | "medium" | "strong")[] | undefined;
-                let assignedStudents: number[] | undefined;
+            // Start generation in context (runs in background)
+            startNoteGeneration({
+              tempId,
+              title: `Конспект: ${topicDefinition.slice(0, 50)}...`,
+              topicDefinition,
+              teacherId: id || "",
+              apiTeacherId,
+              apiClassId,
+              subjectName,
+              courseId: decodedCourse,
+              classLabel,
+              topicName: decodedTopic,
+              audienceSelection,
+            });
 
-                if (hasLevels) {
-                  // PRIORITY 1: Level assignment (overrides any student selection)
-                  assignmentScope = "levels";
-                  assignedLevels = audienceSelection.levels;
-                  assignedStudents = undefined; // Explicitly clear
-                  response = await generateNotesByLevel({
-                    class_id: apiClassId,
-                    teacher_id: apiTeacherId,
-                    subject: subjectName,
-                    level_list: audienceSelection.levels,
-                    topic_definition: topicDefinition,
-                  });
-                } else if (hasStudents) {
-                  // PRIORITY 2: Individual student assignment
-                  assignmentScope = "students";
-                  assignedLevels = undefined; // Explicitly clear
-                  assignedStudents = audienceSelection.students;
-                  response = await generateNotesIndividual({
-                    class_id: apiClassId,
-                    teacher_id: apiTeacherId,
-                    subject: subjectName,
-                    student_list: audienceSelection.students,
-                    topic_definition: topicDefinition,
-                  });
-                } else {
-                  // PRIORITY 3: No selection → entire class (all levels)
-                  assignmentScope = "class";
-                  assignedLevels = undefined;
-                  assignedStudents = undefined;
-                  response = await generateNotesByLevel({
-                    class_id: apiClassId,
-                    teacher_id: apiTeacherId,
-                    subject: subjectName,
-                    level_list: ["weak", "medium", "strong"],
-                    topic_definition: topicDefinition,
-                  });
-                }
-
-                if (!response?.title || !response?.contents) {
-                  throw new Error("Invalid notes response");
-                }
-
-                const created = addMaterial({
-                  type: "note",
-                  title: response.title,
-                  content: response.contents,
-                  teacherNotes: response.teacher_notes,
-                  // Save sources from backend response (visible only to teachers)
-                  sources: response.sources,
-                  teacherId: id,
-                  courseId: decodedCourse,
-                  subject: subjectName,
-                  classId: apiClassId || undefined,
-                  className: classLabel,
-                  topicName: decodedTopic,
-                  assignmentScope,
-                  assignedLevels,
-                  assignedStudents,
-                });
-                setNotes((prev) => [
-                  ...prev,
-                  { id: created.id, title: created.title },
-                ]);
-                setActiveModal(null);
-                setMaterialName("");
-                if (id && courseId && classId && topicId) {
-                  navigate(
-                    `/teacher/${id}/note/${courseId}/${classId}/${topicId}/${created.id}`
-                  );
-                }
-              } catch (error) {
-                console.error(error);
-                setMaterialError(
-                  "Не вдалося згенерувати конспект. Спробуйте ще раз."
-                );
-              } finally {
-                setIsGeneratingMaterial(false);
-              }
-            }}
-          />
-        </div>
+            setAudienceSelection(null);
+          }}
+        />
       </Modal>
       <Modal
         isOpen={isTestModalOpen}
         onClose={() => {
           setActiveModal(null);
-          setTestGenerationStarted(false);
         }}
         size="xl"
         title="Опишіть тему"
@@ -470,105 +490,36 @@ const TeacherTopic = () => {
           placeholder="Детально опишіть тему"
           value={testName}
           onChange={setTestName}
-          primaryLabel={isGeneratingTest ? "Генерується..." : "Згенерувати"}
-          isLoading={isGeneratingTest}
+          primaryLabel="Згенерувати"
+          isLoading={false}
           onSecondaryClick={() => handleOpenAudience("test")}
-          secondaryDisabled={testGenerationStarted || isGeneratingTest}
-          onPrimaryClick={async () => {
-            if (!testName.trim() || isGeneratingTest) {
+          onPrimaryClick={() => {
+            if (!testName.trim()) {
               return;
             }
-            setTestGenerationStarted(true);
-            setIsGeneratingTest(true);
+            const topicDefinition = testName.trim();
+            const tempId = `generating-test-${Date.now()}`;
 
-            // PRIORITY ORDER (highest to lowest):
-            // 1. Levels selected → assign to all students in those levels
-            // 2. Individual students selected → assign only to those students
-            // 3. No selection → assign to entire class (default)
-            const hasLevels = audienceSelection?.levels && audienceSelection.levels.length > 0;
-            const hasStudents = audienceSelection?.students && audienceSelection.students.length > 0;
-
-            let assignmentScope: "class" | "levels" | "students";
-            let assignedLevels: ("weak" | "medium" | "strong")[] | undefined;
-            let assignedStudents: number[] | undefined;
-
-            if (hasLevels) {
-              assignmentScope = "levels";
-              assignedLevels = audienceSelection.levels;
-              assignedStudents = undefined;
-            } else if (hasStudents) {
-              assignmentScope = "students";
-              assignedLevels = undefined;
-              assignedStudents = audienceSelection.students;
-            } else {
-              assignmentScope = "class";
-              assignedLevels = undefined;
-              assignedStudents = undefined;
-            }
-
-            try {
-              const topicDefinition = testName.trim();
-              const response = await generateTest({
-                class_id: apiClassId,
-                teacher_id: apiTeacherId,
-                subject: subjectName,
-                topic_definition: topicDefinition,
-                level_list: assignedLevels ?? [],
-                student_list: assignedStudents ?? [],
-              });
-              const payload = response?.title
-                ? response
-                : buildFallbackTest(topicDefinition);
-              const created = addMaterial({
-                type: "test",
-                title: payload.title,
-                questions: payload.questions,
-                teacherId: id,
-                courseId: decodedCourse,
-                subject: subjectName,
-                classId: apiClassId || undefined,
-                className: classLabel,
-                topicName: decodedTopic,
-                assignmentScope,
-                assignedLevels,
-                assignedStudents,
-              });
-              setTests((prev) => [
-                ...prev,
-                { id: created.id, title: created.title },
-              ]);
-              if (id) {
-                navigate(`/teacher/${id}/test/${created.id}`);
-              }
-            } catch (error) {
-              console.error(error);
-              const fallback = buildFallbackTest(testName.trim());
-              const created = addMaterial({
-                type: "test",
-                title: fallback.title,
-                questions: fallback.questions,
-                teacherId: id,
-                courseId: decodedCourse,
-                subject: subjectName,
-                classId: apiClassId || undefined,
-                className: classLabel,
-                topicName: decodedTopic,
-                assignmentScope,
-                assignedLevels,
-                assignedStudents,
-              });
-              setTests((prev) => [
-                ...prev,
-                { id: created.id, title: created.title },
-              ]);
-              if (id) {
-                navigate(`/teacher/${id}/test/${created.id}`);
-              }
-            } finally {
-              setIsGeneratingTest(false);
-            }
+            // Close modal immediately
             setActiveModal(null);
             setTestName("");
+
+            // Start generation in context (runs in background)
+            startTestGeneration({
+              tempId,
+              title: `Тест: ${topicDefinition.slice(0, 50)}...`,
+              topicDefinition,
+              teacherId: id || "",
+              apiTeacherId,
+              apiClassId,
+              subjectName,
+              courseId: decodedCourse,
+              classLabel,
+              topicName: decodedTopic,
+              audienceSelection,
+            });
+
+            setAudienceSelection(null);
           }}
         />
       </Modal>
@@ -581,6 +532,8 @@ const TeacherTopic = () => {
         }}
         students={classStudents.map((studentId) => ({ id: studentId }))}
         onSave={handleAudienceSave}
+        initialLevels={audienceSelection?.levels}
+        initialStudents={audienceSelection?.students.map(String)}
       />
 
       <ConfirmDeleteModal
