@@ -58,6 +58,18 @@ Key settings in `.env`:
 
 See `backend/.env.example` for all options.
 
+## Data Files
+
+The `backend/data/` directory is not included in the repository. Required files:
+
+| File | Description |
+|------|-------------|
+| `benchmark_scores.parquet` | Student performance data |
+| `benchmark_absences.parquet` | Attendance records |
+| `embeddings/*.parquet` | Pre-computed textbook embeddings for RAG |
+
+See [backend/README.md](backend/README.md) for detailed format specifications.
+
 ## Project Structure
 
 ```
