@@ -71,16 +71,27 @@ See `.env.example` for all available configuration options.
 
 ### 4. Prepare Data Files
 
-Ensure the following data files are present in the `data/` directory:
+The `data/` directory is not included in the repository. You need to add the following files:
 
 ```
 data/
-├── benchmark_scores.parquet    # Student performance data
-├── benchmark_absences.parquet  # Attendance records
-└── embeddings/                 # Pre-computed vector embeddings (for RAG)
+├── benchmark_scores.parquet       # Student performance data
+├── benchmark_absences.parquet     # Attendance records
+└── embeddings/
+    ├── pages_for_hackathon.parquet              # Textbook page embeddings
+    └── toc_for_hackathon_with_subtopics.parquet # Table of contents with embeddings
 ```
 
-The `embeddings/`, `toc/`, and `pages/` folders contain textbook data used by the RAG system to ground AI responses in official curriculum content.
+**Data file formats:**
+
+| File | Required Columns |
+|------|------------------|
+| `benchmark_scores.parquet` | `student_id`, `class_id`, `subject`, `topic`, `score`, `date` |
+| `benchmark_absences.parquet` | `student_id`, `class_id`, `subject`, `topic`, `date` |
+| `pages_for_hackathon.parquet` | `page_id`, `content`, `embedding`, `subject`, `grade` |
+| `toc_for_hackathon_with_subtopics.parquet` | `topic_id`, `topic_name`, `subtopics`, `embedding`, `subject`, `grade` |
+
+Contact the team for access to the data files.
 
 ### 5. Run the Development Server
 
