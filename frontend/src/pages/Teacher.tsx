@@ -361,33 +361,37 @@ const Teacher = () => {
                           бекенді.
                         </div>
                       )}
-                      {courseGroups.map((group) => (
-                        <div key={group.key}>
-                          <div className="text-sm font-semibold text-slate-700">
-                            {group.title}
+                      {courseGroups.map((group) => {
+                        const gradeNumber = group.title.split(" ")[0];
+                        const subjectName = courseSubjectMap[group.courseId] ?? subjectFromCourseId(group.courseId);
+                        return (
+                          <div key={group.key}>
+                            <div className="text-sm font-semibold text-slate-700">
+                              {gradeNumber} клас
+                            </div>
+                            <div className="mt-3 space-y-3">
+                              {group.classes.map((item) => (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => handleCourseSelect(group.courseId, item.id)}
+                                  className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
+                                    selectedCourseId === group.courseId &&
+                                    selectedClassId === item.id
+                                      ? "border-[#BFD6FF] bg-[#E9F1FF] text-slate-900"
+                                      : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+                                  } cursor-pointer`}
+                                >
+                                  <span>{subjectName}</span>
+                                  <span className="text-xs text-slate-500">
+                                    ID {item.id}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                          <div className="mt-3 space-y-3">
-                            {group.classes.map((item) => (
-                              <button
-                                key={item.id}
-                                type="button"
-                                onClick={() => handleCourseSelect(group.courseId, item.id)}
-                                className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
-                                  selectedCourseId === group.courseId &&
-                                  selectedClassId === item.id
-                                    ? "border-[#BFD6FF] bg-[#E9F1FF] text-slate-900"
-                                    : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
-                                } cursor-pointer`}
-                              >
-                                <span>{item.id}</span>
-                                <span className="text-xs text-slate-500">
-                                  ID {item.id}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </Panel>
                   <Panel title="Теми">
@@ -435,33 +439,37 @@ const Teacher = () => {
                           бекенді.
                         </div>
                       )}
-                      {courseGroups.map((group) => (
-                        <div key={group.key}>
-                          <div className="text-sm font-semibold text-slate-700">
-                            {group.title}
+                      {courseGroups.map((group) => {
+                        const gradeNumber = group.title.split(" ")[0];
+                        const subjectName = courseSubjectMap[group.courseId] ?? subjectFromCourseId(group.courseId);
+                        return (
+                          <div key={group.key}>
+                            <div className="text-sm font-semibold text-slate-700">
+                              {gradeNumber} клас
+                            </div>
+                            <div className="mt-3 space-y-3">
+                              {group.classes.map((item) => (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => handleCourseSelect(group.courseId, item.id)}
+                                  className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
+                                    selectedCourseId === group.courseId &&
+                                    selectedClassId === item.id
+                                      ? "border-2 border-blue-500 bg-blue-100 text-slate-900"
+                                      : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+                                  } cursor-pointer`}
+                                >
+                                  <span>{subjectName}</span>
+                                  <span className="text-xs text-slate-500">
+                                    ID {item.id}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                          <div className="mt-3 space-y-3">
-                            {group.classes.map((item) => (
-                              <button
-                                key={item.id}
-                                type="button"
-                                onClick={() => handleCourseSelect(group.courseId, item.id)}
-                                className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
-                                  selectedCourseId === group.courseId &&
-                                  selectedClassId === item.id
-                                    ? "border-2 border-blue-500 bg-blue-100 text-slate-900"
-                                    : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
-                                } cursor-pointer`}
-                              >
-                                <span>{item.id}</span>
-                                <span className="text-xs text-slate-500">
-                                  ID {item.id}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </Panel>
                   <Panel

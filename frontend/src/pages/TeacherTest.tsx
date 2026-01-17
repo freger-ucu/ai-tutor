@@ -14,6 +14,7 @@ import { classLabelToId } from "../data/classUtils";
 import { getTeacherStudents } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
 import type { TestQuestion } from "../types/testTypes";
+import AudienceInfo from "../components/AudienceInfo";
 
 const TeacherTest = () => {
   const { id, testId } = useParams();
@@ -245,6 +246,15 @@ const TeacherTest = () => {
               </svg>
               Видалити
             </button>
+          </div>
+
+          {/* Audience info - shows who can see this test */}
+          <div className="mt-2 shrink-0">
+            <AudienceInfo
+              assignmentScope={storedTest?.assignmentScope}
+              assignedLevels={storedTest?.assignedLevels}
+              assignedStudents={storedTest?.assignedStudents}
+            />
           </div>
 
           {/* Test content - same layout as student view with custom scrollbar */}

@@ -11,6 +11,7 @@ import type { Source } from "../components/LectureContent";
 import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
 import { getTeacherStudents } from "../api/teacher";
+import AudienceInfo from "../components/AudienceInfo";
 
 /**
  * Converts a Source (string or SourceItem) to a display string for editing.
@@ -253,6 +254,15 @@ const TeacherNote = () => {
                 </button>
               </>
             )}
+          </div>
+
+          {/* Audience info - shows who can see this note */}
+          <div className="mt-2 shrink-0">
+            <AudienceInfo
+              assignmentScope={noteMaterial?.assignmentScope}
+              assignedLevels={noteMaterial?.assignedLevels}
+              assignedStudents={noteMaterial?.assignedStudents}
+            />
           </div>
 
           <div className="mt-5 flex-1 min-h-0 rounded-[28px] bg-white p-6 shadow-sm flex flex-col overflow-hidden">
