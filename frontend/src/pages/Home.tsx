@@ -12,6 +12,16 @@ const Home = () => {
   const [studentIdInput, setStudentIdInput] = useState("");
   const [studentIdError, setStudentIdError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const teacherQuickOptions = [
+    { id: "14", label: "Вчитель 14", hint: "Історія" },
+    { id: "4", label: "Вчитель 4", hint: "Алгебра" },
+    { id: "17", label: "Вчитель 17", hint: "Українська мова" },
+  ];
+  const studentQuickOptions = [
+    { id: "114", label: "Учень 114", hint: "8 клас" },
+    { id: "162", label: "Учень 162", hint: "8 клас" },
+    { id: "118", label: "Учень 118", hint: "8 клас" },
+  ];
 
   const handleTeacherSelect = (teacherId: string) => {
     setIsTeacherModalOpen(false);
@@ -44,8 +54,8 @@ const Home = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#1E73F7] flex items-center justify-center">
-      <div className="flex gap-6">
+    <div className="min-h-screen bg-gradient-to-br from-[#1E73F7] via-[#2B7BFA] to-[#1A63D6] flex items-center justify-center">
+      <div className="flex flex-col items-center gap-6 sm:flex-row">
         <Button label="Я Вчитель" onClick={() => setIsTeacherModalOpen(true)}/>
         <Button label="Я Учень" onClick={() => setIsStudentModalOpen(true)} />
       </div>
@@ -60,7 +70,7 @@ const Home = () => {
         }}
         title="Оберіть вчителя"
       >
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="space-y-2">
             <label className="text-xs font-semibold uppercase text-slate-500">
               ID вчителя
@@ -88,6 +98,24 @@ const Home = () => {
               <div className="text-sm text-red-600">{teacherIdError}</div>
             )}
           </div>
+          <div className="space-y-3">
+            <div className="text-xs font-semibold uppercase text-slate-500">
+              Швидкий вибір
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {teacherQuickOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  title={option.hint}
+                  onClick={() => handleTeacherSelect(option.id)}
+                  className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1E73F7] hover:text-slate-900"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <button
             type="button"
             onClick={handleTeacherSubmit}
@@ -108,7 +136,7 @@ const Home = () => {
         }}
         title="Оберіть учня"
       >
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="space-y-2">
             <label className="text-xs font-semibold uppercase text-slate-500">
               ID учня
@@ -135,6 +163,24 @@ const Home = () => {
             {studentIdError && (
               <div className="text-sm text-red-600">{studentIdError}</div>
             )}
+          </div>
+          <div className="space-y-3">
+            <div className="text-xs font-semibold uppercase text-slate-500">
+              Швидкий вибір
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {studentQuickOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  title={option.hint}
+                  onClick={() => handleStudentSelect(option.id)}
+                  className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1E73F7] hover:text-slate-900"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
           <button
             type="button"
