@@ -52,7 +52,7 @@ const ConfirmDeleteModal = ({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="flex-1 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1557c0] hover:bg-[#E9F1FF]"
           >
             Скасувати
           </button>
@@ -62,7 +62,7 @@ const ConfirmDeleteModal = ({
               onConfirm();
               onClose();
             }}
-            className="flex-1 rounded-xl bg-red-600 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+            className="flex-1 rounded-full border border-red-600 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700 hover:border-red-700"
           >
             Видалити
           </button>

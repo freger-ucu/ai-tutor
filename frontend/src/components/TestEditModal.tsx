@@ -222,7 +222,7 @@ const TestEditModal = ({
               type="button"
               onClick={handleReset}
               disabled={!hasChanges || isSaving}
-              className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-[#1557c0] hover:bg-[#E9F1FF] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Скасувати
             </button>
@@ -232,7 +232,7 @@ const TestEditModal = ({
               type="button"
               onClick={handleSave}
               disabled={!hasChanges || isSaving}
-              className="rounded-xl bg-[#1E73F7] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#1557c0] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="rounded-full border border-[#1E73F7] bg-[#1E73F7] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isSaving ? (
                 <>
@@ -291,7 +291,7 @@ const TestEditModal = ({
           <button
             type="button"
             onClick={addQuestion}
-            className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white py-4 text-slate-500 hover:border-[#1E73F7] hover:text-[#1E73F7] hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 font-medium"
+            className="w-full rounded-full border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-600 transition hover:border-[#1557c0] hover:bg-[#E9F1FF] hover:text-[#1E73F7] flex items-center justify-center gap-2"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14M5 12h14" />

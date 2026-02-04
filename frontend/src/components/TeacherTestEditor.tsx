@@ -400,7 +400,7 @@ const TeacherTestEditor = ({ testData, onSave }: TeacherTestEditorProps) => {
                 type="button"
                 onClick={handleCancelEdit}
                 disabled={isSaving}
-                className="w-full rounded-full border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed lg:w-auto"
+                className="w-full rounded-full border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0] disabled:opacity-50 disabled:cursor-not-allowed lg:w-auto"
               >
                 Скасувати
               </button>
@@ -478,7 +478,7 @@ const TeacherTestEditor = ({ testData, onSave }: TeacherTestEditorProps) => {
             <button
               type="button"
               onClick={addQuestion}
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-white/10 border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20 lg:w-auto"
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-white/10 border border-white/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0] lg:w-auto"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 5v14M5 12h14" />
