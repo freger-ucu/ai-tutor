@@ -113,23 +113,23 @@ const SelectStudentsModal = ({
             </div>
 
             {/* Tabs */}
-            <div className="flex rounded-xl bg-[#E9F1FF] p-1">
+            <div className="flex gap-2">
                 <button
                     onClick={() => handleTabChange("levels")}
-                    className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
+                    className={`flex-1 rounded-full border px-4 py-2 text-sm font-semibold transition ${
                         activeTab === "levels"
-                        ? "bg-[#1E73F7] text-white shadow-sm"
-                        : "text-slate-500 hover:text-slate-700"
+                        ? "border-[#1E73F7] bg-[#1E73F7] text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-[#1557c0] hover:bg-[#E9F1FF]"
                     }`}
                 >
                     Рівень
                 </button>
                 <button
                     onClick={() => handleTabChange("individual")}
-                    className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
+                    className={`flex-1 rounded-full border px-4 py-2 text-sm font-semibold transition ${
                         activeTab === "individual"
-                        ? "bg-[#1E73F7] text-white shadow-sm"
-                        : "text-slate-500 hover:text-slate-700"
+                        ? "border-[#1E73F7] bg-[#1E73F7] text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-[#1557c0] hover:bg-[#E9F1FF]"
                     }`}
                 >
                     Індивидуально
@@ -221,7 +221,7 @@ const SelectStudentsModal = ({
 
             <button
                 onClick={handleSave}
-                className="w-full rounded-xl bg-[#1E73F7] py-4 text-base font-semibold text-white shadow-lg shadow-blue-500/20 transition hover:bg-[#1A63D6] hover:shadow-xl"
+                className="w-full rounded-full border border-[#1E73F7] bg-[#1E73F7] px-4 py-4 text-base font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
             >
                 Зберегти
             </button>

@@ -5,7 +5,7 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Card from "../components/Card";
 import Panel from "../components/Panel";
 import StudentSidebar from "../components/StudentSidebar";
-import { getMaterials, isVisibleToStudent } from "../data/materialsStorage";
+import { getMaterials, getTopics, isVisibleToStudent } from "../data/materialsStorage";
 import { getStudentData } from "../api/student";
 import { getStudentDetails } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
@@ -104,7 +104,25 @@ const StudentTopic = () => {
 
   // Use cached value while loading, computed value when available
   const classLabel = computedClassLabel || cachedClassLabel || "";
-  
+
+  // Get topic date from storage
+  const topicDate = useMemo(() => {
+    const topics = getTopics({ courseId: decodedCourse });
+    const topic = topics.find((t) => t.title === decodedTopic);
+    return topic?.createdAt;
+  }, [decodedCourse, decodedTopic]);
+
+  const formatDate = (value?: string) => {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "—";
+    return parsed.toLocaleDateString("uk-UA", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  };
+
   const [notes, setNotes] = useState<{ id: string; title: string }[]>([]);
   const [tests, setTests] = useState<{ id: string; title: string }[]>([]);
 
@@ -261,7 +279,7 @@ const StudentTopic = () => {
               </Link>
               <Link
                 to="/"
-                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
+                className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-red-500 hover:border-red-500 hover:text-white"
               >
                 Вийти
               </Link>
@@ -286,6 +304,10 @@ const StudentTopic = () => {
                 <div>
                     <h1 className="text-xl font-bold text-slate-900 lg:text-2xl w-full break-words">{decodedTopic}</h1>
                     <div className="mt-1 text-sm text-slate-500">{courseLabel}</div>
+                </div>
+                <div className="text-center">
+                    <div className="text-xs font-semibold uppercase text-slate-400">Дата</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">{formatDate(topicDate)}</div>
                 </div>
             </div>
           </Panel>

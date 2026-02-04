@@ -25,7 +25,7 @@ const subjectLabelMap: Record<string, string> = {
 const levelLabels: Record<string, string> = {
   strong: "Високий",
   medium: "Середній",
-  weak: "Початковий",
+  weak: "Низький",
 };
 
 const buildCourseId = (subject: string, grade: number) => {
@@ -267,7 +267,7 @@ const Teacher = () => {
         ? "Високий рівень"
         : single === "medium"
           ? "Середній рівень"
-          : "Початковий рівень";
+          : "Низький рівень";
     }
     return "Рівні не обрано";
   }, [levelFilters]);
@@ -361,7 +361,7 @@ const Teacher = () => {
               <button
                 type="button"
                 onClick={() => navigate("/")}
-                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
+                className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-red-500 hover:border-red-500 hover:text-white"
               >
                 Вийти
               </button>
@@ -370,10 +370,10 @@ const Teacher = () => {
               <button
                 type="button"
                 onClick={() => setActiveView("materials")}
-                className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                className={`flex-1 rounded-full border px-4 py-2 text-sm font-semibold transition ${
                   activeView === "materials"
-                    ? "bg-[#1E73F7] text-white"
-                    : "bg-slate-100 text-slate-700"
+                    ? "border-[#1E73F7] bg-[#1E73F7] text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-[#1557c0] hover:bg-[#E9F1FF]"
                 }`}
               >
                 Матеріали
@@ -381,10 +381,10 @@ const Teacher = () => {
               <button
                 type="button"
                 onClick={() => setActiveView("students")}
-                className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                className={`flex-1 rounded-full border px-4 py-2 text-sm font-semibold transition ${
                   activeView === "students"
-                    ? "bg-[#1E73F7] text-white"
-                    : "bg-slate-100 text-slate-700"
+                    ? "border-[#1E73F7] bg-[#1E73F7] text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-[#1557c0] hover:bg-[#E9F1FF]"
                 }`}
               >
                 Учні
@@ -448,7 +448,7 @@ const Teacher = () => {
                       <button
                         type="button"
                         onClick={() => setIsTopicModalOpen(true)}
-                        className="ml-auto mr-1 rounded-full bg-[#1E73F7] px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#1A63D6] lg:hidden"
+                        className="ml-auto mr-1 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#1E73F7] transition hover:bg-[#E9F1FF] hover:border-[#1557c0] lg:hidden"
                       >
                         + Додати тему
                       </button>
@@ -471,7 +471,7 @@ const Teacher = () => {
                 <button
                   type="button"
                   disabled={!selectedClassId}
-                  className="absolute bottom-0 right-0 hidden items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#1E73F7] shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60 lg:flex"
+                  className="absolute bottom-0 right-0 hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-[#1E73F7] transition hover:bg-[#E9F1FF] hover:border-[#1557c0] disabled:cursor-not-allowed disabled:opacity-60 lg:flex"
                   onClick={() => setIsTopicModalOpen(true)}
                 >
                   <span className="text-lg">＋</span>
@@ -547,7 +547,7 @@ const Teacher = () => {
                             }
                             setIsFilterOpen((open) => !open);
                           }}
-                          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#1E73F7] hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#1557c0] hover:bg-[#E9F1FF]"
                         >
                           {filterButtonLabel}
                           <span className="text-slate-400">▾</span>
@@ -580,14 +580,14 @@ const Teacher = () => {
                                   onChange={() => toggleFilter("weak")}
                                   className="h-4 w-4 rounded border-slate-300 accent-blue-600 text-blue-600 focus:ring-blue-500"
                                 />
-                                Початковий рівень
+                                Низький рівень
                               </label>
                             </div>
                             <div className="mt-4 grid gap-2">
                               <button
                                 type="button"
                                 onClick={applyFilters}
-                                className="w-full rounded-xl bg-[#1E73F7] px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#1A63D6]"
+                                className="w-full rounded-full border border-[#1E73F7] bg-[#1E73F7] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
                               >
                                 Застосувати фільтр
                               </button>
@@ -688,7 +688,7 @@ const Teacher = () => {
           />
           <button
             type="button"
-            className="ml-auto rounded-full bg-[#1E73F7] px-8 py-4 text-lg font-semibold text-white shadow transition hover:-translate-y-0.5 hover:bg-[#1A63D6] hover:shadow-lg cursor-pointer"
+            className="ml-auto rounded-full border border-[#1E73F7] bg-[#1E73F7] px-8 py-4 text-lg font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0] cursor-pointer"
             onClick={handleAddTopic}
           >
             Додати

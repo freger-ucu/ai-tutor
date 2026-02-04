@@ -197,7 +197,7 @@ const TeacherNote = () => {
                 <button
                   type="button"
                   onClick={handleCancelEdit}
-                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
                 >
                   Скасувати
                 </button>

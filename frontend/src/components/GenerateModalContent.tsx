@@ -48,10 +48,10 @@ const GenerateModalContent = ({
             onClick={secondaryDisabled ? undefined : onSecondaryClick}
             disabled={secondaryDisabled}
             aria-disabled={secondaryDisabled}
-            className={`flex items-center justify-center gap-2 rounded-full border-2 px-6 py-2.5 text-sm font-semibold transition ${
+            className={`flex items-center justify-center gap-2 rounded-full border px-6 py-3 text-sm font-semibold transition ${
               secondaryDisabled
                 ? "cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400"
-                : "border-[#1E73F7] bg-white text-[#1E73F7] hover:bg-[#E9F1FF]"
+                : "border-slate-200 bg-white text-[#1E73F7] hover:border-[#1557c0] hover:bg-[#E9F1FF]"
             }`}
           >
             {secondaryLabel}
@@ -61,7 +61,7 @@ const GenerateModalContent = ({
           type="button"
           onClick={onPrimaryClick}
           disabled={isLoading}
-          className="flex items-center justify-center gap-2 rounded-full bg-[#1E73F7] px-7 py-3 text-sm font-semibold text-white shadow transition hover:-translate-y-0.5 hover:bg-[#1A63D6] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70"
+          className="flex items-center justify-center gap-2 rounded-full border border-[#1E73F7] bg-[#1E73F7] px-7 py-3 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0] disabled:cursor-not-allowed disabled:opacity-70"
         >
           {primaryLabel}
           {isLoading && (

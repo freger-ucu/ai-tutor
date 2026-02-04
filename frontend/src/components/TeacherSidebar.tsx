@@ -64,7 +64,7 @@ const TeacherSidebar = ({
   };
 
   return (
-    <aside className="w-72 min-w-72 max-w-72 shrink-0 flex-shrink-0 flex-grow-0 bg-white px-6 py-8 flex flex-col lg:sticky lg:top-0 lg:h-screen">
+    <aside className="w-64 shrink-0 bg-white px-6 py-8 flex flex-col lg:sticky lg:top-0 lg:h-screen">
       {/* Teacher profile section */}
       <div className="flex items-center gap-3">
         <div

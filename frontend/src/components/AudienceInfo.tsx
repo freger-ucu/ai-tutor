@@ -8,7 +8,7 @@ interface AudienceInfoProps {
 }
 
 const levelLabels: Record<string, string> = {
-  weak: "Початковий",
+  weak: "Низький",
   medium: "Середній",
   strong: "Високий",
 };

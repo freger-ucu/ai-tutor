@@ -136,19 +136,30 @@ const TestContainer = ({
     setCurrentQuestionIndex(0);
   }, [testData.id]);
 
-  // Handle Enter key navigation between questions
+  // Handle keyboard navigation between questions (Enter, Arrow keys)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't navigate if user is typing in a textarea or input
+      const activeElement = document.activeElement;
+      if (activeElement?.tagName === "TEXTAREA" || activeElement?.tagName === "INPUT") {
+        return;
+      }
+
       if (e.key === "Enter" && !e.shiftKey) {
-        // Don't navigate if user is typing in a textarea
-        const activeElement = document.activeElement;
-        if (activeElement?.tagName === "TEXTAREA") {
-          return;
-        }
         e.preventDefault();
         // Navigate to next question
         if (currentQuestionIndex < testData.questions.length - 1) {
           setCurrentQuestionIndex(currentQuestionIndex + 1);
+        }
+      } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        if (currentQuestionIndex < testData.questions.length - 1) {
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+        }
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (currentQuestionIndex > 0) {
+          setCurrentQuestionIndex(currentQuestionIndex - 1);
         }
       }
     };
@@ -325,37 +336,52 @@ const TestContainer = ({
         <h1 className="text-xl font-bold text-white mb-2">{testData.title}</h1>
       )}
 
-      {/* Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3 overflow-visible">
-        <TestNavigation
-          totalQuestions={testData.questions.length}
-          currentQuestionIndex={currentQuestionIndex}
-          answeredQuestions={answeredQuestionIndices}
-          onQuestionSelect={handleQuestionSelect}
-          showResult={viewMode === "student" && isFinished}
-          resultMap={resultMap}
-        />
-        {viewMode === "student" && !isFinished && (
+      {/* Navigation with prev/next buttons */}
+      <div className="flex items-center justify-between gap-3 mb-3 overflow-visible">
+        <div className="flex items-center gap-3">
+          <TestNavigation
+            totalQuestions={testData.questions.length}
+            currentQuestionIndex={currentQuestionIndex}
+            answeredQuestions={answeredQuestionIndices}
+            onQuestionSelect={handleQuestionSelect}
+            showResult={viewMode === "student" && isFinished}
+            resultMap={resultMap}
+            viewMode={viewMode}
+          />
+          {viewMode === "student" && isFinished && (
+            <div className="rounded-full bg-[#6FDB9B] px-4 py-2 text-center text-xs font-semibold text-white">
+              {totalQuestions > 0
+                ? `${Math.round((correctAnswersCount / totalQuestions) * 100)}% правильних`
+                : "0%"}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={handleFinish}
-            disabled={isSubmitting}
-            className={`w-full rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all lg:w-[220px] ${
-              isSubmitting
-                ? "cursor-not-allowed bg-[#E63C3C]/60"
-                : "cursor-pointer bg-[#E63C3C] hover:-translate-y-0.5 hover:shadow-lg"
+            onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
+            disabled={currentQuestionIndex === 0}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all ${
+              currentQuestionIndex === 0
+                ? "cursor-not-allowed bg-white/40 text-white/60"
+                : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
             }`}
           >
-            {isSubmitting ? "Перевіряємо..." : "Завершити тест"}
+            ← Попереднє
           </button>
-        )}
-        {viewMode === "student" && isFinished && (
-          <div className="w-full rounded-xl bg-[#6FDB9B] px-4 py-2 text-center text-xs font-semibold text-white lg:w-[220px]">
-            {totalQuestions > 0
-              ? `${Math.round((correctAnswersCount / totalQuestions) * 100)}% правильних відповідей`
-              : "0% правильних відповідей"}
-          </div>
-        )}
+          <button
+            type="button"
+            onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
+            disabled={currentQuestionIndex >= testData.questions.length - 1}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all ${
+              currentQuestionIndex >= testData.questions.length - 1
+                ? "cursor-not-allowed bg-white/40 text-white/60"
+                : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
+            }`}
+          >
+            Наступне →
+          </button>
+        </div>
       </div>
 
       {/* Question card with feedback on the side - flex to fill available space */}
@@ -374,34 +400,6 @@ const TestContainer = ({
               viewMode={viewMode}
               showExplanation={viewMode === "teacher" || (viewMode === "student" && isFinished)}
             />
-          </div>
-
-          {/* Navigation buttons - attached to bottom of question card */}
-          <div className="flex items-center justify-between pt-3 shrink-0">
-            <button
-              type="button"
-              onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
-              disabled={currentQuestionIndex === 0}
-              className={`rounded-full px-3 py-1.5 md:px-4 text-xs font-semibold transition-all duration-300 ease-in-out ${
-                currentQuestionIndex === 0
-                  ? "cursor-not-allowed bg-white/60 text-slate-300"
-                  : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
-              }`}
-            >
-              ← Попереднє
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
-              disabled={currentQuestionIndex >= testData.questions.length - 1}
-              className={`rounded-full px-3 py-1.5 md:px-4 text-xs font-semibold transition-all duration-300 ease-in-out ${
-                currentQuestionIndex >= testData.questions.length - 1
-                  ? "cursor-not-allowed bg-white/60 text-slate-300"
-                  : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
-              }`}
-            >
-              Наступне →
-            </button>
           </div>
 
           {/* Mobile: Feedback below question card */}
@@ -423,6 +421,22 @@ const TestContainer = ({
       {/* Statistics card (if enabled) */}
       {showStatistics && statistics && (
         <TestStatisticsCard statistics={statistics} />
+      )}
+
+      {/* Fixed finish button at bottom right */}
+      {viewMode === "student" && !isFinished && (
+        <button
+          type="button"
+          onClick={handleFinish}
+          disabled={isSubmitting}
+          className={`fixed bottom-6 right-6 z-50 rounded-full border px-6 py-3 text-sm font-semibold text-white transition ${
+            isSubmitting
+              ? "cursor-not-allowed border-red-400 bg-red-400"
+              : "cursor-pointer border-red-500 bg-red-500 hover:border-red-600 hover:bg-red-600"
+          }`}
+        >
+          {isSubmitting ? "Перевіряємо..." : "Завершити тест"}
+        </button>
       )}
     </div>
   );
