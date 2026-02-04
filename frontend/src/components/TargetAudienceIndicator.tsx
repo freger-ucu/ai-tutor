@@ -17,7 +17,7 @@ interface TargetAudienceIndicatorProps {
 }
 
 const levelLabels: Record<string, string> = {
-  weak: "Початковий",
+  weak: "Низький",
   medium: "Середній",
   strong: "Високий",
 };
@@ -33,7 +33,7 @@ const levelColors: Record<string, { bg: string; text: string }> = {
  *
  * Three scenarios:
  * 1. Whole Class: Shows "Весь клас" badge
- * 2. By Level: Shows level chips (Високий, Середній, Початковий)
+ * 2. By Level: Shows level chips (Високий, Середній, Низький)
  * 3. Individual Students: Shows overlapping avatars with tooltips
  *
  * Styling: Background #1E73F7 at 10% opacity, text #000000 at 50% opacity

@@ -8,7 +8,7 @@ interface AudienceInfoProps {
 }
 
 const levelLabels: Record<string, string> = {
-  weak: "Початковий",
+  weak: "Низький",
   medium: "Середній",
   strong: "Високий",
 };
@@ -55,7 +55,11 @@ const AudienceInfo = ({
   }
 
   // Show levels
-  if (assignmentScope === "levels" && assignedLevels && assignedLevels.length > 0) {
+  if (
+    assignmentScope === "levels" &&
+    assignedLevels &&
+    assignedLevels.length > 0
+  ) {
     return (
       <div className="flex items-center gap-2 text-sm">
         <span className="text-white/60">Рівні:</span>
@@ -74,9 +78,15 @@ const AudienceInfo = ({
   }
 
   // Show students with expandable list
-  if (assignmentScope === "students" && assignedStudents && assignedStudents.length > 0) {
+  if (
+    assignmentScope === "students" &&
+    assignedStudents &&
+    assignedStudents.length > 0
+  ) {
     const hasMany = assignedStudents.length > 3;
-    const displayStudents = isExpanded ? assignedStudents : assignedStudents.slice(0, 3);
+    const displayStudents = isExpanded
+      ? assignedStudents
+      : assignedStudents.slice(0, 3);
 
     return (
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -113,11 +123,7 @@ const AudienceInfo = ({
     );
   }
 
-  return (
-    <div className="text-sm text-white/60">
-      Не призначено
-    </div>
-  );
+  return <div className="text-sm text-white/60">Не призначено</div>;
 };
 
 export default AudienceInfo;

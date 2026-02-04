@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import TeacherSidebar from "../components/TeacherSidebar";
-import { addTopic, getTopics } from "../data/materialsStorage";
+import { addTopic, getTopics, deleteTopic } from "../data/materialsStorage";
 import { getTeacherData, getTeacherStudents } from "../api/teacher";
 import type { TeacherClassItem, TeacherStudentItem } from "../api/teacher";
 import { classIdToLabel } from "../data/classUtils";
@@ -24,7 +24,7 @@ const subjectLabelMap: Record<string, string> = {
 const levelLabels: Record<string, string> = {
   strong: "Високий",
   medium: "Середній",
-  weak: "Початковий",
+  weak: "Низький",
 };
 
 const buildCourseId = (subject: string, grade: number) => {
@@ -274,7 +274,7 @@ const Teacher = () => {
         ? "Високий рівень"
         : single === "medium"
           ? "Середній рівень"
-          : "Початковий рівень";
+          : "Низький рівень";
     }
     return "Рівні не обрано";
   }, [levelFilters]);
@@ -469,17 +469,81 @@ const Teacher = () => {
                       </button>
                     </div>
                     <div className="mt-4 space-y-3 lg:mt-6">
-                      {currentTopics.map((topic) => (
-                        <button
-                          key={topic}
-                          type="button"
-                          onClick={() => handleTopicOpen(topic)}
-                          className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50 cursor-pointer"
-                        >
-                          <span>{topic}</span>
-                          <span className="text-lg text-slate-400">›</span>
-                        </button>
-                      ))}
+                      {currentTopics.map((topic) => {
+                        // Find the topic item to get its ID for deletion
+                        const storedTopics = getTopics({
+                          courseId: selectedCourseId,
+                          classId: selectedClassId ?? undefined,
+                        });
+                        const topicItem = storedTopics.find(
+                          (item) =>
+                            item.title === topic &&
+                            item.className === selectedClassLabel,
+                        );
+
+                        const handleDeleteTopic = (e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          if (!topicItem) return;
+
+                          const success = deleteTopic(topicItem.id);
+                          if (success) {
+                            // Refresh topics from localStorage
+                            const refreshedTopics = getTopics({
+                              courseId: selectedCourseId,
+                              classId: selectedClassId ?? undefined,
+                            });
+                            const nextTopicsByClass = refreshedTopics.reduce<
+                              Record<string, string[]>
+                            >((acc, item) => {
+                              const classKey = item.className ?? "";
+                              if (!classKey) return acc;
+                              if (!acc[classKey]) acc[classKey] = [];
+                              acc[classKey].push(item.title);
+                              return acc;
+                            }, {});
+                            setTopicsByClass(nextTopicsByClass);
+                          }
+                        };
+
+                        return (
+                          <div
+                            key={topic}
+                            className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleTopicOpen(topic)}
+                              className="flex-1 text-left cursor-pointer"
+                            >
+                              <span>{topic}</span>
+                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={handleDeleteTopic}
+                                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
+                                title="Видалити"
+                              >
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M3 6h18" />
+                                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                </svg>
+                              </button>
+                              <span className="text-lg text-slate-400">›</span>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </Panel>
                 </div>
@@ -602,7 +666,7 @@ const Teacher = () => {
                                   onChange={() => toggleFilter("weak")}
                                   className="h-4 w-4 rounded border-slate-300 accent-blue-600 text-blue-600 focus:ring-blue-500"
                                 />
-                                Початковий рівень
+                                Низький рівень
                               </label>
                             </div>
                             <div className="mt-4 grid gap-2">
