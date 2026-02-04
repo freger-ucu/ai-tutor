@@ -137,7 +137,7 @@ const SelectStudentsModal = ({
             </div>
 
             {/* Content */}
-            <div className="min-h-[300px]">
+            <div className="min-h-75">
                 {activeTab === "levels" && (
                     <div className="space-y-3">
                         {[
@@ -175,7 +175,7 @@ const SelectStudentsModal = ({
                 )}
 
                 {activeTab === "individual" && (
-                     <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                     <div className="space-y-3 max-h-75 overflow-y-auto pr-2">
                         {classStudents.length === 0 && (
                           <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
                             Немає учнів для вибору.
