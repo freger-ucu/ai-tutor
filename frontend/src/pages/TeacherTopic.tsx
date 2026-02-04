@@ -11,7 +11,11 @@ import Panel from "../components/Panel";
 import SelectStudentsModal from "../components/SelectStudentsModal";
 import TeacherSidebar from "../components/TeacherSidebar";
 import TargetAudienceIndicator from "../components/TargetAudienceIndicator";
-import { deleteMaterial, getMaterials, getTopics } from "../data/materialsStorage";
+import {
+  deleteMaterial,
+  getMaterials,
+  getTopics,
+} from "../data/materialsStorage";
 import type { AssignmentScope } from "../data/materialsStorage";
 import { getTeacherStudents } from "../api/teacher";
 import { classIdToLabel } from "../data/classUtils";
@@ -310,10 +314,10 @@ const TeacherTopic = () => {
           />
         </div>
         <main
-          className="flex-1 px-4 py-6 overflow-y-auto lg:px-10 lg:py-10 lg:overflow-visible"
+          className="flex-1 flex flex-col h-screen overflow-hidden lg:px-10 lg:py-10 px-4 py-6"
           data-scroll-root="mobile"
         >
-          <div className="flex items-center gap-4 mb-6">
+          <div className="flex items-center gap-4 mb-6 shrink-0">
             <BackButton fallbackPath={`/teacher/${id}`} />
             <div className="hidden lg:flex">
               <Breadcrumbs
@@ -325,7 +329,7 @@ const TeacherTopic = () => {
               />
             </div>
           </div>
-          <Panel>
+          <Panel className="shrink-0">
             <div className="grid gap-6 md:grid-cols-4">
               <div>
                 <div className="text-xs font-semibold uppercase text-slate-400">
@@ -361,81 +365,12 @@ const TeacherTopic = () => {
               </div>
             </div>
           </Panel>
-          <div className="mt-6 grid gap-6 lg:mt-8 lg:grid-cols-[1.05fr_0.95fr] overflow-visible">
-            <section className="overflow-visible">
-              <h2 className="text-lg font-semibold text-white lg:text-xl">
+          <div className="mt-6 flex-1 min-h-0 grid gap-6 lg:mt-8 lg:grid-cols-[1.05fr_0.95fr]">
+            <section className="flex flex-col min-h-0">
+              <h2 className="text-lg font-semibold text-white lg:text-xl shrink-0">
                 Конспекти
               </h2>
-              <div className="mt-4 space-y-4 overflow-visible">
-                {notes.map((item) =>
-                  item.isGenerating ? (
-                    <Card
-                      key={item.id}
-                      className="flex items-center justify-between px-5 py-4 transition-all duration-300 ease-in-out opacity-70"
-                    >
-                      <div className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-500">
-                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
-                          <img src="/src/assets/Vector.svg" alt="" className="h-4 w-4" />
-                        </span>
-                        {item.title}
-                      </div>
-                      <div className="flex h-9 w-9 items-center justify-center">
-                        <svg
-                          className="h-5 w-5 animate-spin text-[#1E73F7]"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-                      </div>
-                    </Card>
-                  ) : (
-                    <Link
-                      key={item.id}
-                      to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
-                    >
-                      <Card
-                        className="flex items-center justify-between px-5 py-4 transition-all duration-300 ease-in-out cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]"
-                      >
-                        <div className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900">
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
-                            <img src="/src/assets/Vector.svg" alt="" className="h-4 w-4" />
-                          </span>
-                          {item.title}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setDeleteTarget({ id: item.id, title: item.title, type: "conspect" });
-                          }}
-                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
-                          title="Видалити"
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M3 6h18" />
-                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                          </svg>
-                        </button>
-                      </Card>
-                    </Link>
-                  )
-                )}
+              <div className="mt-4 flex-1 min-h-0 overflow-y-auto space-y-4 pr-2 scroll-smooth scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
                 {notes.map((item) => (
                   <Card
                     key={item.id}
@@ -538,22 +473,22 @@ const TeacherTopic = () => {
                     )}
                   </Card>
                 ))}
+                <AddMaterialsCard
+                  className="mt-4 shrink-0"
+                  title="Додайте навчальні матеріали"
+                  buttonLabel="Згенерувати конспект"
+                  onClick={() => {
+                    setAudienceSelection(null);
+                    setActiveModal("material");
+                  }}
+                />
               </div>
-              <AddMaterialsCard
-                className="mt-4"
-                title="Додайте навчальні матеріали"
-                buttonLabel="Згенерувати конспект"
-                onClick={() => {
-                  setAudienceSelection(null);
-                  setActiveModal("material");
-                }}
-              />
             </section>
-            <section className="overflow-visible">
-              <h2 className="text-lg font-semibold text-white lg:text-xl">
+            <section className="flex flex-col min-h-0">
+              <h2 className="text-lg font-semibold text-white lg:text-xl shrink-0">
                 Тести
               </h2>
-              <div className="mt-4 space-y-4 overflow-visible">
+              <div className="mt-4 flex-1 min-h-0 overflow-y-auto space-y-4 pr-2 scroll-smooth scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
                 {tests.map((item) => (
                   <Card
                     key={item.id}
@@ -652,16 +587,16 @@ const TeacherTopic = () => {
                     )}
                   </Card>
                 ))}
+                <AddMaterialsCard
+                  className="mt-4 shrink-0"
+                  title="Додайте навчальні матеріали"
+                  buttonLabel="Згенерувати тест"
+                  onClick={() => {
+                    setAudienceSelection(null);
+                    setActiveModal("test");
+                  }}
+                />
               </div>
-              <AddMaterialsCard
-                className="mt-4"
-                title="Додайте навчальні матеріали"
-                buttonLabel="Згенерувати тест"
-                onClick={() => {
-                  setAudienceSelection(null);
-                  setActiveModal("test");
-                }}
-              />
             </section>
           </div>
         </main>
