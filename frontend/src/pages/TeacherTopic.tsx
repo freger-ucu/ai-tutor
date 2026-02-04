@@ -10,7 +10,9 @@ import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import SelectStudentsModal from "../components/SelectStudentsModal";
 import TeacherSidebar from "../components/TeacherSidebar";
+import TargetAudienceIndicator from "../components/TargetAudienceIndicator";
 import { deleteMaterial, getMaterials } from "../data/materialsStorage";
+import type { AssignmentScope } from "../data/materialsStorage";
 import { getTeacherStudents } from "../api/teacher";
 import { classIdToLabel } from "../data/classUtils";
 import { toNumericId } from "../api/idUtils";
@@ -38,13 +40,13 @@ const TeacherTopic = () => {
     clearCompletedItem,
   } = useGeneration();
 
-  const [activeModal, setActiveModal] = useState<"material" | "test" | "audience" | null>(
-    null
-  );
+  const [activeModal, setActiveModal] = useState<
+    "material" | "test" | "audience" | null
+  >(null);
   // Keep track of which flow opened the audience selector
-  const [previousModal, setPreviousModal] = useState<"material" | "test" | null>(
-    null
-  );
+  const [previousModal, setPreviousModal] = useState<
+    "material" | "test" | null
+  >(null);
   const [audienceSelection, setAudienceSelection] = useState<{
     levels: ("weak" | "medium" | "strong")[];
     students: number[];
@@ -59,7 +61,7 @@ const TeacherTopic = () => {
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
   const courseLabel = decodedCourse
-    ? courseLabels[decodedCourse] ?? decodedCourse
+    ? (courseLabels[decodedCourse] ?? decodedCourse)
     : "";
   const subjectName = courseLabel || decodedCourse;
   const classNumberMatch = decodedCourse.match(/(\d+)$/);
@@ -71,16 +73,26 @@ const TeacherTopic = () => {
   const apiTeacherId = toNumericId(id) ?? 0;
   const apiClassId = decodedClassId ?? 0;
 
-  const [storedNotes, setStoredNotes] = useState<{ id: string; title: string }[]>([]);
-  const [storedTests, setStoredTests] = useState<{ id: string; title: string }[]>([]);
+  interface StoredMaterialItem {
+    id: string;
+    title: string;
+    assignmentScope?: AssignmentScope;
+    assignedLevels?: ("weak" | "medium" | "strong")[];
+    assignedStudents?: number[];
+  }
+
+  const [storedNotes, setStoredNotes] = useState<StoredMaterialItem[]>([]);
+  const [storedTests, setStoredTests] = useState<StoredMaterialItem[]>([]);
 
   // Get generating items from context
-  const generatingNotes = getGeneratingItemsForTopic(decodedCourse, decodedTopic).filter(
-    (item) => item.type === "note"
-  );
-  const generatingTests = getGeneratingItemsForTopic(decodedCourse, decodedTopic).filter(
-    (item) => item.type === "test"
-  );
+  const generatingNotes = getGeneratingItemsForTopic(
+    decodedCourse,
+    decodedTopic,
+  ).filter((item) => item.type === "note");
+  const generatingTests = getGeneratingItemsForTopic(
+    decodedCourse,
+    decodedTopic,
+  ).filter((item) => item.type === "test");
   const completedItems = getCompletedItemsForTopic(decodedCourse, decodedTopic);
 
   // Handle completed items - refresh from storage to get the real data
@@ -92,12 +104,24 @@ const TeacherTopic = () => {
       courseId: decodedCourse,
       topicName: decodedTopic,
       type: "note",
-    }).map((item) => ({ id: item.id, title: item.title }));
+    }).map((item) => ({
+      id: item.id,
+      title: item.title,
+      assignmentScope: item.assignmentScope,
+      assignedLevels: item.assignedLevels,
+      assignedStudents: item.assignedStudents,
+    }));
     const fetchedTests = getMaterials({
       courseId: decodedCourse,
       topicName: decodedTopic,
       type: "test",
-    }).map((item) => ({ id: item.id, title: item.title }));
+    }).map((item) => ({
+      id: item.id,
+      title: item.title,
+      assignmentScope: item.assignmentScope,
+      assignedLevels: item.assignedLevels,
+      assignedStudents: item.assignedStudents,
+    }));
 
     setStoredNotes(fetchedNotes);
     setStoredTests(fetchedTests);
@@ -114,6 +138,9 @@ const TeacherTopic = () => {
       id: item.tempId,
       title: item.title,
       isGenerating: true,
+      assignmentScope: undefined as AssignmentScope | undefined,
+      assignedLevels: undefined as ("weak" | "medium" | "strong")[] | undefined,
+      assignedStudents: undefined as number[] | undefined,
     }));
     const stored = storedNotes.map((item) => ({
       ...item,
@@ -127,6 +154,9 @@ const TeacherTopic = () => {
       id: item.tempId,
       title: item.title,
       isGenerating: true,
+      assignmentScope: undefined as AssignmentScope | undefined,
+      assignedLevels: undefined as ("weak" | "medium" | "strong")[] | undefined,
+      assignedStudents: undefined as number[] | undefined,
     }));
     const stored = storedTests.map((item) => ({
       ...item,
@@ -157,12 +187,24 @@ const TeacherTopic = () => {
       courseId: decodedCourse,
       topicName: decodedTopic,
       type: "note",
-    }).map((item) => ({ id: item.id, title: item.title }));
+    }).map((item) => ({
+      id: item.id,
+      title: item.title,
+      assignmentScope: item.assignmentScope,
+      assignedLevels: item.assignedLevels,
+      assignedStudents: item.assignedStudents,
+    }));
     const fetchedTests = getMaterials({
       courseId: decodedCourse,
       topicName: decodedTopic,
       type: "test",
-    }).map((item) => ({ id: item.id, title: item.title }));
+    }).map((item) => ({
+      id: item.id,
+      title: item.title,
+      assignmentScope: item.assignmentScope,
+      assignedLevels: item.assignedLevels,
+      assignedStudents: item.assignedStudents,
+    }));
     setStoredNotes(fetchedNotes);
     setStoredTests(fetchedTests);
   }, [decodedCourse, decodedTopic]);
@@ -178,7 +220,9 @@ const TeacherTopic = () => {
       subject: subjectName,
     })
       .then((response) => {
-        setClassStudents(response.students.map((student) => student.student_id));
+        setClassStudents(
+          response.students.map((student) => student.student_id),
+        );
       })
       .catch((error) => {
         console.error(error);
@@ -196,10 +240,15 @@ const TeacherTopic = () => {
     students: string[];
   }) => {
     // SelectStudentsModal now returns stable identifiers directly ("weak", "medium", "strong")
-    const validLevels: ("weak" | "medium" | "strong")[] = ["weak", "medium", "strong"];
+    const validLevels: ("weak" | "medium" | "strong")[] = [
+      "weak",
+      "medium",
+      "strong",
+    ];
     setAudienceSelection({
       levels: selection.levels.filter(
-        (level): level is "weak" | "medium" | "strong" => validLevels.includes(level as "weak" | "medium" | "strong")
+        (level): level is "weak" | "medium" | "strong" =>
+          validLevels.includes(level as "weak" | "medium" | "strong"),
       ),
       students: selection.students
         .map((studentId) => toNumericId(studentId))
@@ -218,9 +267,13 @@ const TeacherTopic = () => {
     const success = deleteMaterial(deleteTarget.id);
     if (success) {
       if (deleteTarget.type === "conspect") {
-        setStoredNotes((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+        setStoredNotes((prev) =>
+          prev.filter((item) => item.id !== deleteTarget.id),
+        );
       } else {
-        setStoredTests((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+        setStoredTests((prev) =>
+          prev.filter((item) => item.id !== deleteTarget.id),
+        );
       }
     }
     setDeleteTarget(null);
@@ -284,71 +337,109 @@ const TeacherTopic = () => {
           </Panel>
           <div className="mt-6 grid gap-6 lg:mt-8 lg:grid-cols-[1.05fr_0.95fr] overflow-visible">
             <section className="overflow-visible">
-              <h2 className="text-lg font-semibold text-white lg:text-xl">Конспекти</h2>
+              <h2 className="text-lg font-semibold text-white lg:text-xl">
+                Конспекти
+              </h2>
               <div className="mt-4 space-y-4 overflow-visible">
                 {notes.map((item) => (
                   <Card
                     key={item.id}
-                    className={`flex items-center justify-between px-5 py-4 transition-all duration-300 ease-in-out ${
+                    className={`px-5 py-4 transition-all duration-300 ease-in-out ${
                       item.isGenerating
                         ? "opacity-70"
                         : "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]"
                     }`}
                   >
-                    {item.isGenerating ? (
-                      <div className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-500">
-                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
-                          <img src="/src/assets/Vector.svg" alt="" className="h-4 w-4" />
-                        </span>
-                        {item.title}
-                      </div>
-                    ) : (
-                      <Link
-                        to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
-                        className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
-                      >
-                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
-                          <img src="/src/assets/Vector.svg" alt="" className="h-4 w-4" />
-                        </span>
-                        {item.title}
-                      </Link>
-                    )}
-                    {item.isGenerating ? (
-                      <div className="flex h-9 w-9 items-center justify-center">
-                        <svg
-                          className="h-5 w-5 animate-spin text-[#1E73F7]"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
+                    <div className="flex items-center justify-between">
+                      {item.isGenerating ? (
+                        <div className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-500">
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
+                            <img
+                              src="/src/assets/Vector.svg"
+                              alt=""
+                              className="h-4 w-4"
+                            />
+                          </span>
+                          {item.title}
+                        </div>
+                      ) : (
+                        <Link
+                          to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
+                          className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
                         >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
+                            <img
+                              src="/src/assets/Vector.svg"
+                              alt=""
+                              className="h-4 w-4"
+                            />
+                          </span>
+                          {item.title}
+                        </Link>
+                      )}
+                      {item.isGenerating ? (
+                        <div className="flex h-9 w-9 items-center justify-center">
+                          <svg
+                            className="h-5 w-5 animate-spin text-[#1E73F7]"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            />
+                          </svg>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeleteTarget({
+                              id: item.id,
+                              title: item.title,
+                              type: "conspect",
+                            })
+                          }
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
+                          title="Видалити"
+                        >
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
                             stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M3 6h18" />
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    {!item.isGenerating && (
+                      <div className="mt-3 pl-9">
+                        <TargetAudienceIndicator
+                          assignmentScope={item.assignmentScope}
+                          assignedLevels={item.assignedLevels}
+                          assignedStudents={item.assignedStudents}
+                          studentCount={classStudents.length}
+                          compact
+                        />
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "conspect" })}
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
-                        title="Видалити"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 6h18" />
-                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                        </svg>
-                      </button>
                     )}
                   </Card>
                 ))}
@@ -364,67 +455,105 @@ const TeacherTopic = () => {
               />
             </section>
             <section className="overflow-visible">
-              <h2 className="text-lg font-semibold text-white lg:text-xl">Тести</h2>
+              <h2 className="text-lg font-semibold text-white lg:text-xl">
+                Тести
+              </h2>
               <div className="mt-4 space-y-4 overflow-visible">
                 {tests.map((item) => (
                   <Card
                     key={item.id}
-                    className={`flex items-center justify-between px-5 py-4 transition-all duration-300 ease-in-out ${
+                    className={`px-5 py-4 transition-all duration-300 ease-in-out ${
                       item.isGenerating
                         ? "opacity-70"
                         : "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]"
                     }`}
                   >
-                    {item.isGenerating ? (
-                      <div className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-500">
-                        <img src="/src/assets/Group.svg" alt="" className="h-6 w-6 transition-transform duration-300" />
-                        {item.title}
-                      </div>
-                    ) : (
-                      <Link
-                        to={`/teacher/${id}/test/${item.id}`}
-                        className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
-                      >
-                        <img src="/src/assets/Group.svg" alt="" className="h-6 w-6 transition-transform duration-300" />
-                        {item.title}
-                      </Link>
-                    )}
-                    {item.isGenerating ? (
-                      <div className="flex h-9 w-9 items-center justify-center">
-                        <svg
-                          className="h-5 w-5 animate-spin text-[#1E73F7]"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
+                    <div className="flex items-center justify-between">
+                      {item.isGenerating ? (
+                        <div className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-500">
+                          <img
+                            src="/src/assets/Group.svg"
+                            alt=""
+                            className="h-6 w-6 transition-transform duration-300"
+                          />
+                          {item.title}
+                        </div>
+                      ) : (
+                        <Link
+                          to={`/teacher/${id}/test/${item.id}`}
+                          className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
                         >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
+                          <img
+                            src="/src/assets/Group.svg"
+                            alt=""
+                            className="h-6 w-6 transition-transform duration-300"
+                          />
+                          {item.title}
+                        </Link>
+                      )}
+                      {item.isGenerating ? (
+                        <div className="flex h-9 w-9 items-center justify-center">
+                          <svg
+                            className="h-5 w-5 animate-spin text-[#1E73F7]"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            />
+                          </svg>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeleteTarget({
+                              id: item.id,
+                              title: item.title,
+                              type: "test",
+                            })
+                          }
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
+                          title="Видалити"
+                        >
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
                             stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M3 6h18" />
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    {!item.isGenerating && (
+                      <div className="mt-3 pl-9">
+                        <TargetAudienceIndicator
+                          assignmentScope={item.assignmentScope}
+                          assignedLevels={item.assignedLevels}
+                          assignedStudents={item.assignedStudents}
+                          studentCount={classStudents.length}
+                          compact
+                        />
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget({ id: item.id, title: item.title, type: "test" })}
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
-                        title="Видалити"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 6h18" />
-                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                        </svg>
-                      </button>
                     )}
                   </Card>
                 ))}

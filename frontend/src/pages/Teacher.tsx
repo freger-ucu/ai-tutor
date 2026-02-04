@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Modal from "../components/Modal";
@@ -30,8 +29,7 @@ const levelLabels: Record<string, string> = {
 
 const buildCourseId = (subject: string, grade: number) => {
   const slug =
-    subjectSlugMap[subject] ??
-    subject.toLowerCase().replace(/\s+/g, "-");
+    subjectSlugMap[subject] ?? subject.toLowerCase().replace(/\s+/g, "-");
   return `${slug}-${grade}`;
 };
 
@@ -55,12 +53,14 @@ const Teacher = () => {
     weak: true,
   });
   const [levelFilters, setLevelFilters] = useState(createDefaultFilters);
-  const [pendingLevelFilters, setPendingLevelFilters] = useState(createDefaultFilters);
+  const [pendingLevelFilters, setPendingLevelFilters] =
+    useState(createDefaultFilters);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement | null>(null);
 
   const viewParam = searchParams.get("view");
-  const activeView: "materials" | "students" = viewParam === "students" ? "students" : "materials";
+  const activeView: "materials" | "students" =
+    viewParam === "students" ? "students" : "materials";
 
   const setActiveView = (view: "materials" | "students") => {
     if (view === "students") {
@@ -154,13 +154,13 @@ const Teacher = () => {
   const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
   const currentClasses = classesByCourse[selectedCourseId] ?? [];
   const [selectedClassId, setSelectedClassId] = useState<number | null>(
-    currentClasses[0]?.id ?? null
+    currentClasses[0]?.id ?? null,
   );
   const selectedClassLabel =
     currentClasses.find((item) => item.id === selectedClassId)?.label ?? "";
-  const [topicsByClass, setTopicsByClass] = useState<
-    Record<string, string[]>
-  >({});
+  const [topicsByClass, setTopicsByClass] = useState<Record<string, string[]>>(
+    {},
+  );
   const currentTopics = topicsByClass[selectedClassLabel] ?? [];
   const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
   const [newTopic, setNewTopic] = useState("");
@@ -191,7 +191,7 @@ const Teacher = () => {
         acc[classKey].push(item.title);
         return acc;
       },
-      {}
+      {},
     );
     setTopicsByClass(nextTopicsByClass);
   }, [selectedCourseId, selectedClassId]);
@@ -205,7 +205,8 @@ const Teacher = () => {
       return;
     }
     const subject =
-      courseSubjectMap[selectedCourseId] ?? subjectFromCourseId(selectedCourseId);
+      courseSubjectMap[selectedCourseId] ??
+      subjectFromCourseId(selectedCourseId);
     setIsStudentsLoading(true);
     getTeacherStudents({
       class_id: selectedClassId,
@@ -222,7 +223,13 @@ const Teacher = () => {
       .finally(() => {
         setIsStudentsLoading(false);
       });
-  }, [activeView, apiTeacherId, selectedClassId, selectedCourseId, courseSubjectMap]);
+  }, [
+    activeView,
+    apiTeacherId,
+    selectedClassId,
+    selectedCourseId,
+    courseSubjectMap,
+  ]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -288,7 +295,8 @@ const Teacher = () => {
     }
 
     const subject =
-      courseSubjectMap[selectedCourseId] ?? subjectFromCourseId(selectedCourseId);
+      courseSubjectMap[selectedCourseId] ??
+      subjectFromCourseId(selectedCourseId);
     const created = addTopic({
       title: trimmedTopic,
       teacherId: id,
@@ -324,7 +332,7 @@ const Teacher = () => {
     const encodedClass = encodeURIComponent(String(selectedClassId));
     const encodedTopic = encodeURIComponent(topic);
     navigate(
-      `/teacher/${id}/topic/${encodedCourse}/${encodedClass}/${encodedTopic}`
+      `/teacher/${id}/topic/${encodedCourse}/${encodedClass}/${encodedTopic}`,
     );
   };
 
@@ -349,7 +357,8 @@ const Teacher = () => {
                 <div
                   className="h-10 w-10 overflow-hidden rounded-full bg-slate-200"
                   style={{
-                    backgroundImage: "url('https://i1.poltava.to/uploads/2017/09/2017-09-19/best.jpg')",
+                    backgroundImage:
+                      "url('https://i1.poltava.to/uploads/2017/09/2017-09-19/best.jpg')",
                     backgroundSize: "cover",
                     backgroundPosition: "center",
                   }}
@@ -405,13 +414,15 @@ const Teacher = () => {
                     <div className="space-y-6">
                       {courseGroups.length === 0 && (
                         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                          Немає доступних курсів. Перевірте ID вчителя або дані в
-                          бекенді.
+                          Немає доступних курсів. Перевірте ID вчителя або дані
+                          в бекенді.
                         </div>
                       )}
                       {courseGroups.map((group) => {
                         const gradeNumber = group.title.split(" ")[0];
-                        const subjectName = courseSubjectMap[group.courseId] ?? subjectFromCourseId(group.courseId);
+                        const subjectName =
+                          courseSubjectMap[group.courseId] ??
+                          subjectFromCourseId(group.courseId);
                         return (
                           <div key={group.key}>
                             <div className="text-sm font-semibold text-slate-700">
@@ -422,7 +433,9 @@ const Teacher = () => {
                                 <button
                                   key={item.id}
                                   type="button"
-                                  onClick={() => handleCourseSelect(group.courseId, item.id)}
+                                  onClick={() =>
+                                    handleCourseSelect(group.courseId, item.id)
+                                  }
                                   className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
                                     selectedCourseId === group.courseId &&
                                     selectedClassId === item.id
@@ -444,7 +457,9 @@ const Teacher = () => {
                   </Panel>
                   <Panel>
                     <div className="flex items-center gap-3">
-                      <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">Теми</h2>
+                      <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">
+                        Теми
+                      </h2>
                       <button
                         type="button"
                         onClick={() => setIsTopicModalOpen(true)}
@@ -493,13 +508,15 @@ const Teacher = () => {
                     <div className="mt-6 flex-1 min-h-0 overflow-y-auto space-y-6 pr-1 scroll-smooth">
                       {courseGroups.length === 0 && (
                         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                          Немає доступних курсів. Перевірте ID вчителя або дані в
-                          бекенді.
+                          Немає доступних курсів. Перевірте ID вчителя або дані
+                          в бекенді.
                         </div>
                       )}
                       {courseGroups.map((group) => {
                         const gradeNumber = group.title.split(" ")[0];
-                        const subjectName = courseSubjectMap[group.courseId] ?? subjectFromCourseId(group.courseId);
+                        const subjectName =
+                          courseSubjectMap[group.courseId] ??
+                          subjectFromCourseId(group.courseId);
                         return (
                           <div key={group.key}>
                             <div className="text-sm font-semibold text-slate-700">
@@ -510,7 +527,9 @@ const Teacher = () => {
                                 <button
                                   key={item.id}
                                   type="button"
-                                  onClick={() => handleCourseSelect(group.courseId, item.id)}
+                                  onClick={() =>
+                                    handleCourseSelect(group.courseId, item.id)
+                                  }
                                   className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
                                     selectedCourseId === group.courseId &&
                                     selectedClassId === item.id
@@ -534,7 +553,10 @@ const Teacher = () => {
                     className="flex h-full flex-col overflow-hidden"
                     contentClassName="flex flex-col flex-1 min-h-0"
                   >
-                    <div className="flex items-center justify-between shrink-0" ref={filterRef}>
+                    <div
+                      className="flex items-center justify-between shrink-0"
+                      ref={filterRef}
+                    >
                       <h2 className="text-xl font-semibold text-slate-900">
                         Учні класу
                       </h2>
@@ -624,19 +646,24 @@ const Teacher = () => {
                               if (!id || !selectedCourseId) {
                                 return;
                               }
-                              const encodedCourse = encodeURIComponent(selectedCourseId);
+                              const encodedCourse =
+                                encodeURIComponent(selectedCourseId);
                               const encodedClass = encodeURIComponent(
-                                String(selectedClassId)
+                                String(selectedClassId),
                               );
                               navigate(
-                                `/teacher/${id}/class/${encodedCourse}/${encodedClass}/student/${student.student_id}`
+                                `/teacher/${id}/class/${encodedCourse}/${encodedClass}/student/${student.student_id}`,
                               );
                             }}
                             className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50 cursor-pointer"
                           >
                             <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E9F1FF] text-sm font-semibold text-[#1E73F7]">
-                                {student.student_id}
+                              <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-200">
+                                <img
+                                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${student.student_id}`}
+                                  alt={`Учень ${student.student_id}`}
+                                  className="h-full w-full object-cover"
+                                />
                               </div>
                               <span>Учень {student.student_id}</span>
                             </div>
@@ -679,9 +706,9 @@ const Teacher = () => {
             value={newTopic}
             onChange={(event) => setNewTopic(event.target.value)}
             onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                    handleAddTopic();
-                }
+              if (e.key === "Enter") {
+                handleAddTopic();
+              }
             }}
             placeholder="Введіть тему"
             className="w-full rounded-full bg-[#E9F1FF] px-8 py-5 text-lg font-medium text-slate-700 placeholder-slate-500 outline-none transition focus:bg-white focus:ring-2 focus:ring-[#BFD6FF]"
