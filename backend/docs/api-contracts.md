@@ -630,8 +630,7 @@ Generates feedback after completing a test using LangGraph flow. Output is conci
   "status": "ready",
   "checks": {
     "data_files": true,
-    "llm_config": true,
-    "redis": true
+    "llm_config": true
   }
 }
 ```
@@ -642,8 +641,7 @@ Generates feedback after completing a test using LangGraph flow. Output is conci
   "status": "not_ready",
   "checks": {
     "data_files": true,
-    "llm_config": false,
-    "redis": true
+    "llm_config": false
   }
 }
 ```

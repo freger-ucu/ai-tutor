@@ -5,6 +5,7 @@ interface TestNavigationProps {
   onQuestionSelect: (index: number) => void;
   showResult?: boolean;
   resultMap?: Map<number, "correct" | "incorrect" | "partial">;
+  viewMode?: "teacher" | "student";
 }
 
 const TestNavigation = ({
@@ -14,12 +15,14 @@ const TestNavigation = ({
   onQuestionSelect,
   showResult = false,
   resultMap,
+  viewMode = "student",
 }: TestNavigationProps) => {
   return (
     <div className="flex gap-1.5 items-center overflow-x-auto overflow-y-visible flex-nowrap p-1">
       {Array.from({ length: totalQuestions }, (_, index) => {
         const isCurrent = index === currentQuestionIndex;
-        const isAnswered = answeredQuestions.has(index);
+        // For teacher view, treat all questions as answered to match student view styling
+        const isAnswered = viewMode === "teacher" || answeredQuestions.has(index);
         const result = showResult ? resultMap?.get(index) : undefined;
         const resultClass =
           result === "correct"
@@ -35,6 +38,11 @@ const TestNavigation = ({
           ? "border border-dashed border-white/50 bg-transparent text-white/80"
           : "";
 
+        // For teacher view non-current buttons - blue with dashed white border
+        const teacherNonCurrentClass = viewMode === "teacher" && !isCurrent
+          ? "bg-[#1E73F7] text-white border border-dashed border-white/50 hover:bg-[#1557c0] hover:scale-105"
+          : "";
+
         return (
           <button
             key={index}
@@ -45,9 +53,11 @@ const TestNavigation = ({
                 ? `${resultClass} ${isCurrent ? "scale-110 ring-2 ring-white shadow-lg z-10" : ""}`
                 : isCurrent
                   ? "bg-white text-[#1E73F7] scale-110 ring-2 ring-white shadow-lg z-10"
-                  : isAnswered
-                    ? "bg-white/90 text-[#1E73F7] hover:bg-white hover:scale-105"
-                    : unansweredClass || "bg-white/40 text-white hover:bg-white/60 hover:scale-105"
+                  : teacherNonCurrentClass
+                    ? teacherNonCurrentClass
+                    : isAnswered
+                      ? "bg-white text-[#1E73F7] hover:bg-slate-100 hover:scale-105"
+                      : unansweredClass || "bg-white/40 text-white hover:bg-white/60 hover:scale-105"
             }`}
           >
             {index + 1}

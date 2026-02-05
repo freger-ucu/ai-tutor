@@ -1,10 +1,18 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from "react";
 import { addMaterial } from "../data/materialsStorage";
 import {
   generateNotesByLevel,
   generateNotesIndividual,
   generateTest,
 } from "../api/teacher";
+import { buildFallbackNotes, buildFallbackTest } from "../data/fallbackContent";
 
 interface GeneratingItem {
   tempId: string;
@@ -61,8 +69,14 @@ interface GenerationContextType {
     } | null;
   }) => void;
   clearCompletedItem: (tempId: string) => void;
-  getGeneratingItemsForTopic: (courseId: string, topicName: string) => GeneratingItem[];
-  getCompletedItemsForTopic: (courseId: string, topicName: string) => CompletedItem[];
+  getGeneratingItemsForTopic: (
+    courseId: string,
+    topicName: string,
+  ) => GeneratingItem[];
+  getCompletedItemsForTopic: (
+    courseId: string,
+    topicName: string,
+  ) => CompletedItem[];
 }
 
 const GenerationContext = createContext<GenerationContextType | null>(null);
@@ -73,30 +87,6 @@ export const useGeneration = () => {
     throw new Error("useGeneration must be used within GenerationProvider");
   }
   return context;
-};
-
-const buildFallbackTest = (topicDefinition: string, topicName: string) => {
-  const fallbackTitle = topicDefinition.trim() || topicName || "Тест";
-  return {
-    title: `Тест. ${fallbackTitle}`,
-    questions: [
-      {
-        question: `Запитання за темою: ${fallbackTitle}`,
-        type: "single_choice",
-        difficulty: "easy",
-        answer_options: [
-          { answer: "Правильна відповідь", correct: true },
-          { answer: "Варіант 2", correct: false },
-          { answer: "Варіант 3", correct: false },
-          { answer: "Варіант 4", correct: false },
-        ],
-        explanation:
-          "Це демо-запитання. Додайте серверну генерацію для реальних тестів.",
-        topic: fallbackTitle,
-        subtopics: [],
-      },
-    ],
-  };
 };
 
 export const GenerationProvider = ({ children }: { children: ReactNode }) => {
@@ -143,23 +133,35 @@ export const GenerationProvider = ({ children }: { children: ReactNode }) => {
         },
       ]);
 
-      try {
-        const hasLevels =
-          params.audienceSelection?.levels &&
-          params.audienceSelection.levels.length > 0;
-        const hasStudents =
-          params.audienceSelection?.students &&
-          params.audienceSelection.students.length > 0;
+      const hasLevels =
+        params.audienceSelection?.levels &&
+        params.audienceSelection.levels.length > 0;
+      const hasStudents =
+        params.audienceSelection?.students &&
+        params.audienceSelection.students.length > 0;
 
+      let assignmentScope: "class" | "levels" | "students";
+      let assignedLevels: ("weak" | "medium" | "strong")[] | undefined;
+      let assignedStudents: number[] | undefined;
+
+      if (hasLevels) {
+        assignmentScope = "levels";
+        assignedLevels = params.audienceSelection!.levels;
+        assignedStudents = undefined;
+      } else if (hasStudents) {
+        assignmentScope = "students";
+        assignedLevels = undefined;
+        assignedStudents = params.audienceSelection!.students;
+      } else {
+        assignmentScope = "class";
+        assignedLevels = undefined;
+        assignedStudents = undefined;
+      }
+
+      try {
         let response;
-        let assignmentScope: "class" | "levels" | "students";
-        let assignedLevels: ("weak" | "medium" | "strong")[] | undefined;
-        let assignedStudents: number[] | undefined;
 
         if (hasLevels) {
-          assignmentScope = "levels";
-          assignedLevels = params.audienceSelection!.levels;
-          assignedStudents = undefined;
           response = await generateNotesByLevel({
             class_id: params.apiClassId,
             teacher_id: params.apiTeacherId,
@@ -168,9 +170,6 @@ export const GenerationProvider = ({ children }: { children: ReactNode }) => {
             topic_definition: params.topicDefinition,
           });
         } else if (hasStudents) {
-          assignmentScope = "students";
-          assignedLevels = undefined;
-          assignedStudents = params.audienceSelection!.students;
           response = await generateNotesIndividual({
             class_id: params.apiClassId,
             teacher_id: params.apiTeacherId,
@@ -179,9 +178,6 @@ export const GenerationProvider = ({ children }: { children: ReactNode }) => {
             topic_definition: params.topicDefinition,
           });
         } else {
-          assignmentScope = "class";
-          assignedLevels = undefined;
-          assignedStudents = undefined;
           response = await generateNotesByLevel({
             class_id: params.apiClassId,
             teacher_id: params.apiTeacherId,
@@ -214,7 +210,7 @@ export const GenerationProvider = ({ children }: { children: ReactNode }) => {
 
         // Move from generating to completed
         setGeneratingItems((prev) =>
-          prev.filter((item) => item.tempId !== params.tempId)
+          prev.filter((item) => item.tempId !== params.tempId),
         );
         setCompletedItems((prev) => [
           ...prev,
@@ -229,15 +225,55 @@ export const GenerationProvider = ({ children }: { children: ReactNode }) => {
         ]);
       } catch (error) {
         console.error("Note generation failed:", error);
-        // Remove from generating on error
-        setGeneratingItems((prev) =>
-          prev.filter((item) => item.tempId !== params.tempId)
-        );
+        // On error, use fallback content to continue UI testing
+        try {
+          const fallback = buildFallbackNotes(
+            params.topicDefinition,
+            params.topicName,
+          );
+          const created = addMaterial({
+            type: "note",
+            title: fallback.title,
+            content: fallback.contents,
+            teacherNotes: fallback.teacher_notes,
+            sources: fallback.sources,
+            teacherId: params.teacherId,
+            courseId: params.courseId,
+            subject: params.subjectName,
+            classId: params.apiClassId || undefined,
+            className: params.classLabel,
+            topicName: params.topicName,
+            assignmentScope,
+            assignedLevels,
+            assignedStudents,
+          });
+
+          setGeneratingItems((prev) =>
+            prev.filter((item) => item.tempId !== params.tempId),
+          );
+          setCompletedItems((prev) => [
+            ...prev,
+            {
+              tempId: params.tempId,
+              realId: created.id,
+              title: created.title,
+              type: "note",
+              courseId: params.courseId,
+              topicName: params.topicName,
+            },
+          ]);
+        } catch (fallbackError) {
+          // Complete failure - log and remove from generating
+          console.error("Fallback note creation also failed:", fallbackError);
+          setGeneratingItems((prev) =>
+            prev.filter((item) => item.tempId !== params.tempId),
+          );
+        }
       } finally {
         activeGenerations.current.delete(params.tempId);
       }
     },
-    []
+    [],
   );
 
   const startTestGeneration = useCallback(
@@ -333,7 +369,7 @@ export const GenerationProvider = ({ children }: { children: ReactNode }) => {
 
         // Move from generating to completed
         setGeneratingItems((prev) =>
-          prev.filter((item) => item.tempId !== params.tempId)
+          prev.filter((item) => item.tempId !== params.tempId),
         );
         setCompletedItems((prev) => [
           ...prev,
@@ -352,7 +388,7 @@ export const GenerationProvider = ({ children }: { children: ReactNode }) => {
         try {
           const fallback = buildFallbackTest(
             params.topicDefinition,
-            params.topicName
+            params.topicName,
           );
           const created = addMaterial({
             type: "test",
@@ -370,7 +406,7 @@ export const GenerationProvider = ({ children }: { children: ReactNode }) => {
           });
 
           setGeneratingItems((prev) =>
-            prev.filter((item) => item.tempId !== params.tempId)
+            prev.filter((item) => item.tempId !== params.tempId),
           );
           setCompletedItems((prev) => [
             ...prev,
@@ -383,17 +419,18 @@ export const GenerationProvider = ({ children }: { children: ReactNode }) => {
               topicName: params.topicName,
             },
           ]);
-        } catch {
-          // Complete failure - just remove from generating
+        } catch (fallbackError) {
+          // Complete failure - log and remove from generating
+          console.error("Fallback test creation also failed:", fallbackError);
           setGeneratingItems((prev) =>
-            prev.filter((item) => item.tempId !== params.tempId)
+            prev.filter((item) => item.tempId !== params.tempId),
           );
         }
       } finally {
         activeGenerations.current.delete(params.tempId);
       }
     },
-    []
+    [],
   );
 
   const clearCompletedItem = useCallback((tempId: string) => {
@@ -403,19 +440,19 @@ export const GenerationProvider = ({ children }: { children: ReactNode }) => {
   const getGeneratingItemsForTopic = useCallback(
     (courseId: string, topicName: string) => {
       return generatingItems.filter(
-        (item) => item.courseId === courseId && item.topicName === topicName
+        (item) => item.courseId === courseId && item.topicName === topicName,
       );
     },
-    [generatingItems]
+    [generatingItems],
   );
 
   const getCompletedItemsForTopic = useCallback(
     (courseId: string, topicName: string) => {
       return completedItems.filter(
-        (item) => item.courseId === courseId && item.topicName === topicName
+        (item) => item.courseId === courseId && item.topicName === topicName,
       );
     },
-    [completedItems]
+    [completedItems],
   );
 
   return (

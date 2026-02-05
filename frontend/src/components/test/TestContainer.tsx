@@ -136,19 +136,30 @@ const TestContainer = ({
     setCurrentQuestionIndex(0);
   }, [testData.id]);
 
-  // Handle Enter key navigation between questions
+  // Handle keyboard navigation between questions (Enter, Arrow keys)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't navigate if user is typing in a textarea or input
+      const activeElement = document.activeElement;
+      if (activeElement?.tagName === "TEXTAREA" || activeElement?.tagName === "INPUT") {
+        return;
+      }
+
       if (e.key === "Enter" && !e.shiftKey) {
-        // Don't navigate if user is typing in a textarea
-        const activeElement = document.activeElement;
-        if (activeElement?.tagName === "TEXTAREA") {
-          return;
-        }
         e.preventDefault();
         // Navigate to next question
         if (currentQuestionIndex < testData.questions.length - 1) {
           setCurrentQuestionIndex(currentQuestionIndex + 1);
+        }
+      } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        if (currentQuestionIndex < testData.questions.length - 1) {
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+        }
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (currentQuestionIndex > 0) {
+          setCurrentQuestionIndex(currentQuestionIndex - 1);
         }
       }
     };
@@ -325,8 +336,8 @@ const TestContainer = ({
         <h1 className="text-xl font-bold text-white mb-2">{testData.title}</h1>
       )}
 
-      {/* Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3 overflow-visible">
+      {/* Navigation with prev/next buttons */}
+      <div className="flex items-center justify-between gap-3 mb-3 overflow-visible">
         <TestNavigation
           totalQuestions={testData.questions.length}
           currentQuestionIndex={currentQuestionIndex}
@@ -334,28 +345,66 @@ const TestContainer = ({
           onQuestionSelect={handleQuestionSelect}
           showResult={viewMode === "student" && isFinished}
           resultMap={resultMap}
+          viewMode={viewMode}
         />
-        {viewMode === "student" && !isFinished && (
-          <button
-            type="button"
-            onClick={handleFinish}
-            disabled={isSubmitting}
-            className={`w-full rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all lg:w-[220px] ${
-              isSubmitting
-                ? "cursor-not-allowed bg-[#E63C3C]/60"
-                : "cursor-pointer bg-[#E63C3C] hover:-translate-y-0.5 hover:shadow-lg"
-            }`}
-          >
-            {isSubmitting ? "Перевіряємо..." : "Завершити тест"}
-          </button>
-        )}
-        {viewMode === "student" && isFinished && (
-          <div className="w-full rounded-xl bg-[#6FDB9B] px-4 py-2 text-center text-xs font-semibold text-white lg:w-[220px]">
-            {totalQuestions > 0
-              ? `${Math.round((correctAnswersCount / totalQuestions) * 100)}% правильних відповідей`
-              : "0% правильних відповідей"}
+        <div className="flex flex-col items-stretch gap-2 md:w-72 shrink-0">
+          {viewMode === "student" && isFinished && (() => {
+            const percent = totalQuestions > 0
+              ? Math.round((correctAnswersCount / totalQuestions) * 100)
+              : 0;
+            // Color gradient: red (0%) -> yellow (50%) -> green (100%)
+            const getBgColor = (p: number) => {
+              if (p <= 50) {
+                // Red to Yellow: interpolate between #E63C3C and #F5A623
+                const ratio = p / 50;
+                const r = Math.round(230 + (245 - 230) * ratio);
+                const g = Math.round(60 + (166 - 60) * ratio);
+                const b = Math.round(60 + (35 - 60) * ratio);
+                return `rgb(${r}, ${g}, ${b})`;
+              }
+              // Yellow to Green: interpolate between #F5A623 and #6FDB9B
+              const ratio = (p - 50) / 50;
+              const r = Math.round(245 + (111 - 245) * ratio);
+              const g = Math.round(166 + (219 - 166) * ratio);
+              const b = Math.round(35 + (155 - 35) * ratio);
+              return `rgb(${r}, ${g}, ${b})`;
+            };
+            return (
+              <div
+                className="rounded-full px-4 py-1.5 text-center text-sm font-semibold text-white"
+                style={{ backgroundColor: getBgColor(percent) }}
+              >
+                {percent}% правильних
+              </div>
+            );
+          })()}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
+              disabled={currentQuestionIndex === 0}
+              className={`flex-1 rounded-full px-4 py-1.5 text-sm font-semibold transition-all ${
+                currentQuestionIndex === 0
+                  ? "cursor-not-allowed bg-white/40 text-white/60"
+                  : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
+              }`}
+            >
+              ← Попереднє
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
+              disabled={currentQuestionIndex >= testData.questions.length - 1}
+              className={`flex-1 rounded-full px-4 py-1.5 text-sm font-semibold transition-all ${
+                currentQuestionIndex >= testData.questions.length - 1
+                  ? "cursor-not-allowed bg-white/40 text-white/60"
+                  : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
+              }`}
+            >
+              Наступне →
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Question card with feedback on the side - flex to fill available space */}
@@ -374,34 +423,6 @@ const TestContainer = ({
               viewMode={viewMode}
               showExplanation={viewMode === "teacher" || (viewMode === "student" && isFinished)}
             />
-          </div>
-
-          {/* Navigation buttons - attached to bottom of question card */}
-          <div className="flex items-center justify-between pt-3 shrink-0">
-            <button
-              type="button"
-              onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
-              disabled={currentQuestionIndex === 0}
-              className={`rounded-full px-3 py-1.5 md:px-4 text-xs font-semibold transition-all duration-300 ease-in-out ${
-                currentQuestionIndex === 0
-                  ? "cursor-not-allowed bg-white/60 text-slate-300"
-                  : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
-              }`}
-            >
-              ← Попереднє
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
-              disabled={currentQuestionIndex >= testData.questions.length - 1}
-              className={`rounded-full px-3 py-1.5 md:px-4 text-xs font-semibold transition-all duration-300 ease-in-out ${
-                currentQuestionIndex >= testData.questions.length - 1
-                  ? "cursor-not-allowed bg-white/60 text-slate-300"
-                  : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
-              }`}
-            >
-              Наступне →
-            </button>
           </div>
 
           {/* Mobile: Feedback below question card */}
@@ -423,6 +444,22 @@ const TestContainer = ({
       {/* Statistics card (if enabled) */}
       {showStatistics && statistics && (
         <TestStatisticsCard statistics={statistics} />
+      )}
+
+      {/* Fixed finish button at bottom right */}
+      {viewMode === "student" && !isFinished && (
+        <button
+          type="button"
+          onClick={handleFinish}
+          disabled={isSubmitting}
+          className={`fixed bottom-6 right-6 z-50 rounded-full border bg-white px-6 py-3 text-sm font-semibold transition ${
+            isSubmitting
+              ? "cursor-not-allowed border-white/60 text-slate-400"
+              : "cursor-pointer border-white text-[#1E73F7] hover:bg-rose-500 hover:border-rose-500 hover:text-white"
+          }`}
+        >
+          {isSubmitting ? "Перевіряємо..." : "Завершити тест"}
+        </button>
       )}
     </div>
   );

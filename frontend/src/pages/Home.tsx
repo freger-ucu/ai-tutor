@@ -108,7 +108,7 @@ const Home = () => {
                   <button
                     type="button"
                     onClick={() => handleTeacherSelect(option.id)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1E73F7] hover:text-slate-900"
+                    className="w-full rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1557c0] hover:bg-[#E9F1FF]"
                   >
                     {option.label}
                   </button>
@@ -122,7 +122,7 @@ const Home = () => {
           <button
             type="button"
             onClick={handleTeacherSubmit}
-            className="w-full rounded-xl bg-[#1E73F7] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1A63D6]"
+            className="w-full rounded-full border border-[#1E73F7] bg-[#1E73F7] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
           >
             Продовжити
           </button>
@@ -177,7 +177,7 @@ const Home = () => {
                   <button
                     type="button"
                     onClick={() => handleStudentSelect(option.id)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1E73F7] hover:text-slate-900"
+                    className="w-full rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1557c0] hover:bg-[#E9F1FF]"
                   >
                     {option.label}
                   </button>
@@ -191,7 +191,7 @@ const Home = () => {
           <button
             type="button"
             onClick={handleStudentSubmit}
-            className="w-full rounded-xl bg-[#1E73F7] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1A63D6]"
+            className="w-full rounded-full border border-[#1E73F7] bg-[#1E73F7] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
           >
             Продовжити
           </button>

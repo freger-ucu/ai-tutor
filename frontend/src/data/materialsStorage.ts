@@ -255,6 +255,34 @@ export const addTopic = (input: Omit<TopicItem, "id" | "createdAt">) => {
   return nextItem;
 };
 
+export const deleteTopic = (topicId: string): boolean => {
+  const topics = readTopics();
+  const topicIndex = topics.findIndex((item) => item.id === topicId);
+  if (topicIndex === -1) {
+    return false;
+  }
+
+  const topic = topics[topicIndex];
+
+  // Delete all materials (notes and tests) associated with this topic
+  const materials = readMaterials();
+  const filteredMaterials = materials.filter((material) => {
+    // Match materials by topicName, courseId, and className
+    const matchesTopic = material.topicName === topic.title;
+    const matchesCourse = material.courseId === topic.courseId;
+    const matchesClass = material.className === topic.className;
+
+    // Keep materials that don't match this topic
+    return !(matchesTopic && matchesCourse && matchesClass);
+  });
+  writeMaterials(filteredMaterials);
+
+  // Delete the topic itself
+  topics.splice(topicIndex, 1);
+  writeTopics(topics);
+  return true;
+};
+
 /**
  * Check if a student should see a material based on assignment scope.
  * Implements strict visibility rules:

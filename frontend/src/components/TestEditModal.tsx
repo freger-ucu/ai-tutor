@@ -192,15 +192,15 @@ const TestEditModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-100">
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#1E73F7]">
       {/* Header */}
-      <header className="shrink-0 bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
+      <header className="shrink-0 px-6 py-4">
         <div className="flex items-center justify-between max-w-6xl mx-auto">
           <div className="flex items-center gap-4">
             <button
               type="button"
               onClick={handleClose}
-              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+              className="rounded-lg p-2 text-white/70 hover:bg-white/10 hover:text-white"
               title="Закрити"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -208,31 +208,21 @@ const TestEditModal = ({
               </svg>
             </button>
             <div>
-              <h1 className="text-xl font-bold text-slate-900">
+              <h1 className="text-xl font-bold text-white">
                 Редагування тесту
               </h1>
-              <p className="text-sm text-slate-500">{testTitle}</p>
+              <p className="text-sm text-white/70">{testTitle}</p>
             </div>
           </div>
 
           {/* Action buttons */}
           <div className="flex items-center gap-3">
-            {/* Reset button */}
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={!hasChanges || isSaving}
-              className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Скасувати
-            </button>
-
             {/* Save button */}
             <button
               type="button"
               onClick={handleSave}
               disabled={!hasChanges || isSaving}
-              className="rounded-xl bg-[#1E73F7] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#1557c0] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="rounded-full border border-white bg-white px-5 py-2.5 text-sm font-semibold text-[#1E73F7] transition hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isSaving ? (
                 <>
@@ -252,7 +242,7 @@ const TestEditModal = ({
         {/* Error message */}
         {saveError && (
           <div className="max-w-6xl mx-auto mt-3">
-            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">
+            <div className="rounded-lg bg-red-100 border border-red-300 px-4 py-2 text-sm text-red-800">
               {saveError}
             </div>
           </div>
@@ -263,14 +253,14 @@ const TestEditModal = ({
       <main className="flex-1 overflow-y-auto py-6">
         <div className="max-w-4xl mx-auto px-6 space-y-4">
           {draftQuestions.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
-              <div className="text-slate-400 mb-4">
+            <div className="rounded-[22px] border border-dashed border-white/30 bg-white/10 p-12 text-center">
+              <div className="text-white/50 mb-4">
                 <svg className="mx-auto h-12 w-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M9 12h6M12 9v6M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <p className="text-slate-600 font-medium">Тест не має питань</p>
-              <p className="text-slate-400 text-sm mt-1">Додайте перше питання</p>
+              <p className="text-white font-medium">Тест не має питань</p>
+              <p className="text-white/60 text-sm mt-1">Додайте перше питання</p>
             </div>
           ) : (
             draftQuestions.map((question, index) => (
@@ -291,7 +281,7 @@ const TestEditModal = ({
           <button
             type="button"
             onClick={addQuestion}
-            className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white py-4 text-slate-500 hover:border-[#1E73F7] hover:text-[#1E73F7] hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 font-medium"
+            className="w-full rounded-full border border-white/20 bg-white/10 px-4 py-4 text-sm font-semibold text-white transition hover:bg-white/20 flex items-center justify-center gap-2"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14M5 12h14" />
@@ -302,13 +292,13 @@ const TestEditModal = ({
       </main>
 
       {/* Footer with summary */}
-      <footer className="shrink-0 bg-white border-t border-slate-200 px-6 py-3">
-        <div className="max-w-6xl mx-auto flex items-center justify-between text-sm text-slate-500">
+      <footer className="shrink-0 px-6 py-3">
+        <div className="max-w-6xl mx-auto flex items-center justify-between text-sm text-white/70">
           <div>
-            Питань: <span className="font-semibold text-slate-700">{draftQuestions.length}</span>
+            Питань: <span className="font-semibold text-white">{draftQuestions.length}</span>
           </div>
           {hasChanges && (
-            <div className="flex items-center gap-2 text-amber-600">
+            <div className="flex items-center gap-2 text-amber-300">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
               </svg>
