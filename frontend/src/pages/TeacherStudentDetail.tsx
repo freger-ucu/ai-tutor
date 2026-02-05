@@ -35,7 +35,9 @@ const TeacherStudentDetail = () => {
   const [studentDetails, setStudentDetails] =
     useState<StudentDetailsResponse | null>(null);
   const [recommendation, setRecommendation] = useState("");
-  const [recommendationError, setRecommendationError] = useState<string | null>(null);
+  const [recommendationError, setRecommendationError] = useState<string | null>(
+    null,
+  );
   const [isRecommendationLoading, setIsRecommendationLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -67,7 +69,8 @@ const TeacherStudentDetail = () => {
     setFetchError(null);
 
     const recommendationKey = `${apiStudentId}-${subjectName}`;
-    const isNewRecommendation = recommendationKeyRef.current !== recommendationKey;
+    const isNewRecommendation =
+      recommendationKeyRef.current !== recommendationKey;
     recommendationKeyRef.current = recommendationKey;
     setIsRecommendationLoading(true);
     setRecommendationError(null);
@@ -148,7 +151,7 @@ const TeacherStudentDetail = () => {
               activeItem="students"
               onMaterialsClick={() => navigate(backToMaterialsHref)}
               onStudentsClick={() => navigate(backToStudentsHref)}
-          />
+            />
           </div>
           <main
             className="flex-1 px-4 py-6 flex items-center justify-center lg:px-8 lg:py-10"
@@ -171,7 +174,7 @@ const TeacherStudentDetail = () => {
               activeItem="students"
               onMaterialsClick={() => navigate(backToMaterialsHref)}
               onStudentsClick={() => navigate(backToStudentsHref)}
-          />
+            />
           </div>
           <main
             className="flex-1 px-4 py-6 flex items-center justify-center lg:px-8 lg:py-10"
@@ -187,35 +190,40 @@ const TeacherStudentDetail = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#1E73F7] text-slate-900">
-      <div className="flex min-h-screen">
-        <div className="hidden lg:flex">
-            <TeacherSidebar
+    <div className="min-h-screen lg:h-screen bg-[#1E73F7] text-slate-900 flex flex-col lg:flex-row">
+      <div className="hidden lg:flex">
+        <TeacherSidebar
           teacherName={id ? `Вчитель ${id}` : "Вчитель"}
           activeItem="students"
           onMaterialsClick={() => navigate(backToMaterialsHref)}
           onStudentsClick={() => navigate(backToStudentsHref)}
         />
+      </div>
+      <main
+        className="flex-1 px-4 py-6 flex flex-col overflow-y-auto lg:px-8 lg:py-10 lg:overflow-hidden lg:h-screen"
+        data-scroll-root="mobile"
+      >
+        {/* Breadcrumbs row - above the grid */}
+        <div className="flex items-center gap-4 mb-6 shrink-0">
+          <BackButton fallbackPath={backToClassHref} />
+          <div className="hidden lg:flex">
+            <Breadcrumbs
+              items={[
+                {
+                  label: subjectName || "Предмет",
+                  href: backToStudentsHref,
+                },
+                { label: classLabel || "Клас", href: backToClassHref },
+                { label: `Учень ${apiStudentId ?? studentId}` },
+              ]}
+            />
+          </div>
         </div>
-        <main
-          className="flex-1 px-4 py-6 overflow-y-auto lg:px-8 lg:py-10 lg:overflow-hidden"
-          data-scroll-root="mobile"
-        >
-          <div className="flex flex-col lg:h-[calc(100vh-5rem)]">
-            <div className="flex items-center gap-4 mb-6 shrink-0">
-              <BackButton fallbackPath={backToClassHref} />
-              <div className="hidden lg:flex">
-                <Breadcrumbs
-                  items={[
-                    { label: subjectName || "Предмет", href: backToStudentsHref },
-                    { label: classLabel || "Клас", href: backToClassHref },
-                    { label: `Учень ${apiStudentId ?? studentId}` },
-                  ]}
-                />
-              </div>
-            </div>
 
-            <div className="flex items-center gap-4 mb-8 shrink-0">
+        <div className="flex-1 min-h-0 grid lg:grid-cols-[0.8fr_1.2fr] gap-6">
+          {/* Left column: Student info, Recommendations */}
+          <div className="flex flex-col min-h-0">
+            <div className="flex items-center gap-4 mb-6 shrink-0">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-lg font-semibold text-[#1E73F7]">
                 {apiStudentId ?? studentId}
               </div>
@@ -223,9 +231,6 @@ const TeacherStudentDetail = () => {
                 <h1 className="text-2xl font-bold text-white lg:text-3xl">
                   Учень {apiStudentId ?? studentId}
                 </h1>
-                <p className="text-white/70 text-sm">
-                  {subjectName} — {classLabel}
-                </p>
               </div>
               <div className="relative ml-4 h-20 w-20">
                 <img
@@ -239,94 +244,103 @@ const TeacherStudentDetail = () => {
               </div>
             </div>
 
-            <div className="grid flex-1 min-h-0 gap-6 lg:grid-cols-2">
-              <div className="flex h-full flex-col overflow-visible lg:overflow-hidden rounded-[22px] bg-white p-6 text-slate-900 shadow-sm">
-                <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">Рекомендації</h2>
-                <div className="mt-4 flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto lg:pr-1 scroll-smooth">
+            {/* Recommendations */}
+            <div className="flex flex-1 min-h-0 flex-col rounded-[22px] bg-white p-5 text-slate-900 shadow-sm">
+              <h2 className="text-base font-semibold text-slate-900 lg:text-lg shrink-0">
+                Рекомендації
+              </h2>
+              <div className="mt-3 flex-1 min-h-0 overflow-y-auto pr-1 scroll-smooth">
                   {isRecommendationLoading ? (
                     <p className="text-sm text-slate-500">
                       Завантаження рекомендацій...
                     </p>
                   ) : recommendation ? (
-                    <MarkdownContent content={recommendation} className="text-sm text-slate-700" />
+                    <MarkdownContent
+                      content={recommendation}
+                      className="text-sm text-slate-700"
+                    />
                   ) : (
                     <p className="text-sm text-slate-600 leading-relaxed">
                       Рекомендації для цього учня ще не сформовані.
                     </p>
                   )}
                   {recommendationError && (
-                    <p className="mt-3 text-xs text-rose-500">
+                    <p className="mt-2 text-xs text-rose-500">
                       {recommendationError}
                     </p>
                   )}
                 </div>
               </div>
+            </div>
 
-              <div className="flex h-full flex-col overflow-visible lg:overflow-hidden rounded-[22px] bg-white p-6 text-slate-900 shadow-sm">
-                <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">Проблемні теми</h2>
-                <div className="mt-4 flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto lg:pr-1 scroll-smooth">
-                  <div className="space-y-6">
-                    <div>
-                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-                        <span className="h-2 w-2 rounded-full bg-rose-500" />
-                        Низькі оцінки
-                      </div>
-                      {studentDetails.problematic_topics.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                          Немає проблемних тем.
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {studentDetails.problematic_topics.map((topic, index) => (
-                            <div
-                              key={index}
-                              className="flex items-center justify-between rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm"
-                            >
-                              <span className="font-medium text-slate-800">
-                                {topic.topic}
-                              </span>
-                              <span className="text-sm font-semibold text-rose-600">
-                                {topic.average_score.toFixed(1)}/12
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+          {/* Right column: Problematic topics + Skipped lessons (full height) */}
+          <div className="flex flex-col gap-6 min-h-0">
+            {/* Problematic topics */}
+            <div className="flex flex-1 flex-col rounded-[22px] bg-white p-6 text-slate-900 shadow-sm min-h-0">
+              <h2 className="text-lg font-semibold text-slate-900 lg:text-xl shrink-0">
+                Проблемні теми
+              </h2>
+              <div className="mt-4 flex-1 min-h-0 overflow-y-auto pr-1 scroll-smooth">
+                  {studentDetails.problematic_topics.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                      Немає проблемних тем.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {studentDetails.problematic_topics.map(
+                        (topic, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm"
+                          >
+                            <span className="font-medium text-slate-800">
+                              {topic.topic}
+                            </span>
+                            <span className="text-sm font-semibold text-rose-600">
+                              {topic.average_score.toFixed(1)}/12
+                            </span>
+                          </div>
+                        ),
                       )}
                     </div>
-                    <div className="border-t border-slate-200 pt-4">
-                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-                        <span className="h-2 w-2 rounded-full bg-slate-400" />
-                        Пропущені теми
-                      </div>
-                      {studentDetails.skipped_lessons.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                          Немає пропущених тем.
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {studentDetails.skipped_lessons.map((lesson, index) => (
-                            <div
-                              key={index}
-                              className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
-                            >
-                              <span className="font-medium text-slate-800">
-                                {lesson.topic}
-                              </span>
-                              <span className="text-sm font-semibold text-slate-500">
-                                {formatDate(lesson.date)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  )}
                 </div>
+              </div>
+
+            {/* Skipped lessons */}
+            <div className="flex flex-1 flex-col rounded-[22px] bg-white p-6 text-slate-900 shadow-sm min-h-0">
+              <h2 className="text-lg font-semibold text-slate-900 lg:text-xl shrink-0">
+                Пропущені теми
+              </h2>
+              <div className="mt-4 flex-1 min-h-0 overflow-y-auto pr-1 scroll-smooth">
+                  {studentDetails.skipped_lessons.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                      Немає пропущених тем.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {studentDetails.skipped_lessons.map(
+                        (lesson, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
+                          >
+                            <span className="font-medium text-slate-800">
+                              {lesson.topic}
+                            </span>
+                            <span className="text-sm font-semibold text-slate-500">
+                              {formatDate(lesson.date)}
+                            </span>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  )}
               </div>
             </div>
           </div>
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 };

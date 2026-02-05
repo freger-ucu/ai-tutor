@@ -1,10 +1,9 @@
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Modal from "../components/Modal";
 import Panel from "../components/Panel";
 import TeacherSidebar from "../components/TeacherSidebar";
-import { addTopic, getTopics } from "../data/materialsStorage";
+import { addTopic, getTopics, deleteTopic } from "../data/materialsStorage";
 import { getTeacherData, getTeacherStudents } from "../api/teacher";
 import type { TeacherClassItem, TeacherStudentItem } from "../api/teacher";
 import { classIdToLabel } from "../data/classUtils";
@@ -25,13 +24,12 @@ const subjectLabelMap: Record<string, string> = {
 const levelLabels: Record<string, string> = {
   strong: "Високий",
   medium: "Середній",
-  weak: "Початковий",
+  weak: "Низький",
 };
 
 const buildCourseId = (subject: string, grade: number) => {
   const slug =
-    subjectSlugMap[subject] ??
-    subject.toLowerCase().replace(/\s+/g, "-");
+    subjectSlugMap[subject] ?? subject.toLowerCase().replace(/\s+/g, "-");
   return `${slug}-${grade}`;
 };
 
@@ -55,12 +53,14 @@ const Teacher = () => {
     weak: true,
   });
   const [levelFilters, setLevelFilters] = useState(createDefaultFilters);
-  const [pendingLevelFilters, setPendingLevelFilters] = useState(createDefaultFilters);
+  const [pendingLevelFilters, setPendingLevelFilters] =
+    useState(createDefaultFilters);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement | null>(null);
 
   const viewParam = searchParams.get("view");
-  const activeView: "materials" | "students" = viewParam === "students" ? "students" : "materials";
+  const activeView: "materials" | "students" =
+    viewParam === "students" ? "students" : "materials";
 
   const setActiveView = (view: "materials" | "students") => {
     if (view === "students") {
@@ -154,13 +154,13 @@ const Teacher = () => {
   const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId);
   const currentClasses = classesByCourse[selectedCourseId] ?? [];
   const [selectedClassId, setSelectedClassId] = useState<number | null>(
-    currentClasses[0]?.id ?? null
+    currentClasses[0]?.id ?? null,
   );
   const selectedClassLabel =
     currentClasses.find((item) => item.id === selectedClassId)?.label ?? "";
-  const [topicsByClass, setTopicsByClass] = useState<
-    Record<string, string[]>
-  >({});
+  const [topicsByClass, setTopicsByClass] = useState<Record<string, string[]>>(
+    {},
+  );
   const currentTopics = topicsByClass[selectedClassLabel] ?? [];
   const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
   const [newTopic, setNewTopic] = useState("");
@@ -191,7 +191,7 @@ const Teacher = () => {
         acc[classKey].push(item.title);
         return acc;
       },
-      {}
+      {},
     );
     setTopicsByClass(nextTopicsByClass);
   }, [selectedCourseId, selectedClassId]);
@@ -205,7 +205,8 @@ const Teacher = () => {
       return;
     }
     const subject =
-      courseSubjectMap[selectedCourseId] ?? subjectFromCourseId(selectedCourseId);
+      courseSubjectMap[selectedCourseId] ??
+      subjectFromCourseId(selectedCourseId);
     setIsStudentsLoading(true);
     getTeacherStudents({
       class_id: selectedClassId,
@@ -222,7 +223,13 @@ const Teacher = () => {
       .finally(() => {
         setIsStudentsLoading(false);
       });
-  }, [activeView, apiTeacherId, selectedClassId, selectedCourseId, courseSubjectMap]);
+  }, [
+    activeView,
+    apiTeacherId,
+    selectedClassId,
+    selectedCourseId,
+    courseSubjectMap,
+  ]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -267,7 +274,7 @@ const Teacher = () => {
         ? "Високий рівень"
         : single === "medium"
           ? "Середній рівень"
-          : "Початковий рівень";
+          : "Низький рівень";
     }
     return "Рівні не обрано";
   }, [levelFilters]);
@@ -288,7 +295,8 @@ const Teacher = () => {
     }
 
     const subject =
-      courseSubjectMap[selectedCourseId] ?? subjectFromCourseId(selectedCourseId);
+      courseSubjectMap[selectedCourseId] ??
+      subjectFromCourseId(selectedCourseId);
     const created = addTopic({
       title: trimmedTopic,
       teacherId: id,
@@ -324,7 +332,7 @@ const Teacher = () => {
     const encodedClass = encodeURIComponent(String(selectedClassId));
     const encodedTopic = encodeURIComponent(topic);
     navigate(
-      `/teacher/${id}/topic/${encodedCourse}/${encodedClass}/${encodedTopic}`
+      `/teacher/${id}/topic/${encodedCourse}/${encodedClass}/${encodedTopic}`,
     );
   };
 
@@ -349,7 +357,8 @@ const Teacher = () => {
                 <div
                   className="h-10 w-10 overflow-hidden rounded-full bg-slate-200"
                   style={{
-                    backgroundImage: "url('https://i1.poltava.to/uploads/2017/09/2017-09-19/best.jpg')",
+                    backgroundImage:
+                      "url('https://i1.poltava.to/uploads/2017/09/2017-09-19/best.jpg')",
                     backgroundSize: "cover",
                     backgroundPosition: "center",
                   }}
@@ -361,7 +370,7 @@ const Teacher = () => {
               <button
                 type="button"
                 onClick={() => navigate("/")}
-                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
+                className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-red-500 hover:border-red-500 hover:text-white"
               >
                 Вийти
               </button>
@@ -370,10 +379,10 @@ const Teacher = () => {
               <button
                 type="button"
                 onClick={() => setActiveView("materials")}
-                className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                className={`flex-1 rounded-full border px-4 py-2 text-sm font-semibold transition ${
                   activeView === "materials"
-                    ? "bg-[#1E73F7] text-white"
-                    : "bg-slate-100 text-slate-700"
+                    ? "border-[#1E73F7] bg-[#1E73F7] text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-[#1557c0] hover:bg-[#E9F1FF]"
                 }`}
               >
                 Матеріали
@@ -381,10 +390,10 @@ const Teacher = () => {
               <button
                 type="button"
                 onClick={() => setActiveView("students")}
-                className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                className={`flex-1 rounded-full border px-4 py-2 text-sm font-semibold transition ${
                   activeView === "students"
-                    ? "bg-[#1E73F7] text-white"
-                    : "bg-slate-100 text-slate-700"
+                    ? "border-[#1E73F7] bg-[#1E73F7] text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-[#1557c0] hover:bg-[#E9F1FF]"
                 }`}
               >
                 Учні
@@ -405,13 +414,15 @@ const Teacher = () => {
                     <div className="space-y-6">
                       {courseGroups.length === 0 && (
                         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                          Немає доступних курсів. Перевірте ID вчителя або дані в
-                          бекенді.
+                          Немає доступних курсів. Перевірте ID вчителя або дані
+                          в бекенді.
                         </div>
                       )}
                       {courseGroups.map((group) => {
                         const gradeNumber = group.title.split(" ")[0];
-                        const subjectName = courseSubjectMap[group.courseId] ?? subjectFromCourseId(group.courseId);
+                        const subjectName =
+                          courseSubjectMap[group.courseId] ??
+                          subjectFromCourseId(group.courseId);
                         return (
                           <div key={group.key}>
                             <div className="text-sm font-semibold text-slate-700">
@@ -422,7 +433,9 @@ const Teacher = () => {
                                 <button
                                   key={item.id}
                                   type="button"
-                                  onClick={() => handleCourseSelect(group.courseId, item.id)}
+                                  onClick={() =>
+                                    handleCourseSelect(group.courseId, item.id)
+                                  }
                                   className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
                                     selectedCourseId === group.courseId &&
                                     selectedClassId === item.id
@@ -444,34 +457,96 @@ const Teacher = () => {
                   </Panel>
                   <Panel>
                     <div className="flex items-center gap-3">
-                      <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">Теми</h2>
+                      <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">
+                        Теми
+                      </h2>
                       <button
                         type="button"
                         onClick={() => setIsTopicModalOpen(true)}
-                        className="ml-auto mr-1 rounded-full bg-[#1E73F7] px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#1A63D6] lg:hidden"
+                        className="ml-auto mr-1 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#1E73F7] transition hover:bg-[#E9F1FF] hover:border-[#1557c0] lg:hidden"
                       >
                         + Додати тему
                       </button>
                     </div>
                     <div className="mt-4 space-y-3 lg:mt-6">
-                      {currentTopics.map((topic) => (
-                        <button
-                          key={topic}
-                          type="button"
-                          onClick={() => handleTopicOpen(topic)}
-                          className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50 cursor-pointer"
-                        >
-                          <span>{topic}</span>
-                          <span className="text-lg text-slate-400">›</span>
-                        </button>
-                      ))}
+                      {currentTopics.map((topic) => {
+                        // Find the topic item to get its ID for deletion
+                        const storedTopics = getTopics({
+                          courseId: selectedCourseId,
+                          classId: selectedClassId ?? undefined,
+                        });
+                        const topicItem = storedTopics.find(
+                          (item) =>
+                            item.title === topic &&
+                            item.className === selectedClassLabel,
+                        );
+
+                        const handleDeleteTopic = (e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          if (!topicItem) return;
+
+                          const success = deleteTopic(topicItem.id);
+                          if (success) {
+                            // Refresh topics from localStorage
+                            const refreshedTopics = getTopics({
+                              courseId: selectedCourseId,
+                              classId: selectedClassId ?? undefined,
+                            });
+                            const nextTopicsByClass = refreshedTopics.reduce<
+                              Record<string, string[]>
+                            >((acc, item) => {
+                              const classKey = item.className ?? "";
+                              if (!classKey) return acc;
+                              if (!acc[classKey]) acc[classKey] = [];
+                              acc[classKey].push(item.title);
+                              return acc;
+                            }, {});
+                            setTopicsByClass(nextTopicsByClass);
+                          }
+                        };
+
+                        return (
+                          <button
+                            key={topic}
+                            type="button"
+                            onClick={() => handleTopicOpen(topic)}
+                            className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50 cursor-pointer"
+                          >
+                            <span>{topic}</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={handleDeleteTopic}
+                                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
+                                title="Видалити"
+                              >
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M3 6h18" />
+                                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                </svg>
+                              </button>
+                              <span className="text-lg text-slate-400">›</span>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </Panel>
                 </div>
                 <button
                   type="button"
                   disabled={!selectedClassId}
-                  className="absolute bottom-0 right-0 hidden items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#1E73F7] shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60 lg:flex"
+                  className="absolute bottom-0 right-0 hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-[#1E73F7] transition hover:bg-[#E9F1FF] hover:border-[#1557c0] disabled:cursor-not-allowed disabled:opacity-60 lg:flex"
                   onClick={() => setIsTopicModalOpen(true)}
                 >
                   <span className="text-lg">＋</span>
@@ -493,13 +568,15 @@ const Teacher = () => {
                     <div className="mt-6 flex-1 min-h-0 overflow-y-auto space-y-6 pr-1 scroll-smooth">
                       {courseGroups.length === 0 && (
                         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                          Немає доступних курсів. Перевірте ID вчителя або дані в
-                          бекенді.
+                          Немає доступних курсів. Перевірте ID вчителя або дані
+                          в бекенді.
                         </div>
                       )}
                       {courseGroups.map((group) => {
                         const gradeNumber = group.title.split(" ")[0];
-                        const subjectName = courseSubjectMap[group.courseId] ?? subjectFromCourseId(group.courseId);
+                        const subjectName =
+                          courseSubjectMap[group.courseId] ??
+                          subjectFromCourseId(group.courseId);
                         return (
                           <div key={group.key}>
                             <div className="text-sm font-semibold text-slate-700">
@@ -510,7 +587,9 @@ const Teacher = () => {
                                 <button
                                   key={item.id}
                                   type="button"
-                                  onClick={() => handleCourseSelect(group.courseId, item.id)}
+                                  onClick={() =>
+                                    handleCourseSelect(group.courseId, item.id)
+                                  }
                                   className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
                                     selectedCourseId === group.courseId &&
                                     selectedClassId === item.id
@@ -534,7 +613,10 @@ const Teacher = () => {
                     className="flex h-full flex-col overflow-hidden"
                     contentClassName="flex flex-col flex-1 min-h-0"
                   >
-                    <div className="flex items-center justify-between shrink-0" ref={filterRef}>
+                    <div
+                      className="flex items-center justify-between shrink-0"
+                      ref={filterRef}
+                    >
                       <h2 className="text-xl font-semibold text-slate-900">
                         Учні класу
                       </h2>
@@ -547,7 +629,7 @@ const Teacher = () => {
                             }
                             setIsFilterOpen((open) => !open);
                           }}
-                          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#1E73F7] hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#1557c0] hover:bg-[#E9F1FF]"
                         >
                           {filterButtonLabel}
                           <span className="text-slate-400">▾</span>
@@ -580,14 +662,14 @@ const Teacher = () => {
                                   onChange={() => toggleFilter("weak")}
                                   className="h-4 w-4 rounded border-slate-300 accent-blue-600 text-blue-600 focus:ring-blue-500"
                                 />
-                                Початковий рівень
+                                Низький рівень
                               </label>
                             </div>
                             <div className="mt-4 grid gap-2">
                               <button
                                 type="button"
                                 onClick={applyFilters}
-                                className="w-full rounded-xl bg-[#1E73F7] px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#1A63D6]"
+                                className="w-full rounded-full border border-[#1E73F7] bg-[#1E73F7] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
                               >
                                 Застосувати фільтр
                               </button>
@@ -624,19 +706,24 @@ const Teacher = () => {
                               if (!id || !selectedCourseId) {
                                 return;
                               }
-                              const encodedCourse = encodeURIComponent(selectedCourseId);
+                              const encodedCourse =
+                                encodeURIComponent(selectedCourseId);
                               const encodedClass = encodeURIComponent(
-                                String(selectedClassId)
+                                String(selectedClassId),
                               );
                               navigate(
-                                `/teacher/${id}/class/${encodedCourse}/${encodedClass}/student/${student.student_id}`
+                                `/teacher/${id}/class/${encodedCourse}/${encodedClass}/student/${student.student_id}`,
                               );
                             }}
                             className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50 cursor-pointer"
                           >
                             <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E9F1FF] text-sm font-semibold text-[#1E73F7]">
-                                {student.student_id}
+                              <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-200">
+                                <img
+                                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${student.student_id}`}
+                                  alt={`Учень ${student.student_id}`}
+                                  className="h-full w-full object-cover"
+                                />
                               </div>
                               <span>Учень {student.student_id}</span>
                             </div>
@@ -679,16 +766,16 @@ const Teacher = () => {
             value={newTopic}
             onChange={(event) => setNewTopic(event.target.value)}
             onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                    handleAddTopic();
-                }
+              if (e.key === "Enter") {
+                handleAddTopic();
+              }
             }}
             placeholder="Введіть тему"
             className="w-full rounded-full bg-[#E9F1FF] px-8 py-5 text-lg font-medium text-slate-700 placeholder-slate-500 outline-none transition focus:bg-white focus:ring-2 focus:ring-[#BFD6FF]"
           />
           <button
             type="button"
-            className="ml-auto rounded-full bg-[#1E73F7] px-8 py-4 text-lg font-semibold text-white shadow transition hover:-translate-y-0.5 hover:bg-[#1A63D6] hover:shadow-lg cursor-pointer"
+            className="ml-auto rounded-full border border-[#1E73F7] bg-[#1E73F7] px-8 py-4 text-lg font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0] cursor-pointer"
             onClick={handleAddTopic}
           >
             Додати

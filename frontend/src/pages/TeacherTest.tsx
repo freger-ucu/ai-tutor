@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import AudienceInfo from "../components/AudienceInfo";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
@@ -221,37 +222,55 @@ const TeacherTest = () => {
               />
             </div>
           </div>
-          <div className="flex items-center gap-4 shrink-0">
-            <h1 className="text-lg font-bold text-white lg:text-2xl">
-              {testData.title}
-            </h1>
+          <div className="flex items-center justify-between gap-4 shrink-0 lg:pr-4">
+            <div className="flex items-center gap-4">
+              <h1 className="text-xl font-bold text-white">
+                {testData.title}
+              </h1>
+              {/* Audience indicator */}
+              {storedTest && (
+                <button
+                  type="button"
+                  onClick={() => setIsAudienceModalOpen(true)}
+                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
+                >
+                  <AudienceInfo
+                    assignmentScope={storedTest.assignmentScope}
+                    assignedLevels={storedTest.assignedLevels}
+                    assignedStudents={storedTest.assignedStudents}
+                  />
+                </button>
+              )}
+            </div>
 
-            {/* Edit Test button - opens the editing modal */}
-            <button
-              type="button"
-              onClick={() => setIsEditModalOpen(true)}
-              className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-              <span className="hidden lg:inline">Редагувати тест</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Edit Test button - opens the editing modal */}
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(true)}
+                className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                <span className="hidden lg:inline">Редагувати тест</span>
+              </button>
 
-            {/* Delete button */}
-            <button
-              type="button"
-              onClick={() => setIsDeleteModalOpen(true)}
-              className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 hover:border-red-500"
-              aria-label="Видалити тест"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 6h18" />
-                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-              </svg>
-            </button>
+              {/* Delete button */}
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(true)}
+                className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 hover:border-red-500"
+                aria-label="Видалити тест"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18" />
+                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Test content - same layout as student view with custom scrollbar */}
@@ -270,8 +289,26 @@ const TeacherTest = () => {
         isOpen={isAudienceModalOpen}
         onClose={() => setIsAudienceModalOpen(false)}
         students={classStudents.map((studentId) => ({ id: studentId }))}
+        initialLevels={storedTest?.assignedLevels}
+        initialStudents={storedTest?.assignedStudents?.map(String)}
         onSave={(selection) => {
-            console.log("Saved selection", selection);
+            if (!testId) return;
+            // Determine assignment scope based on selection
+            const hasLevels = selection.levels.length > 0;
+            const hasStudents = selection.students.length > 0;
+            const assignmentScope = hasStudents ? "students" : hasLevels ? "levels" : "class";
+            const assignedLevels = hasLevels
+              ? (selection.levels as ("weak" | "medium" | "strong")[])
+              : undefined;
+            const assignedStudents = hasStudents
+              ? selection.students.map((s) => Number(s))
+              : undefined;
+            updateMaterial(testId, {
+              assignmentScope,
+              assignedLevels,
+              assignedStudents,
+            });
+            setRefreshKey((prev) => prev + 1);
             setIsAudienceModalOpen(false);
         }}
       />

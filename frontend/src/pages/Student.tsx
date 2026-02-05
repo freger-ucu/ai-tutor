@@ -299,7 +299,7 @@ const Student = () => {
               <button
                 type="button"
                 onClick={() => navigate("/")}
-                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
+                className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-red-500 hover:border-red-500 hover:text-white"
               >
                 Вийти
               </button>
@@ -336,32 +336,36 @@ const Student = () => {
                   {topic.title}
                 </div>
 
-                <div className="min-w-[220px]">
-                  <div className="text-xs font-semibold uppercase text-[#1E73F7]">
-                    Тестів пройдено
-                  </div>
-                  <div className="mt-2 flex items-center gap-3">
-                    <div className="h-2.5 w-40 rounded-full bg-[#E9F1FF]">
-                      <div
-                        className="h-full rounded-full bg-[#1E73F7]"
-                        style={{ width: `${topic.percent}%` }}
-                      />
+                <div className="flex items-center gap-6">
+                  <div>
+                    <div className="text-xs font-semibold uppercase text-[#1E73F7]">
+                      Тестів пройдено
                     </div>
-                    <div className="text-sm font-semibold text-slate-700">
+                    <div className="mt-2 flex items-center gap-3">
+                      <div className="h-2.5 w-40 rounded-full bg-[#E9F1FF]">
+                        <div
+                          className="h-full rounded-full bg-[#1E73F7]"
+                          style={{ width: `${topic.percent}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {topic.completedTests}/{topic.totalTests} тестів
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 text-right text-sm font-semibold tabular-nums text-slate-700">
                       {topic.percent}%
                     </div>
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {topic.completedTests}/{topic.totalTests} тестів
-                  </div>
-                </div>
-
-                <div className="min-w-[160px]">
-                  <div className="text-xs font-semibold uppercase text-[#1E73F7]">
-                    Дата
-                  </div>
-                  <div className="mt-2 text-sm font-semibold text-slate-900">
-                    {formatDate(topic.createdAt)}
+                    <div>
+                      <div className="text-xs font-semibold uppercase text-[#1E73F7]">
+                        Дата
+                      </div>
+                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                        {formatDate(topic.createdAt)}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

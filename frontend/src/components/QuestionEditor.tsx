@@ -95,7 +95,7 @@ const QuestionEditor = ({
   const isOpenQuestion = question.type === "open";
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-[22px] bg-white p-6 shadow-lg">
       {/* Header with question number and controls */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
