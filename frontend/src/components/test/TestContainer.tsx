@@ -452,10 +452,10 @@ const TestContainer = ({
           type="button"
           onClick={handleFinish}
           disabled={isSubmitting}
-          className={`fixed bottom-6 right-6 z-50 rounded-full border px-6 py-3 text-sm font-semibold text-white transition ${
+          className={`fixed bottom-6 right-6 z-50 rounded-full border bg-white px-6 py-3 text-sm font-semibold transition ${
             isSubmitting
-              ? "cursor-not-allowed border-red-400 bg-red-400"
-              : "cursor-pointer border-red-500 bg-red-500 hover:border-red-600 hover:bg-red-600"
+              ? "cursor-not-allowed border-white/60 text-slate-400"
+              : "cursor-pointer border-white text-[#1E73F7] hover:bg-rose-500 hover:border-rose-500 hover:text-white"
           }`}
         >
           {isSubmitting ? "Перевіряємо..." : "Завершити тест"}

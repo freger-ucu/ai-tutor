@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import AudienceInfo from "../components/AudienceInfo";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
@@ -143,9 +144,25 @@ const TeacherNote = () => {
             </div>
           </div>
           <div className="flex items-center justify-between gap-4 shrink-0 lg:pr-4">
-            <h1 className="text-xl font-bold text-white">
-              {noteTitle}
-            </h1>
+            <div className="flex items-center gap-4">
+              <h1 className="text-xl font-bold text-white">
+                {noteTitle}
+              </h1>
+              {/* Audience indicator */}
+              {noteMaterial && (
+                <button
+                  type="button"
+                  onClick={() => setIsAudienceModalOpen(true)}
+                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
+                >
+                  <AudienceInfo
+                    assignmentScope={noteMaterial.assignmentScope}
+                    assignedLevels={noteMaterial.assignedLevels}
+                    assignedStudents={noteMaterial.assignedStudents}
+                  />
+                </button>
+              )}
+            </div>
 
             {/* Edit/Delete buttons */}
             {noteMaterial && (
@@ -244,8 +261,26 @@ const TeacherNote = () => {
         isOpen={isAudienceModalOpen}
         onClose={() => setIsAudienceModalOpen(false)}
         students={classStudents.map((studentId) => ({ id: studentId }))}
+        initialLevels={noteMaterial?.assignedLevels}
+        initialStudents={noteMaterial?.assignedStudents?.map(String)}
         onSave={(selection) => {
-            console.log("Saved selection", selection);
+            if (!noteId) return;
+            // Determine assignment scope based on selection
+            const hasLevels = selection.levels.length > 0;
+            const hasStudents = selection.students.length > 0;
+            const assignmentScope = hasStudents ? "students" : hasLevels ? "levels" : "class";
+            const assignedLevels = hasLevels
+              ? (selection.levels as ("weak" | "medium" | "strong")[])
+              : undefined;
+            const assignedStudents = hasStudents
+              ? selection.students.map((s) => Number(s))
+              : undefined;
+            updateMaterial(noteId, {
+              assignmentScope,
+              assignedLevels,
+              assignedStudents,
+            });
+            setMaterialVersion((v) => v + 1);
             setIsAudienceModalOpen(false);
         }}
       />
