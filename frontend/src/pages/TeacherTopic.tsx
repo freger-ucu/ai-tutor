@@ -623,6 +623,7 @@ const TeacherTopic = () => {
           isLoading={false}
           onSecondaryClick={() => handleOpenAudience("material")}
           errorText={materialError ?? undefined}
+          audienceSelection={audienceSelection}
           onPrimaryClick={() => {
             if (!materialName.trim()) {
               setMaterialError("Напишіть тему");
@@ -677,6 +678,7 @@ const TeacherTopic = () => {
           isLoading={false}
           onSecondaryClick={() => handleOpenAudience("test")}
           errorText={testError ?? undefined}
+          audienceSelection={audienceSelection}
           onPrimaryClick={() => {
             if (!testName.trim()) {
               setTestError("Напишіть тему");

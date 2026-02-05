@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import AudienceInfo from "../components/AudienceInfo";
 import BackButton from "../components/BackButton";
 import Breadcrumbs from "../components/Breadcrumbs";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
@@ -222,9 +223,25 @@ const TeacherTest = () => {
             </div>
           </div>
           <div className="flex items-center justify-between gap-4 shrink-0 lg:pr-4">
-            <h1 className="text-xl font-bold text-white">
-              {testData.title}
-            </h1>
+            <div className="flex items-center gap-4">
+              <h1 className="text-xl font-bold text-white">
+                {testData.title}
+              </h1>
+              {/* Audience indicator */}
+              {storedTest && (
+                <button
+                  type="button"
+                  onClick={() => setIsAudienceModalOpen(true)}
+                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
+                >
+                  <AudienceInfo
+                    assignmentScope={storedTest.assignmentScope}
+                    assignedLevels={storedTest.assignedLevels}
+                    assignedStudents={storedTest.assignedStudents}
+                  />
+                </button>
+              )}
+            </div>
 
             <div className="flex items-center gap-2">
               {/* Edit Test button - opens the editing modal */}
@@ -272,8 +289,26 @@ const TeacherTest = () => {
         isOpen={isAudienceModalOpen}
         onClose={() => setIsAudienceModalOpen(false)}
         students={classStudents.map((studentId) => ({ id: studentId }))}
+        initialLevels={storedTest?.assignedLevels}
+        initialStudents={storedTest?.assignedStudents?.map(String)}
         onSave={(selection) => {
-            console.log("Saved selection", selection);
+            if (!testId) return;
+            // Determine assignment scope based on selection
+            const hasLevels = selection.levels.length > 0;
+            const hasStudents = selection.students.length > 0;
+            const assignmentScope = hasStudents ? "students" : hasLevels ? "levels" : "class";
+            const assignedLevels = hasLevels
+              ? (selection.levels as ("weak" | "medium" | "strong")[])
+              : undefined;
+            const assignedStudents = hasStudents
+              ? selection.students.map((s) => Number(s))
+              : undefined;
+            updateMaterial(testId, {
+              assignmentScope,
+              assignedLevels,
+              assignedStudents,
+            });
+            setRefreshKey((prev) => prev + 1);
             setIsAudienceModalOpen(false);
         }}
       />
