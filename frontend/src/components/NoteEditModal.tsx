@@ -112,23 +112,9 @@ const NoteEditModal = ({
             <button
               type="button"
               onClick={() => setIsPreviewMode(!isPreviewMode)}
-              className={`rounded-full border px-5 py-2.5 text-sm font-semibold transition ${
-                isPreviewMode
-                  ? "border-white bg-white text-[#1E73F7]"
-                  : "border-white/20 bg-white/10 text-white hover:bg-white/20"
-              }`}
+              className="rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
             >
               {isPreviewMode ? "Редагувати" : "Перегляд"}
-            </button>
-
-            {/* Reset button */}
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={!hasChanges || isSaving}
-              className="rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Скасувати
             </button>
 
             {/* Save button */}
