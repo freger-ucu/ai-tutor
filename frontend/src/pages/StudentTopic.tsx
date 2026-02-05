@@ -5,7 +5,11 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import Card from "../components/Card";
 import Panel from "../components/Panel";
 import StudentSidebar from "../components/StudentSidebar";
-import { getMaterials, getTopics, isVisibleToStudent } from "../data/materialsStorage";
+import {
+  getMaterials,
+  getTopics,
+  isVisibleToStudent,
+} from "../data/materialsStorage";
 import { getStudentData } from "../api/student";
 import { getStudentDetails } from "../api/teacher";
 import { toNumericId } from "../api/idUtils";
@@ -22,7 +26,10 @@ const getStudentClassCache = (studentId: string | undefined): string | null => {
   }
 };
 
-const setStudentClassCache = (studentId: string | undefined, classLabel: string) => {
+const setStudentClassCache = (
+  studentId: string | undefined,
+  classLabel: string,
+) => {
   if (!studentId || !classLabel) return;
   try {
     localStorage.setItem(`student_class_${studentId}`, classLabel);
@@ -32,7 +39,11 @@ const setStudentClassCache = (studentId: string | undefined, classLabel: string)
 };
 
 const subjects = [
-  { id: "algebra", label: "Алгебра", icon: <span className="text-xl">√x</span> },
+  {
+    id: "algebra",
+    label: "Алгебра",
+    icon: <span className="text-xl">√x</span>,
+  },
   {
     id: "history",
     label: "Історія України",
@@ -76,13 +87,18 @@ const StudentTopic = () => {
   const [studentGrade, setStudentGrade] = useState<number | null>(null);
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
   const [studentError, setStudentError] = useState<string | null>(null);
-  const [studentLevel, setStudentLevel] = useState<"weak" | "medium" | "strong" | null>(null);
+  const [studentLevel, setStudentLevel] = useState<
+    "weak" | "medium" | "strong" | null
+  >(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const decodedTopic = topicId ? decodeURIComponent(topicId) : "";
   const decodedCourse = courseId ? decodeURIComponent(courseId) : "";
-  const courseLabel = decodedCourse ? courseLabels[decodedCourse] ?? decodedCourse : "";
-  const subjectSlug = decodedCourse.split("-").slice(0, -1).join("-") || decodedCourse;
+  const courseLabel = decodedCourse
+    ? (courseLabels[decodedCourse] ?? decodedCourse)
+    : "";
+  const subjectSlug =
+    decodedCourse.split("-").slice(0, -1).join("-") || decodedCourse;
   const subjectName = subjectLabelMap[subjectSlug] ?? courseLabel ?? "";
   const backToSubjectHref = `/student/${studentId}?subject=${subjectSlug}`;
 
@@ -92,8 +108,8 @@ const StudentTopic = () => {
     studentGrade && studentClassId
       ? classIdToLabel(studentGrade, studentClassId)
       : studentGrade
-      ? String(studentGrade)
-      : "";
+        ? String(studentGrade)
+        : "";
 
   // Update cache when we have a valid classLabel
   useEffect(() => {
@@ -129,7 +145,7 @@ const StudentTopic = () => {
   // Get test completion data for current student
   const testCompletionMap = useMemo(
     () => getStudentTestCompletionMap(studentId),
-    [studentId]
+    [studentId],
   );
 
   useEffect(() => {
@@ -162,7 +178,11 @@ const StudentTopic = () => {
     const materials = getMaterials({
       courseId: decodedCourse,
       subject: subjectName,
-      ...(studentClassId ? { classId: studentClassId } : classLabel ? { className: classLabel } : {}),
+      ...(studentClassId
+        ? { classId: studentClassId }
+        : classLabel
+          ? { className: classLabel }
+          : {}),
     });
     // Find first material with a valid teacherId
     for (const m of materials) {
@@ -198,7 +218,7 @@ const StudentTopic = () => {
     }
     const matches = subjects.filter(
       (subject) =>
-        apiSubjects.includes(subject.label) || apiSubjects.includes(subject.id)
+        apiSubjects.includes(subject.label) || apiSubjects.includes(subject.id),
     );
     return matches.length ? matches : subjects;
   }, [apiSubjects]);
@@ -211,24 +231,30 @@ const StudentTopic = () => {
     // Fetch materials without teacherId filter - students should see all materials for their class
     // Use classId OR className (not both) to avoid overly strict filtering
     const materials = getMaterials({
-        courseId: decodedCourse,
-        subject: subjectName,
-        ...(studentClassId ? { classId: studentClassId } : classLabel ? { className: classLabel } : {}),
-        topicName: decodedTopic,
+      courseId: decodedCourse,
+      subject: subjectName,
+      ...(studentClassId
+        ? { classId: studentClassId }
+        : classLabel
+          ? { className: classLabel }
+          : {}),
+      topicName: decodedTopic,
     });
 
     // Filter materials by visibility - STRICT assignment targeting
     const visibleMaterials = apiId
-      ? materials.filter((m) => isVisibleToStudent(m, apiId, studentLevel ?? undefined))
+      ? materials.filter((m) =>
+          isVisibleToStudent(m, apiId, studentLevel ?? undefined),
+        )
       : materials;
 
     const storedNotes = visibleMaterials
-        .filter(m => m.type === "note")
-        .map(m => ({ id: m.id, title: m.title }));
+      .filter((m) => m.type === "note")
+      .map((m) => ({ id: m.id, title: m.title }));
 
     const storedTests = visibleMaterials
-        .filter(m => m.type === "test")
-        .map(m => ({ id: m.id, title: m.title }));
+      .filter((m) => m.type === "test")
+      .map((m) => ({ id: m.id, title: m.title }));
 
     setNotes(storedNotes);
     setTests(storedTests);
@@ -246,10 +272,10 @@ const StudentTopic = () => {
 
   if (studentError) {
     return (
-        <div className="flex min-h-screen items-center justify-center bg-[#1E73F7]">
-          <div className="text-xl text-white">Учня не знайдено</div>
-        </div>
-      );
+      <div className="flex min-h-screen items-center justify-center bg-[#1E73F7]">
+        <div className="text-xl text-white">Учня не знайдено</div>
+      </div>
+    );
   }
 
   return (
@@ -266,10 +292,10 @@ const StudentTopic = () => {
         </div>
 
         <main
-          className="flex-1 px-4 py-6 overflow-y-auto lg:px-8 lg:py-10 lg:overflow-visible"
+          className="flex-1 flex flex-col h-screen overflow-hidden lg:px-8 lg:py-10 px-4 py-6"
           data-scroll-root="mobile"
         >
-          <div className="mb-4 rounded-2xl bg-white/95 px-4 py-3 shadow-md lg:hidden">
+          <div className="mb-4 rounded-2xl bg-white/95 px-4 py-3 shadow-md lg:hidden shrink-0">
             <div className="flex items-center justify-between gap-3">
               <Link
                 to={backToSubjectHref}
@@ -284,12 +310,12 @@ const StudentTopic = () => {
                 Вийти
               </Link>
             </div>
-            <div className="mt-2 text-sm font-semibold text-slate-800 break-words">
+            <div className="mt-2 text-sm font-semibold text-slate-800 wrap-break-word">
               {decodedTopic || "Тема"}
             </div>
             <div className="mt-1 text-xs text-slate-500">{courseLabel}</div>
           </div>
-          <div className="hidden items-center gap-4 mb-6 lg:flex">
+          <div className="hidden items-center gap-4 mb-6 lg:flex shrink-0">
             <BackButton fallbackPath={backToSubjectHref} />
             <Breadcrumbs
               items={[
@@ -299,105 +325,136 @@ const StudentTopic = () => {
             />
           </div>
 
-          <Panel>
+          <Panel className="shrink-0">
             <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-xl font-bold text-slate-900 lg:text-2xl w-full break-words">{decodedTopic}</h1>
-                    <div className="mt-1 text-sm text-slate-500">{courseLabel}</div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-900 lg:text-2xl w-full wrap-break-word">
+                  {decodedTopic}
+                </h1>
+                <div className="mt-1 text-sm text-slate-500">{courseLabel}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs font-semibold uppercase text-slate-400">
+                  Дата
                 </div>
-                <div className="text-center">
-                    <div className="text-xs font-semibold uppercase text-slate-400">Дата</div>
-                    <div className="mt-1 text-sm font-semibold text-slate-900">{formatDate(topicDate)}</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">
+                  {formatDate(topicDate)}
                 </div>
+              </div>
             </div>
           </Panel>
 
-          <div className="mt-6 grid gap-6 lg:mt-8 lg:grid-cols-[1.05fr_0.95fr] overflow-visible">
-            <section className="overflow-visible">
-              <h2 className="text-lg font-semibold text-white lg:text-xl">Конспекти</h2>
-              <div className="mt-4 flex flex-col gap-4 overflow-visible lg:gap-5">
-                {notes.length > 0 ? notes.map((item) => (
-                  <Link
-                    key={item.id}
-                    to={`/student/${studentId}/note/${courseId}/${topicId}/${item.id}`}
-                  >
-                    <Card className="flex items-center gap-3 px-5 py-4 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98] lg:px-6 lg:py-5">
-                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-sm transition-all duration-300">
-                        <img src="/src/assets/Vector.svg" alt="" className="h-4 w-4" />
-                      </span>
-                      <span className="text-sm font-semibold text-slate-900 lg:text-base">{item.title}</span>
-                    </Card>
-                  </Link>
-                )) : (
-                     <div className="rounded-2xl border border-white/10 px-6 py-8 text-center text-sm text-white/40">
-                        Немає конспектів
-                    </div>
+          <div className="mt-6 flex-1 min-h-0 grid gap-6 lg:mt-8 lg:grid-cols-[1.05fr_0.95fr]">
+            <section className="flex flex-col min-h-0">
+              <h2 className="text-lg font-semibold text-white lg:text-xl shrink-0">
+                Конспекти
+              </h2>
+              <div className="mt-4 flex-1 min-h-0 overflow-y-auto flex flex-col gap-4 pr-2 scroll-smooth scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent lg:gap-5">
+                {notes.length > 0 ? (
+                  notes.map((item) => (
+                    <Link
+                      key={item.id}
+                      to={`/student/${studentId}/note/${courseId}/${topicId}/${item.id}`}
+                    >
+                      <Card className="flex items-center gap-3 px-5 py-4 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98] lg:px-6 lg:py-5">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-sm transition-all duration-300">
+                          <img
+                            src="/src/assets/Vector.svg"
+                            alt=""
+                            className="h-4 w-4"
+                          />
+                        </span>
+                        <span className="text-sm font-semibold text-slate-900 lg:text-base">
+                          {item.title}
+                        </span>
+                      </Card>
+                    </Link>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-white/10 px-6 py-8 text-center text-sm text-white/40">
+                    Немає конспектів
+                  </div>
                 )}
               </div>
             </section>
 
-            <section className="overflow-visible">
-              <h2 className="text-lg font-semibold text-white lg:text-xl">Тести</h2>
-              <div className="mt-4 flex flex-col gap-4 overflow-visible lg:gap-5">
-                {tests.length > 0 ? tests.map((item) => {
-                  const completion = testCompletionMap.get(item.id);
-                  const barSegments = 10;
-                  const correctSegments = completion?.totalQuestions
-                    ? Math.round((completion.correctAnswers / completion.totalQuestions) * barSegments)
-                    : 0;
-                  const clampedCorrectSegments = Math.min(
-                    barSegments,
-                    Math.max(0, correctSegments)
-                  );
-                  const isCompleted = Boolean(completion);
+            <section className="flex flex-col min-h-0">
+              <h2 className="text-lg font-semibold text-white lg:text-xl shrink-0">
+                Тести
+              </h2>
+              <div className="mt-4 flex-1 min-h-0 overflow-y-auto flex flex-col gap-4 pr-2 scroll-smooth scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent lg:gap-5">
+                {tests.length > 0 ? (
+                  tests.map((item) => {
+                    const completion = testCompletionMap.get(item.id);
+                    const barSegments = 10;
+                    const correctSegments = completion?.totalQuestions
+                      ? Math.round(
+                          (completion.correctAnswers /
+                            completion.totalQuestions) *
+                            barSegments,
+                        )
+                      : 0;
+                    const clampedCorrectSegments = Math.min(
+                      barSegments,
+                      Math.max(0, correctSegments),
+                    );
+                    const isCompleted = Boolean(completion);
 
-                  return (
-                    <Link key={item.id} to={`/student/${studentId}/test/${item.id}`}>
-                      <Card className="flex flex-col gap-4 px-5 py-4 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98] lg:px-6 lg:py-5">
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <img
-                              src="/src/assets/Group.svg"
-                              alt=""
-                              className="h-6 w-6 transition-transform duration-300"
-                            />
-                            <span className="text-sm font-semibold text-slate-900 lg:text-base break-words">
-                              {item.title}
+                    return (
+                      <Link
+                        key={item.id}
+                        to={`/student/${studentId}/test/${item.id}`}
+                      >
+                        <Card className="flex flex-col gap-4 px-5 py-4 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98] lg:px-6 lg:py-5">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <img
+                                src="/src/assets/Group.svg"
+                                alt=""
+                                className="h-6 w-6 transition-transform duration-300"
+                              />
+                              <span className="text-sm font-semibold text-slate-900 lg:text-base wrap-break-word">
+                                {item.title}
+                              </span>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-[#E9F1FF] px-4 py-1.5 text-xs font-semibold text-[#1E73F7]">
+                              Пройти
                             </span>
                           </div>
-                          <span className="shrink-0 rounded-full bg-[#E9F1FF] px-4 py-1.5 text-xs font-semibold text-[#1E73F7]">
-                            Пройти
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-1">
-                            {Array.from({ length: barSegments }).map((_, index) => (
-                              <span
-                                key={index}
-                                className={`h-2 w-5 rounded-full ${
-                                  isCompleted
-                                    ? index < clampedCorrectSegments
-                                      ? "bg-[#6FDB9B]"
-                                      : "bg-[#E63C3C]"
-                                    : "bg-slate-200"
-                                }`}
-                              />
-                            ))}
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-1">
+                              {Array.from({ length: barSegments }).map(
+                                (_, index) => (
+                                  <span
+                                    key={index}
+                                    className={`h-2 w-5 rounded-full ${
+                                      isCompleted
+                                        ? index < clampedCorrectSegments
+                                          ? "bg-[#6FDB9B]"
+                                          : "bg-[#E63C3C]"
+                                        : "bg-slate-200"
+                                    }`}
+                                  />
+                                ),
+                              )}
+                            </div>
+                            <div className="text-xs font-semibold text-slate-500">
+                              {
+                                "\u041e\u0441\u0442\u0430\u043d\u043d\u044f \u0441\u043f\u0440\u043e\u0431\u0430:"
+                              }{" "}
+                              {completion
+                                ? `${completion.correctAnswers}/${completion.totalQuestions}`
+                                : "—"}
+                            </div>
                           </div>
-                          <div className="text-xs font-semibold text-slate-500">
-                            {"\u041e\u0441\u0442\u0430\u043d\u043d\u044f \u0441\u043f\u0440\u043e\u0431\u0430:"}{" "}
-                            {completion
-                              ? `${completion.correctAnswers}/${completion.totalQuestions}`
-                              : "—"}
-                          </div>
-                        </div>
-                      </Card>
-                    </Link>
-                  );
-                }) : (
-                     <div className="rounded-2xl border border-white/10 px-6 py-8 text-center text-sm text-white/40">
-                        Немає тестів
-                    </div>
+                        </Card>
+                      </Link>
+                    );
+                  })
+                ) : (
+                  <div className="rounded-2xl border border-white/10 px-6 py-8 text-center text-sm text-white/40">
+                    Немає тестів
+                  </div>
                 )}
               </div>
             </section>
