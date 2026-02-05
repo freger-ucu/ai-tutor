@@ -97,7 +97,8 @@ class Settings(BaseSettings):
 
     # Replicate (for embeddings)
     replicate_api_key: str = ""
-    replicate_embedding_model: str = "cuuupid/gte-qwen2-7b-instruct"
+    replicate_embedding_model: str = "lucataco/qwen3-embedding-8b:42d968487820032a1535d81ea20df16f442ea308ec5abae6b5d6cf4675eb3e2f"
+    replicate_embedding_dim: int = 4096  # Must match stored embeddings
 
     # Embeddings (can be pinned to a provider)
     llm_embedding_provider: LLMProvider = LLMProvider.LAPA

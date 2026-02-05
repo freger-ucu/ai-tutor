@@ -301,7 +301,7 @@ class LLMClient:
         return response.data[0].embedding
 
     async def _embed_replicate(self, text: str) -> List[float]:
-        """Generate embedding using Replicate API (gte-Qwen2-7B-instruct)."""
+        """Generate embedding using Replicate API (qwen3-embedding-8b)."""
         if not REPLICATE_AVAILABLE:
             raise ImportError(
                 "replicate package not installed. Run: pip install replicate"
@@ -313,20 +313,55 @@ class LLMClient:
             raise ValueError("REPLICATE_API_KEY not set in environment")
         os.environ["REPLICATE_API_TOKEN"] = api_key
 
+        # Get embedding dimension from config
+        embedding_dim = getattr(app_settings, 'replicate_embedding_dim', 4096)
+
         # Run in executor to avoid blocking
         loop = asyncio.get_event_loop()
         output = await loop.run_in_executor(
             None,
             lambda: replicate.run(
                 self.embedding_model,
-                input={"text": [text]}
+                input={
+                    "text": [text],
+                    "embedding_dim": embedding_dim,
+                    "normalize": True
+                }
             )
         )
 
-        # Output is a list of embedding vectors, we want the first one
-        if output and len(output) > 0:
-            return list(output[0])
-        raise ValueError("Replicate returned empty embedding")
+        # Handle different output formats from Replicate
+        logger.debug(f"Replicate raw output type: {type(output)}, value: {output}")
+
+        if output is None:
+            raise ValueError("Replicate returned None")
+
+        # If output is a dict with 'embeddings' key
+        if isinstance(output, dict):
+            if 'embeddings' in output:
+                return list(output['embeddings'][0])
+            elif 'embedding' in output:
+                return list(output['embedding'])
+            else:
+                logger.error(f"Unexpected dict output format: {output.keys()}")
+                raise ValueError(f"Unexpected output format: {output.keys()}")
+
+        # If output is a list of embeddings
+        if isinstance(output, list) and len(output) > 0:
+            first = output[0]
+            if isinstance(first, (list, tuple)):
+                return list(first)
+            return list(output)
+
+        # Try iterating if it's a generator/iterator
+        try:
+            result = list(output)
+            if result and isinstance(result[0], (list, tuple)):
+                return list(result[0])
+            return result
+        except Exception as e:
+            logger.error(f"Failed to parse Replicate output: {e}, output={output}")
+            raise ValueError(f"Replicate returned unexpected format: {type(output)}")
 
 
 # Global instance
