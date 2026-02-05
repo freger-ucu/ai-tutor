@@ -91,8 +91,8 @@ const TestQuestionCard = ({
     return "neutral";
   };
 
-  // Show difficulty badge when viewing results (teacher always, student after finish)
-  const showDifficultyBadge = isTeacher || showResult;
+  // Show difficulty badge only for teacher view - students should never see difficulty
+  const showDifficultyBadge = isTeacher;
 
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm animate-fadeIn">

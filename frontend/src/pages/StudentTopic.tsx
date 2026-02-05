@@ -354,19 +354,14 @@ const StudentTopic = () => {
                   return (
                     <Link key={item.id} to={`/student/${studentId}/test/${item.id}`}>
                       <Card className="flex flex-col gap-4 px-5 py-4 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98] lg:px-6 lg:py-5">
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <img
-                              src="/src/assets/Group.svg"
-                              alt=""
-                              className="h-6 w-6 transition-transform duration-300"
-                            />
-                            <span className="text-sm font-semibold text-slate-900 lg:text-base break-words">
-                              {item.title}
-                            </span>
-                          </div>
-                          <span className="shrink-0 rounded-full bg-[#E9F1FF] px-4 py-1.5 text-xs font-semibold text-[#1E73F7]">
-                            Пройти
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img
+                            src="/src/assets/Group.svg"
+                            alt=""
+                            className="h-6 w-6 transition-transform duration-300"
+                          />
+                          <span className="text-sm font-semibold text-slate-900 lg:text-base break-words">
+                            {item.title}
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-3">

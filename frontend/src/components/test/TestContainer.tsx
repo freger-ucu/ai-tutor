@@ -338,49 +338,72 @@ const TestContainer = ({
 
       {/* Navigation with prev/next buttons */}
       <div className="flex items-center justify-between gap-3 mb-3 overflow-visible">
-        <div className="flex items-center gap-3">
-          <TestNavigation
-            totalQuestions={testData.questions.length}
-            currentQuestionIndex={currentQuestionIndex}
-            answeredQuestions={answeredQuestionIndices}
-            onQuestionSelect={handleQuestionSelect}
-            showResult={viewMode === "student" && isFinished}
-            resultMap={resultMap}
-            viewMode={viewMode}
-          />
-          {viewMode === "student" && isFinished && (
-            <div className="rounded-full bg-[#6FDB9B] px-4 py-2 text-center text-xs font-semibold text-white">
-              {totalQuestions > 0
-                ? `${Math.round((correctAnswersCount / totalQuestions) * 100)}% правильних`
-                : "0%"}
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
-            disabled={currentQuestionIndex === 0}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all ${
-              currentQuestionIndex === 0
-                ? "cursor-not-allowed bg-white/40 text-white/60"
-                : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
-            }`}
-          >
-            ← Попереднє
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
-            disabled={currentQuestionIndex >= testData.questions.length - 1}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all ${
-              currentQuestionIndex >= testData.questions.length - 1
-                ? "cursor-not-allowed bg-white/40 text-white/60"
-                : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
-            }`}
-          >
-            Наступне →
-          </button>
+        <TestNavigation
+          totalQuestions={testData.questions.length}
+          currentQuestionIndex={currentQuestionIndex}
+          answeredQuestions={answeredQuestionIndices}
+          onQuestionSelect={handleQuestionSelect}
+          showResult={viewMode === "student" && isFinished}
+          resultMap={resultMap}
+          viewMode={viewMode}
+        />
+        <div className="flex flex-col items-stretch gap-2 md:w-72 shrink-0">
+          {viewMode === "student" && isFinished && (() => {
+            const percent = totalQuestions > 0
+              ? Math.round((correctAnswersCount / totalQuestions) * 100)
+              : 0;
+            // Color gradient: red (0%) -> yellow (50%) -> green (100%)
+            const getBgColor = (p: number) => {
+              if (p <= 50) {
+                // Red to Yellow: interpolate between #E63C3C and #F5A623
+                const ratio = p / 50;
+                const r = Math.round(230 + (245 - 230) * ratio);
+                const g = Math.round(60 + (166 - 60) * ratio);
+                const b = Math.round(60 + (35 - 60) * ratio);
+                return `rgb(${r}, ${g}, ${b})`;
+              }
+              // Yellow to Green: interpolate between #F5A623 and #6FDB9B
+              const ratio = (p - 50) / 50;
+              const r = Math.round(245 + (111 - 245) * ratio);
+              const g = Math.round(166 + (219 - 166) * ratio);
+              const b = Math.round(35 + (155 - 35) * ratio);
+              return `rgb(${r}, ${g}, ${b})`;
+            };
+            return (
+              <div
+                className="rounded-full px-4 py-1.5 text-center text-sm font-semibold text-white"
+                style={{ backgroundColor: getBgColor(percent) }}
+              >
+                {percent}% правильних
+              </div>
+            );
+          })()}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleQuestionSelect(currentQuestionIndex - 1)}
+              disabled={currentQuestionIndex === 0}
+              className={`flex-1 rounded-full px-4 py-1.5 text-sm font-semibold transition-all ${
+                currentQuestionIndex === 0
+                  ? "cursor-not-allowed bg-white/40 text-white/60"
+                  : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
+              }`}
+            >
+              ← Попереднє
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuestionSelect(currentQuestionIndex + 1)}
+              disabled={currentQuestionIndex >= testData.questions.length - 1}
+              className={`flex-1 rounded-full px-4 py-1.5 text-sm font-semibold transition-all ${
+                currentQuestionIndex >= testData.questions.length - 1
+                  ? "cursor-not-allowed bg-white/40 text-white/60"
+                  : "cursor-pointer bg-white text-[#1E73F7] hover:-translate-y-0.5 hover:shadow-lg"
+              }`}
+            >
+              Наступне →
+            </button>
+          </div>
         </div>
       </div>
 

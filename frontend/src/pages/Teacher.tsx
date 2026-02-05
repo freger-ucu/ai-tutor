@@ -506,17 +506,13 @@ const Teacher = () => {
                         };
 
                         return (
-                          <div
+                          <button
                             key={topic}
-                            className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50"
+                            type="button"
+                            onClick={() => handleTopicOpen(topic)}
+                            className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50 cursor-pointer"
                           >
-                            <button
-                              type="button"
-                              onClick={() => handleTopicOpen(topic)}
-                              className="flex-1 text-left cursor-pointer"
-                            >
-                              <span>{topic}</span>
-                            </button>
+                            <span>{topic}</span>
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
@@ -541,7 +537,7 @@ const Teacher = () => {
                               </button>
                               <span className="text-lg text-slate-400">›</span>
                             </div>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>

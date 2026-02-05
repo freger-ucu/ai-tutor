@@ -370,18 +370,14 @@ const TeacherTopic = () => {
               <h2 className="text-lg font-semibold text-white lg:text-xl shrink-0">
                 Конспекти
               </h2>
-              <div className="mt-4 flex-1 min-h-0 overflow-y-auto space-y-4 pr-2 scroll-smooth scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-                {notes.map((item) => (
-                  <Card
-                    key={item.id}
-                    className={`px-5 py-4 transition-all duration-300 ease-in-out ${
-                      item.isGenerating
-                        ? "opacity-70"
-                        : "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      {item.isGenerating ? (
+              <div className="mt-4 flex-1 min-h-0 overflow-y-auto space-y-4 pt-1 pr-2 teacher-scrollbar">
+                {notes.map((item) =>
+                  item.isGenerating ? (
+                    <Card
+                      key={item.id}
+                      className="px-5 py-4 opacity-70"
+                    >
+                      <div className="flex items-center justify-between">
                         <div className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-500">
                           <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
                             <img
@@ -392,22 +388,6 @@ const TeacherTopic = () => {
                           </span>
                           {item.title}
                         </div>
-                      ) : (
-                        <Link
-                          to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
-                          className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
-                        >
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
-                            <img
-                              src="/src/assets/Vector.svg"
-                              alt=""
-                              className="h-4 w-4"
-                            />
-                          </span>
-                          {item.title}
-                        </Link>
-                      )}
-                      {item.isGenerating ? (
                         <div className="flex h-9 w-9 items-center justify-center">
                           <svg
                             className="h-5 w-5 animate-spin text-[#1E73F7]"
@@ -430,49 +410,69 @@ const TeacherTopic = () => {
                             />
                           </svg>
                         </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDeleteTarget({
-                              id: item.id,
-                              title: item.title,
-                              type: "conspect",
-                            })
-                          }
-                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
-                          title="Видалити"
-                        >
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M3 6h18" />
-                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                    {!item.isGenerating && (
-                      <div className="mt-3 pl-9">
-                        <TargetAudienceIndicator
-                          assignmentScope={item.assignmentScope}
-                          assignedLevels={item.assignedLevels}
-                          assignedStudents={item.assignedStudents}
-                          studentCount={classStudents.length}
-                          compact
-                        />
                       </div>
-                    )}
-                  </Card>
-                ))}
+                    </Card>
+                  ) : (
+                    <Link
+                      key={item.id}
+                      to={`/teacher/${id}/note/${courseId}/${classId}/${topicId}/${item.id}`}
+                      className="block"
+                    >
+                      <Card className="px-5 py-4 transition-all duration-300 ease-in-out cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900">
+                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-sm">
+                              <img
+                                src="/src/assets/Vector.svg"
+                                alt=""
+                                className="h-4 w-4"
+                              />
+                            </span>
+                            {item.title}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDeleteTarget({
+                                id: item.id,
+                                title: item.title,
+                                type: "conspect",
+                              });
+                            }}
+                            className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
+                            title="Видалити"
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M3 6h18" />
+                              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                            </svg>
+                          </button>
+                        </div>
+                        <div className="mt-3 pl-9">
+                          <TargetAudienceIndicator
+                            assignmentScope={item.assignmentScope}
+                            assignedLevels={item.assignedLevels}
+                            assignedStudents={item.assignedStudents}
+                            studentCount={classStudents.length}
+                            compact
+                          />
+                        </div>
+                      </Card>
+                    </Link>
+                  )
+                )}
                 <AddMaterialsCard
                   className="mt-4 shrink-0"
                   title="Додайте навчальні матеріали"
@@ -488,18 +488,14 @@ const TeacherTopic = () => {
               <h2 className="text-lg font-semibold text-white lg:text-xl shrink-0">
                 Тести
               </h2>
-              <div className="mt-4 flex-1 min-h-0 overflow-y-auto space-y-4 pr-2 scroll-smooth scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-                {tests.map((item) => (
-                  <Card
-                    key={item.id}
-                    className={`px-5 py-4 transition-all duration-300 ease-in-out ${
-                      item.isGenerating
-                        ? "opacity-70"
-                        : "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      {item.isGenerating ? (
+              <div className="mt-4 flex-1 min-h-0 overflow-y-auto space-y-4 pt-1 pr-2 teacher-scrollbar">
+                {tests.map((item) =>
+                  item.isGenerating ? (
+                    <Card
+                      key={item.id}
+                      className="px-5 py-4 opacity-70"
+                    >
+                      <div className="flex items-center justify-between">
                         <div className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-500">
                           <img
                             src="/src/assets/Group.svg"
@@ -508,20 +504,6 @@ const TeacherTopic = () => {
                           />
                           {item.title}
                         </div>
-                      ) : (
-                        <Link
-                          to={`/teacher/${id}/test/${item.id}`}
-                          className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900"
-                        >
-                          <img
-                            src="/src/assets/Group.svg"
-                            alt=""
-                            className="h-6 w-6 transition-transform duration-300"
-                          />
-                          {item.title}
-                        </Link>
-                      )}
-                      {item.isGenerating ? (
                         <div className="flex h-9 w-9 items-center justify-center">
                           <svg
                             className="h-5 w-5 animate-spin text-[#1E73F7]"
@@ -544,49 +526,67 @@ const TeacherTopic = () => {
                             />
                           </svg>
                         </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDeleteTarget({
-                              id: item.id,
-                              title: item.title,
-                              type: "test",
-                            })
-                          }
-                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
-                          title="Видалити"
-                        >
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M3 6h18" />
-                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                    {!item.isGenerating && (
-                      <div className="mt-3 pl-9">
-                        <TargetAudienceIndicator
-                          assignmentScope={item.assignmentScope}
-                          assignedLevels={item.assignedLevels}
-                          assignedStudents={item.assignedStudents}
-                          studentCount={classStudents.length}
-                          compact
-                        />
                       </div>
-                    )}
-                  </Card>
-                ))}
+                    </Card>
+                  ) : (
+                    <Link
+                      key={item.id}
+                      to={`/teacher/${id}/test/${item.id}`}
+                      className="block"
+                    >
+                      <Card className="px-5 py-4 transition-all duration-300 ease-in-out cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:shadow-[#1E73F7]/20 hover:border-[#1E73F7]/30 active:scale-[0.98]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-900">
+                            <img
+                              src="/src/assets/Group.svg"
+                              alt=""
+                              className="h-6 w-6 transition-transform duration-300"
+                            />
+                            {item.title}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDeleteTarget({
+                                id: item.id,
+                                title: item.title,
+                                type: "test",
+                              });
+                            }}
+                            className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 hover:scale-110"
+                            title="Видалити"
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M3 6h18" />
+                              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                            </svg>
+                          </button>
+                        </div>
+                        <div className="mt-3 pl-9">
+                          <TargetAudienceIndicator
+                            assignmentScope={item.assignmentScope}
+                            assignedLevels={item.assignedLevels}
+                            assignedStudents={item.assignedStudents}
+                            studentCount={classStudents.length}
+                            compact
+                          />
+                        </div>
+                      </Card>
+                    </Link>
+                  )
+                )}
                 <AddMaterialsCard
                   className="mt-4 shrink-0"
                   title="Додайте навчальні матеріали"

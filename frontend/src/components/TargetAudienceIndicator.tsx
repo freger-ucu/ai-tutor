@@ -47,6 +47,7 @@ const TargetAudienceIndicator = ({
   compact = false,
 }: TargetAudienceIndicatorProps) => {
   const [hoveredStudentId, setHoveredStudentId] = useState<number | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // Calculate the count of students to display
   const displayCount =
@@ -114,18 +115,21 @@ const TargetAudienceIndicator = ({
     assignedStudents.length > 0
   ) {
     const maxVisible = compact ? 3 : 5;
-    const visibleStudents = assignedStudents.slice(0, maxVisible);
+    const hasMore = assignedStudents.length > maxVisible;
+    const visibleStudents = isExpanded
+      ? assignedStudents
+      : assignedStudents.slice(0, maxVisible);
     const remainingCount = assignedStudents.length - maxVisible;
 
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span
           className="text-xs font-medium"
           style={{ color: "rgba(0, 0, 0, 0.5)" }}
         >
           Учнів: {assignedStudents.length}
         </span>
-        <div className="flex -space-x-2">
+        <div className="flex flex-wrap -space-x-2 gap-y-1">
           {visibleStudents.map((studentId, index) => {
             const studentName = studentNames[studentId] || `Учень ${studentId}`;
             return (
@@ -155,16 +159,41 @@ const TargetAudienceIndicator = ({
               </div>
             );
           })}
-          {remainingCount > 0 && (
-            <div
-              className={`flex ${compact ? "h-6 w-6 text-[10px]" : "h-7 w-7 text-xs"} items-center justify-center rounded-full border-2 border-white font-semibold`}
+          {hasMore && !isExpanded && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsExpanded(true);
+              }}
+              className={`flex ${compact ? "h-6 w-6 text-[10px]" : "h-7 w-7 text-xs"} items-center justify-center rounded-full border-2 border-white font-semibold cursor-pointer transition-all hover:scale-110`}
               style={{
                 backgroundColor: "rgba(30, 115, 247, 0.1)",
                 color: "rgba(0, 0, 0, 0.5)",
               }}
+              title="Показати всіх"
             >
               +{remainingCount}
-            </div>
+            </button>
+          )}
+          {hasMore && isExpanded && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsExpanded(false);
+              }}
+              className={`flex ${compact ? "h-6 px-2 text-[10px]" : "h-7 px-2.5 text-xs"} items-center justify-center rounded-full border-2 border-white font-semibold cursor-pointer transition-all hover:scale-105 ml-1`}
+              style={{
+                backgroundColor: "rgba(30, 115, 247, 0.1)",
+                color: "rgba(0, 0, 0, 0.5)",
+              }}
+              title="Згорнути"
+            >
+              ←
+            </button>
           )}
         </div>
       </div>

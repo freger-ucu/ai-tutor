@@ -242,12 +242,13 @@ const TeacherStudentDetail = () => {
               </div>
             </div>
 
-            <div className="grid flex-1 min-h-0 gap-6 lg:grid-cols-2">
-              <div className="flex h-full flex-col overflow-visible lg:overflow-hidden rounded-[22px] bg-white p-6 text-slate-900 shadow-sm">
-                <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">
+            <div className="grid flex-1 min-h-0 gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+              {/* Left column: Recommendations (narrower) */}
+              <div className="flex h-full flex-col overflow-visible lg:overflow-hidden rounded-[22px] bg-white p-5 text-slate-900 shadow-sm">
+                <h2 className="text-base font-semibold text-slate-900 lg:text-lg">
                   Рекомендації
                 </h2>
-                <div className="mt-4 flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto lg:pr-1 scroll-smooth">
+                <div className="mt-3 flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto lg:pr-1 scroll-smooth">
                   {isRecommendationLoading ? (
                     <p className="text-sm text-slate-500">
                       Завантаження рекомендацій...
@@ -263,77 +264,76 @@ const TeacherStudentDetail = () => {
                     </p>
                   )}
                   {recommendationError && (
-                    <p className="mt-3 text-xs text-rose-500">
+                    <p className="mt-2 text-xs text-rose-500">
                       {recommendationError}
                     </p>
                   )}
                 </div>
               </div>
 
-              <div className="flex h-full flex-col overflow-visible lg:overflow-hidden rounded-[22px] bg-white p-6 text-slate-900 shadow-sm">
-                <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">
-                  Проблемні теми
-                </h2>
-                <div className="mt-4 flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto lg:pr-1 scroll-smooth">
-                  <div className="space-y-6">
-                    <div>
-                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-                        <span className="h-2 w-2 rounded-full bg-rose-500" />
-                        Низькі оцінки
+              {/* Right column: Problematic topics + Skipped lessons */}
+              <div className="flex flex-col gap-6 min-h-0">
+                {/* Problematic topics */}
+                <div className="flex flex-1 flex-col overflow-visible lg:overflow-hidden rounded-[22px] bg-white p-6 text-slate-900 shadow-sm min-h-0">
+                  <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">
+                    Проблемні теми
+                  </h2>
+                  <div className="mt-4 flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto lg:pr-1 scroll-smooth">
+                    {studentDetails.problematic_topics.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        Немає проблемних тем.
                       </div>
-                      {studentDetails.problematic_topics.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                          Немає проблемних тем.
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {studentDetails.problematic_topics.map(
-                            (topic, index) => (
-                              <div
-                                key={index}
-                                className="flex items-center justify-between rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm"
-                              >
-                                <span className="font-medium text-slate-800">
-                                  {topic.topic}
-                                </span>
-                                <span className="text-sm font-semibold text-rose-600">
-                                  {topic.average_score.toFixed(1)}/12
-                                </span>
-                              </div>
-                            ),
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="border-t border-slate-200 pt-4">
-                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-                        <span className="h-2 w-2 rounded-full bg-slate-400" />
-                        Пропущені теми
+                    ) : (
+                      <div className="space-y-2">
+                        {studentDetails.problematic_topics.map(
+                          (topic, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center justify-between rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm"
+                            >
+                              <span className="font-medium text-slate-800">
+                                {topic.topic}
+                              </span>
+                              <span className="text-sm font-semibold text-rose-600">
+                                {topic.average_score.toFixed(1)}/12
+                              </span>
+                            </div>
+                          ),
+                        )}
                       </div>
-                      {studentDetails.skipped_lessons.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                          Немає пропущених тем.
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {studentDetails.skipped_lessons.map(
-                            (lesson, index) => (
-                              <div
-                                key={index}
-                                className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
-                              >
-                                <span className="font-medium text-slate-800">
-                                  {lesson.topic}
-                                </span>
-                                <span className="text-sm font-semibold text-slate-500">
-                                  {formatDate(lesson.date)}
-                                </span>
-                              </div>
-                            ),
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Skipped lessons */}
+                <div className="flex flex-1 flex-col overflow-visible lg:overflow-hidden rounded-[22px] bg-white p-6 text-slate-900 shadow-sm min-h-0">
+                  <h2 className="text-lg font-semibold text-slate-900 lg:text-xl">
+                    Пропущені теми
+                  </h2>
+                  <div className="mt-4 flex-1 min-h-0 overflow-y-visible lg:overflow-y-auto lg:pr-1 scroll-smooth">
+                    {studentDetails.skipped_lessons.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        Немає пропущених тем.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {studentDetails.skipped_lessons.map(
+                          (lesson, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
+                            >
+                              <span className="font-medium text-slate-800">
+                                {lesson.topic}
+                              </span>
+                              <span className="text-sm font-semibold text-slate-500">
+                                {formatDate(lesson.date)}
+                              </span>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
