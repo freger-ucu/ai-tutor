@@ -9,7 +9,7 @@ services:
       - "8000:8000"
     volumes:
       - ../backend:/app
-      - backend-data:/app/data
+      - ../backend/data:/app/data:ro
     environment:
       - DEBUG=true
       - REDIS_URL=redis://redis:6379
@@ -29,7 +29,7 @@ services:
       - ../frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_BASE_URL=http://159.65.201.164:8000/api/v1
     depends_on:
       - backend
     networks:
@@ -49,5 +49,4 @@ networks:
     driver: bridge
 
 volumes:
-  backend-data:
   redis-data:
