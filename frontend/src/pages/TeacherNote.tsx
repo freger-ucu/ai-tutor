@@ -5,6 +5,7 @@ import Breadcrumbs from "../components/Breadcrumbs";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import LectureContent from "../components/LectureContent";
 import MarkdownContent from "../components/MarkdownContent";
+import NoteEditModal from "../components/NoteEditModal";
 import SelectStudentsModal from "../components/SelectStudentsModal";
 import TeacherSidebar from "../components/TeacherSidebar";
 import { deleteMaterial, getMaterials, updateMaterial } from "../data/materialsStorage";
@@ -33,8 +34,7 @@ const TeacherNote = () => {
   const navigate = useNavigate();
 
   const [isAudienceModalOpen, setIsAudienceModalOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editContent, setEditContent] = useState("");
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [materialVersion, setMaterialVersion] = useState(0);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
@@ -96,24 +96,13 @@ const TeacherNote = () => {
       });
   }, [apiTeacherId, apiClassId, subjectName]);
 
-  const handleStartEdit = useCallback(() => {
-    setEditContent(noteMaterial?.content ?? "");
-    setIsEditMode(true);
-  }, [noteMaterial?.content]);
-
-  const handleCancelEdit = useCallback(() => {
-    setIsEditMode(false);
-    setEditContent("");
-  }, []);
-
-  const handleSaveEdit = useCallback(() => {
+  const handleSaveEdit = useCallback((content: string) => {
     if (!noteId) return;
     updateMaterial(noteId, {
-      content: editContent,
+      content,
     });
     setMaterialVersion((v) => v + 1);
-    setIsEditMode(false);
-  }, [noteId, editContent]);
+  }, [noteId]);
 
   const handleDelete = useCallback(() => {
     if (!noteId) return;
@@ -153,17 +142,17 @@ const TeacherNote = () => {
               />
             </div>
           </div>
-          <div className="flex items-center gap-4 shrink-0">
-            <h1 className="text-lg font-bold text-white lg:text-2xl">
-              Конспект. {noteTitle}
+          <div className="flex items-center justify-between gap-4 shrink-0 lg:pr-4">
+            <h1 className="text-xl font-bold text-white">
+              {noteTitle}
             </h1>
 
-            {/* Edit/Delete buttons - shown when not in edit mode and material exists */}
-            {!isEditMode && noteMaterial && (
-              <>
+            {/* Edit/Delete buttons */}
+            {noteMaterial && (
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleStartEdit}
+                  onClick={() => setIsEditModalOpen(true)}
                   className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
                 >
                   <PencilIcon />
@@ -181,27 +170,7 @@ const TeacherNote = () => {
                     <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
                   </svg>
                 </button>
-              </>
-            )}
-
-            {/* Save/Cancel buttons - shown in edit mode */}
-            {isEditMode && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleSaveEdit}
-                  className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#1E73F7] transition hover:bg-slate-100"
-                >
-                  Зберегти зміни
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancelEdit}
-                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1557c0] hover:border-[#1557c0]"
-                >
-                  Скасувати
-                </button>
-              </>
+              </div>
             )}
           </div>
 
@@ -209,19 +178,7 @@ const TeacherNote = () => {
             <div className="flex-1 min-h-0 grid gap-6 lg:grid-cols-[1fr_300px]">
               <div className="rounded-[20px] bg-white overflow-y-visible lg:overflow-y-auto lg:pr-2">
                 <div className="break-words">
-                  {isEditMode ? (
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 mb-2 block">
-                        Зміст конспекту
-                      </label>
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        className="min-h-[400px] w-full rounded-xl border border-slate-200 p-4 text-sm text-slate-800 resize-none focus:border-[#1E73F7] focus:outline-none focus:ring-1 focus:ring-[#1E73F7]"
-                        placeholder="Введіть зміст конспекту..."
-                      />
-                    </div>
-                  ) : noteMaterial?.content ? (
+                  {noteMaterial?.content ? (
                     <LectureContent
                       content={noteMaterial.content}
                       sources={noteMaterial.sources ?? []}
@@ -263,7 +220,6 @@ const TeacherNote = () => {
                     </div>
                   )}
                 </div>
-
               </div>
 
               <div className="rounded-[20px] bg-[#E9F1FF] p-4 h-full flex flex-col overflow-visible lg:p-5 lg:overflow-hidden">
@@ -300,6 +256,14 @@ const TeacherNote = () => {
         onConfirm={handleDelete}
         title={noteTitle}
         itemType="conspect"
+      />
+
+      <NoteEditModal
+        isOpen={isEditModalOpen}
+        noteTitle={noteTitle}
+        content={noteMaterial?.content ?? ""}
+        onSave={handleSaveEdit}
+        onClose={() => setIsEditModalOpen(false)}
       />
     </div>
   );

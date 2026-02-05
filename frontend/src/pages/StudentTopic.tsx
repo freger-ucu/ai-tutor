@@ -400,51 +400,33 @@ const StudentTopic = () => {
                     );
                     const isCompleted = Boolean(completion);
 
-                    return (
-                      <Link
-                        key={item.id}
-                        to={`/student/${studentId}/test/${item.id}`}
-                      >
-                        <Card className="flex flex-col gap-4 px-5 py-4 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98] lg:px-6 lg:py-5">
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <img
-                                src="/src/assets/Group.svg"
-                                alt=""
-                                className="h-6 w-6 transition-transform duration-300"
-                              />
-                              <span className="text-sm font-semibold text-slate-900 lg:text-base wrap-break-word">
-                                {item.title}
-                              </span>
-                            </div>
-                            <span className="shrink-0 rounded-full bg-[#E9F1FF] px-4 py-1.5 text-xs font-semibold text-[#1E73F7]">
-                              Пройти
-                            </span>
-                          </div>
+                  return (
+                    <Link key={item.id} to={`/student/${studentId}/test/${item.id}`}>
+                      <Card className="flex flex-col gap-4 px-5 py-4 cursor-pointer border border-slate-100 shadow-md transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-xl hover:shadow-[#1E73F7]/15 hover:border-[#1E73F7]/30 active:scale-[0.98] lg:px-6 lg:py-5">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img
+                            src="/src/assets/Group.svg"
+                            alt=""
+                            className="h-6 w-6 transition-transform duration-300"
+                          />
+                          <span className="text-sm font-semibold text-slate-900 lg:text-base wrap-break-word">
+                            {item.title}
+                          </span>
+                        </div>
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-1">
-                              {Array.from({ length: barSegments }).map(
-                                (_, index) => (
-                                  <span
-                                    key={index}
-                                    className={`h-2 w-5 rounded-full ${
-                                      isCompleted
-                                        ? index < clampedCorrectSegments
-                                          ? "bg-[#6FDB9B]"
-                                          : "bg-[#E63C3C]"
-                                        : "bg-slate-200"
-                                    }`}
-                                  />
-                                ),
-                              )}
-                            </div>
-                            <div className="text-xs font-semibold text-slate-500">
-                              {
-                                "\u041e\u0441\u0442\u0430\u043d\u043d\u044f \u0441\u043f\u0440\u043e\u0431\u0430:"
-                              }{" "}
-                              {completion
-                                ? `${completion.correctAnswers}/${completion.totalQuestions}`
-                                : "—"}
+                              {Array.from({ length: barSegments }).map((_, index) => (
+                                <span
+                                  key={index}
+                                  className={`h-2 w-5 rounded-full ${
+                                    isCompleted
+                                      ? index < clampedCorrectSegments
+                                        ? "bg-[#6FDB9B]"
+                                        : "bg-[#E63C3C]"
+                                      : "bg-slate-200"
+                                  }`}
+                                />
+                              ))}
                             </div>
                           </div>
                         </Card>

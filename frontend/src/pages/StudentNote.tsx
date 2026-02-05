@@ -301,8 +301,8 @@ const StudentNote = () => {
             Конспект. {noteTitle}
           </h1>
 
-          <div className="mt-4 flex-1 min-h-0 rounded-[28px] bg-white p-4 shadow-sm overflow-y-visible lg:mt-5 lg:p-6 lg:overflow-y-auto">
-            <div className="rounded-[20px] bg-white">
+          <div className="mt-4 flex-1 min-h-0 rounded-[28px] bg-white p-4 shadow-sm flex flex-col overflow-visible lg:mt-5 lg:p-6 lg:overflow-hidden">
+            <div className="flex-1 min-h-0 rounded-[20px] bg-white overflow-y-visible lg:overflow-y-auto lg:pr-2">
               <div className="break-words">
                 {noteMaterial?.content ? (
                   <LectureContent
