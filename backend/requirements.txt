@@ -19,6 +19,7 @@ langgraph>=0.2.0
 # RAG
 rank-bm25>=0.2.2
 tqdm>=4.66.0
+replicate
 
 # Optional: Advanced RAG features
 sentence-transformers>=2.2.0
