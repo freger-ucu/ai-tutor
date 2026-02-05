@@ -17,6 +17,7 @@ class LLMProvider(str, Enum):
     MAMAY = "mamay"  # Alias for lapa with mamay model
     OPENAI = "openai"
     GEMINI = "gemini"
+    REPLICATE = "replicate"  # For embeddings only (gte-Qwen2-7B-instruct)
 
 
 # Provider-specific configurations
@@ -94,6 +95,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
 
+    # Replicate (for embeddings)
+    replicate_api_key: str = ""
+    replicate_embedding_model: str = "cuuupid/gte-qwen2-7b-instruct"
+
     # Embeddings (can be pinned to a provider)
     llm_embedding_provider: LLMProvider = LLMProvider.LAPA
     llm_embedding_model: str = "text-embedding-qwen"
@@ -146,6 +151,8 @@ class Settings(BaseSettings):
             return self.openai_api_key
         elif self.llm_embedding_provider == LLMProvider.GEMINI:
             return self.gemini_api_key
+        elif self.llm_embedding_provider == LLMProvider.REPLICATE:
+            return self.replicate_api_key
         return ""
 
     @property
@@ -153,11 +160,15 @@ class Settings(BaseSettings):
         """Get base URL for embedding provider."""
         if self.llm_embedding_provider in (LLMProvider.LAPA, LLMProvider.MAMAY):
             return self.lapa_base_url
+        if self.llm_embedding_provider == LLMProvider.REPLICATE:
+            return ""  # Replicate uses its own SDK, no base URL needed
         return PROVIDER_CONFIGS[self.llm_embedding_provider]["base_url"]
 
     @property
     def embedding_model(self) -> str:
         """Get embedding model name."""
+        if self.llm_embedding_provider == LLMProvider.REPLICATE:
+            return self.replicate_embedding_model
         return self.llm_embedding_model
 
     def get_provider_for_task(self, task: str) -> "LLMProvider":

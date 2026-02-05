@@ -2,12 +2,14 @@
 LLM Client for Agentic RAG - multi-provider support.
 
 Supports: Lapa (Mamay), OpenAI, Gemini via OpenAI-compatible API.
+Supports Replicate for embeddings (gte-Qwen2-7B-instruct).
 Includes LangSmith tracing for observability.
 """
 
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 from typing import Dict, Any, List, Optional, Type
@@ -19,6 +21,13 @@ from ..config import get_settings
 from app.config import settings as app_settings, LLMProvider
 from app.services.tracing import trace_llm, is_tracing_enabled
 from app.utils.json_parser import parse_json_response
+
+# Optional replicate import for embeddings
+try:
+    import replicate
+    REPLICATE_AVAILABLE = True
+except ImportError:
+    REPLICATE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -281,12 +290,43 @@ class LLMClient:
 
     async def embed(self, text: str) -> List[float]:
         """Generate embedding vector."""
+        if self.embedding_provider == "replicate":
+            return await self._embed_replicate(text)
+
         response = await self.embedding_client.embeddings.create(
             input=text,
             model=self.embedding_model,
             encoding_format="float"
         )
         return response.data[0].embedding
+
+    async def _embed_replicate(self, text: str) -> List[float]:
+        """Generate embedding using Replicate API (gte-Qwen2-7B-instruct)."""
+        if not REPLICATE_AVAILABLE:
+            raise ImportError(
+                "replicate package not installed. Run: pip install replicate"
+            )
+
+        # Set API token from config
+        api_key = app_settings.replicate_api_key
+        if not api_key:
+            raise ValueError("REPLICATE_API_KEY not set in environment")
+        os.environ["REPLICATE_API_TOKEN"] = api_key
+
+        # Run in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        output = await loop.run_in_executor(
+            None,
+            lambda: replicate.run(
+                self.embedding_model,
+                input={"text": [text]}
+            )
+        )
+
+        # Output is a list of embedding vectors, we want the first one
+        if output and len(output) > 0:
+            return list(output[0])
+        raise ValueError("Replicate returned empty embedding")
 
 
 # Global instance
